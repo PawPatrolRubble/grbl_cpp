@@ -1,0 +1,113 @@
+# Build outputs
+build/
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.pdb
+*.obj
+*.o
+*.lib
+*.exp
+*.res
+*.aps
+*.idb
+*.pch
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.wasm
+*.wat
+
+# Visual Studio / MSBuild
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opensdf
+*.sdf
+*.ipch
+*.aps
+*.pyc
+*.pyo
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+CMakeTmp/
+CTestTestfile.cmake
+_deps/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+CTestTestfile
+compile_commands.json
+
+# Qt / MOC / UIC
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.moc
+*.qmlc
+*.jsc
+*-autogen/
+autogen/
+
+# Qt deploy
+bin/
+lib/
+
+# Qt Creator
+*.creator
+*.creator.user
+
+# Ninja
+.ninja_deps
+.ninja_log
+rules.ninja
+
+# Debug / Release / RelWithDebInfo
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+
+# Qt settings
+*.pro.user
+*.pro.user.*
+
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/c_cpp_properties.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# CLion
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Kate / gedit
+*~
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
