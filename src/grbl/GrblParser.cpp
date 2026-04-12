@@ -33,43 +33,41 @@ void GrblParser::parseStatusReport(const QString &report)
     MachineState::State state = parseState(fields[0]);
     m_machineState->setState(state);
 
+    bool hasMPos = false;
+    bool hasWPos = false;
+    QVector3D parsedMPos;
+    QVector3D parsedWPos;
+
     for (int i = 1; i < fields.size(); ++i) {
         const QString &field = fields[i];
 
-        if (field.startsWith("MPos:")) {
-            QVector3D pos = parsePosition(field.mid(5));
-            m_machineState->setMachinePosition(pos);
-            if (i < fields.size()) {
-                for (int j = i + 1; j < fields.size(); ++j) {
-                    if (fields[j].startsWith("WPos:")) {
-                        QVector3D wpos = parsePosition(fields[j].mid(5));
-                        m_machineState->setWorkPosition(wpos);
-                        break;
-                    }
-                }
-            }
+        if (field.startsWith("WCO:")) {
+            m_lastWco = parseWco(field.mid(4));
+        } else if (field.startsWith("MPos:")) {
+            parsedMPos = parsePosition(field.mid(5));
+            hasMPos = true;
         } else if (field.startsWith("WPos:")) {
-            bool hasMPos = false;
-            for (const QString &f : fields) {
-                if (f.startsWith("MPos:")) { hasMPos = true; break; }
-            }
-            if (!hasMPos) {
-                QVector3D pos = parsePosition(field.mid(5));
-                m_machineState->setWorkPosition(pos);
-            }
+            parsedWPos = parsePosition(field.mid(5));
+            hasWPos = true;
         } else if (field.startsWith("Fs:")) {
             parseFeedOverrides(field.mid(3));
         } else if (field.startsWith("F:")) {
             bool ok = false;
             double feed = field.mid(2).toDouble(&ok);
-            if (ok)
-                m_machineState->setFeedRate(feed);
+            if (ok) m_machineState->setFeedRate(feed);
         } else if (field.startsWith("S:")) {
             bool ok = false;
             double speed = field.mid(2).toDouble(&ok);
-            if (ok)
-                m_machineState->setSpindleSpeed(speed);
+            if (ok) m_machineState->setSpindleSpeed(speed);
         }
+    }
+
+    if (hasMPos) {
+        m_machineState->setMachinePosition(parsedMPos);
+        m_machineState->setWorkPosition(parsedMPos - m_lastWco);
+    } else if (hasWPos) {
+        m_machineState->setWorkPosition(parsedWPos);
+        m_machineState->setMachinePosition(parsedWPos + m_lastWco);
     }
 }
 

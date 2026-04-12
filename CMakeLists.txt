@@ -12,7 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent)
 find_package(Qt6CorePrivate REQUIRED)
 
 qt_standard_project_setup()
@@ -21,25 +21,64 @@ set(GRBL_SOURCES
     src/grbl/MachineState.cpp
     src/grbl/GrblParser.cpp
     src/grbl/SerialManager.cpp
+    src/grbl/GcodeStreamer.cpp
     src/grbl/GcodeParser.cpp
     src/grbl/FileManager.cpp
+    src/grbl/TextToGcode/HersheyFontParser.cpp
+    src/grbl/TextToGcode/SvgFontParser.cpp
+    src/grbl/TextToGcode/HpglFontParser.cpp
+    src/grbl/TextToGcode/JsonFontParser.cpp
+    src/grbl/TextToGcode/VectorFontLoader.cpp
+    src/grbl/TextToGcode/TextToGcodeGenerator.cpp
 )
 
 set(GRBL_HEADERS
     src/grbl/MachineState.h
     src/grbl/GrblParser.h
     src/grbl/SerialManager.h
+    src/grbl/GcodeStreamer.h
     src/grbl/GcodeParser.h
     src/grbl/FileManager.h
     src/grbl/types.h
+    src/grbl/TextToGcode/VectorFontParser.h
+    src/grbl/TextToGcode/HersheyFontParser.h
+    src/grbl/TextToGcode/SvgFontParser.h
+    src/grbl/TextToGcode/HpglFontParser.h
+    src/grbl/TextToGcode/JsonFontParser.h
+    src/grbl/TextToGcode/VectorFontLoader.h
+    src/grbl/TextToGcode/TextToGcodeGenerator.h
 )
 
 set(UI_SOURCES
     src/ui/MainWindow.cpp
+    src/ui/ToolpathCanvas.cpp
+    src/ui/GcodeListWidget.cpp
+    src/ui/ToolpathPanel.cpp
+    src/ui/TransformToolbar.cpp
+    src/ui/TextToGcodeDialog.cpp
+    src/ui/panels/ConnectionPanel.cpp
+    src/ui/panels/StatusPanel.cpp
+    src/ui/panels/ControlPanel.cpp
+    src/ui/panels/JogPanel.cpp
+    src/ui/panels/ConsolePanel.cpp
+)
+
+set(UI_FILES
+    src/ui/TextToGcodeDialog.ui
 )
 
 set(UI_HEADERS
     src/ui/MainWindow.h
+    src/ui/ToolpathCanvas.h
+    src/ui/GcodeListWidget.h
+    src/ui/ToolpathPanel.h
+    src/ui/TransformToolbar.h
+    src/ui/TextToGcodeDialog.h
+    src/ui/panels/ConnectionPanel.h
+    src/ui/panels/StatusPanel.h
+    src/ui/panels/ControlPanel.h
+    src/ui/panels/JogPanel.h
+    src/ui/panels/ConsolePanel.h
 )
 
 set(SOURCES
@@ -47,6 +86,7 @@ set(SOURCES
     src/App.cpp
     ${GRBL_SOURCES}
     ${UI_SOURCES}
+    ${UI_FILES}
 )
 
 set(HEADERS
@@ -66,6 +106,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     Qt6::CorePrivate
+    Qt6::Concurrent
 )
 
 if(WIN32)

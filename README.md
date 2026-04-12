@@ -46,30 +46,33 @@ Commands sent to GRBL:
 - **Step jog**: `$J=G91 {axis}{sign}{step} F{feed}`
 - **Jog cancel**: realtime byte `0x85`
 
-## Build Requirements
+## Prerequisites
 
-| Component | Version |
-|-----------|---------|
-| Visual Studio | 2026 (MSVC 19.50+) |
-| Qt | 6.11.0 MSVC 2022 64-bit at `C:\Qt\6.11.0\msvc2022_64` |
-| CMake | 3.16+ |
-| Platform | Windows |
+- **Visual Studio 2026** with C++ desktop development workload
+- **Qt 6.11.0** installed at `C:\Qt\6.11.0\msvc2022_64`
+- **CMake 3.16+** (bundled with Qt Tools)
+- **Windows 10/11** x64
 
-## Build
+## Compile and Run
 
-### Quick build
+### 1. First-time setup (configure CMake)
+```batch
+cmake -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=C:/Qt/6.11.0/msvc2022_64
+```
+
+### 2. Build the project
+```batch
+cmake --build build --config Release
+```
+
+### 3. Run the application
+```batch
+build\bin\Release\GrblSender.exe
+```
+
+### Quick build (single command)
 ```batch
 D:\projects\github\grbl_cpp\build.bat
-```
-
-### Manual build
-```batch
-cmake --build D:\projects\github\grbl_cpp\build --config Release
-```
-
-### After code changes
-```batch
-cmake --build D:\projects\github\grbl_cpp\build --config Release
 ```
 
 ## Debugging (VS Code)
@@ -109,7 +112,12 @@ Install these from the VS Code Extensions panel (`Ctrl+Shift+X`):
 
 ## Run
 
+```batch
+build\bin\Release\GrblSender.exe
 ```
+
+Or use the full path:
+```batch
 D:\projects\github\grbl_cpp\build\bin\Release\GrblSender.exe
 ```
 

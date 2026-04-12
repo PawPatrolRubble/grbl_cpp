@@ -4,8 +4,9 @@
 #include <QString>
 #include <QStringList>
 #include <QQueue>
-#include <QThreadPool>
-#include <QReadWriteLock>
+#include <QTimer>
+#include <QThread>
+#include <QMutex>
 
 class MachineState;
 
@@ -31,48 +32,30 @@ public:
     void jogContinuous(const QString &axis, int direction, double feedRate);
     void jogCancel();
 
-    void startStreaming(const QStringList &lines);
-    void pauseStreaming();
-    void resumeStreaming();
-    void stopStreaming();
-    bool isStreaming() const;
-
 signals:
     void connectedChanged(bool connected);
     void responseReceived(const QString &response);
+    void ackReceived();
+    void commandErrorReceived(const QString &error);
     void errorOccurred(const QString &error);
-    void streamingStarted();
-    void streamingFinished();
-    void streamingPaused();
-    void streamingResumed();
-    void streamingProgress(int currentLine, int totalLines);
     void commandSent(const QString &command);
-    void commandError(int line, const QString &error);
 
 private slots:
     void handleReadData();
+    void pollStatus();
 
 private:
     void processBuffer();
-    void sendNextLine();
 
     MachineState *m_machineState;
     QString m_buffer;
 
     void *m_handle;
-    class QWinEventNotifier *m_readNotifier;
+    mutable QMutex m_handleMutex;
     int m_baudRate = 115200;
-
-    QStringList m_streamQueue;
-    QQueue<QString> m_pendingCommands;
-    int m_linesSent = 0;
-    int m_totalLines = 0;
-    int m_okCount = 0;
-    int m_errorCount = 0;
-    bool m_streaming = false;
-    bool m_paused = false;
-    bool m_jogging = false;
     bool m_grblReady = false;
 
-    bool writeData(const QByteArray &data);
+    QThread m_ioThread;
+    QTimer *m_readTimer = nullptr;
+    QTimer *m_pollTimer = nullptr;
 };

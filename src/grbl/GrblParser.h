@@ -25,4 +25,5 @@ private:
     void parseFeedOverrides(const QString &fsStr);
 
     MachineState *m_machineState;
+    QVector3D m_lastWco;
 };

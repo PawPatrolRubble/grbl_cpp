@@ -32,6 +32,18 @@ bool FileManager::loadFile(const QString &filePath)
     return true;
 }
 
+void FileManager::loadLines(const QString &fileName, const QStringList &lines)
+{
+    m_lines = lines;
+    m_fileName = fileName;
+    
+    // In-memory files have a mock filePath or empty
+    m_filePath = QString("memory://") + fileName;
+    
+    m_loaded = true;
+    emit fileLoaded(m_fileName);
+}
+
 bool FileManager::saveFile(const QString &filePath, const QStringList &lines)
 {
     QFile file(filePath);

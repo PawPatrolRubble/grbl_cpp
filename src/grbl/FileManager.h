@@ -14,6 +14,7 @@ public:
     explicit FileManager(QObject *parent = nullptr);
 
     bool loadFile(const QString &filePath);
+    void loadLines(const QString &fileName, const QStringList &lines);
     bool saveFile(const QString &filePath, const QStringList &lines);
     void clear();
 

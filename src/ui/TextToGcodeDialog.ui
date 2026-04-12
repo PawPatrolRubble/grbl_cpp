@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TextToGcodeDialog</class>
+ <widget class="QDialog" name="TextToGcodeDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>500</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Text to G-code</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>Text:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPlainTextEdit" name="textInput">
+       <property name="maximumHeight">
+        <number>80</number>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="sourceLabel">
+       <property name="text">
+        <string>Font Source:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QComboBox" name="fontSourceCombo">
+       <item>
+        <property name="text">
+         <string>System Font</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Custom Vector File</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Select Font:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <layout class="QVBoxLayout" name="fontSelectionLayout">
+       <item>
+        <widget class="QComboBox" name="fontFamilyCombo"/>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="customFontLayout">
+        <item>
+         <widget class="QLineEdit" name="fontPathInput">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="browseButton">
+          <property name="text">
+           <string>Browse...</string>
+          </property>
+         </widget>
+        </item>
+         </layout>
+       </item>
+      </layout>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="label_3">
+       <property name="text">
+        <string>Size (mm):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QDoubleSpinBox" name="sizeSpinBox">
+       <property name="value">
+        <double>10.0</double>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="0">
+      <widget class="QLabel" name="label_4">
+       <property name="text">
+        <string>Tool Mode:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="1">
+      <widget class="QComboBox" name="toolModeCombo">
+       <item>
+        <property name="text">
+         <string>Pen Plotter</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Laser</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item row="5" column="0">
+      <widget class="QLabel" name="label_5">
+       <property name="text">
+        <string>Feed Speed (mm/min):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="1">
+      <widget class="QDoubleSpinBox" name="feedSpeedSpinBox">
+       <property name="maximum">
+        <double>10000.0</double>
+       </property>
+       <property name="value">
+        <double>500.0</double>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="0">
+      <widget class="QLabel" name="label_plunge">
+       <property name="text">
+        <string>Plunge Speed (mm/min):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="1">
+      <widget class="QDoubleSpinBox" name="plungeSpeedSpinBox">
+       <property name="maximum">
+        <double>10000.0</double>
+       </property>
+       <property name="value">
+        <double>200.0</double>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="0">
+      <widget class="QLabel" name="label_6">
+       <property name="text">
+        <string>Fast Movement Height (mm):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="1">
+      <widget class="QDoubleSpinBox" name="fastHeightSpinBox">
+       <property name="minimum">
+        <double>-100.0</double>
+       </property>
+       <property name="value">
+        <double>5.0</double>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="0">
+      <widget class="QLabel" name="label_7">
+       <property name="text">
+        <string>Work Height (mm):</string>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="1">
+      <widget class="QDoubleSpinBox" name="workHeightSpinBox">
+       <property name="minimum">
+        <double>-100.0</double>
+       </property>
+       <property name="value">
+        <double>0.0</double>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="previewLabel">
+     <property name="text">
+      <string>Generated G-code Preview:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="gcodePreview">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="previewButton">
+       <property name="text">
+        <string>Update Preview</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="cancelButton">
+       <property name="text">
+        <string>Cancel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="generateButton">
+       <property name="text">
+        <string>Generate &amp;&amp; Load</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
