@@ -17,15 +17,14 @@ class ApplicationCore : public QObject
 
 public:
     explicit ApplicationCore(QObject *parent = nullptr);
-    ~ApplicationCore() override;
+    ~ApplicationCore() override = default;
 
-    // Accessors — all services are owned by ApplicationCore
-    MachineState    *machineState()    const { return m_machineState; }
-    SerialManager   *serialManager()   const { return m_serialManager; }
-    GcodeStreamer   *streamer()        const { return m_streamer; }
-    GrblParser      *grblParser()      const { return m_grblParser; }
-    GcodeParser     *gcodeParser()     const { return m_gcodeParser; }
-    FileManager     *fileManager()     const { return m_fileManager; }
+    [[nodiscard]] MachineState    *machineState()    const { return m_machineState; }
+    [[nodiscard]] SerialManager   *serialManager()   const { return m_serialManager; }
+    [[nodiscard]] GcodeStreamer   *streamer()        const { return m_streamer; }
+    [[nodiscard]] GrblParser      *grblParser()      const { return m_grblParser; }
+    [[nodiscard]] GcodeParser     *gcodeParser()     const { return m_gcodeParser; }
+    [[nodiscard]] FileManager     *fileManager()     const { return m_fileManager; }
 
     /// Wire internal service-to-service connections.
     /// UI code should connect to the signals exposed here, NOT to individual services directly.

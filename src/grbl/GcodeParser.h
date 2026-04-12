@@ -29,7 +29,7 @@ public:
     explicit GcodeParser(QObject *parent = nullptr);
 
     /// Parse a list of G-code lines. Thread-safe and reentrant.
-    QList<GcodeMove> parse(const QStringList &lines);
+    QList<GcodeMove> parse(const QList<QString> &lines);
 
     /// Static utility: parse a single line (stateless).
     static GcodeMove parseLine(const QString &line, int lineNumber,

@@ -31,7 +31,7 @@ public:
     /// Disconnect from the GRBL device.
     void disconnectFromGrbl();
 
-    bool isConnected() const;
+    bool isConnected() const noexcept;
 
     /// Send a line command (e.g., "G0 X0 Y0", "$H").
     void sendCommand(const QString &command);

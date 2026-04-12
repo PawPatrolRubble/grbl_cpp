@@ -3,11 +3,11 @@
 #include <QMainWindow>
 #include <QFutureWatcher>
 
-#include "ApplicationCore.h"
-#include "SettingsManager.h"
-#include "grbl/GcodeParser.h"
+#include "ui_MainWindow.h"
 
-class DockPanel;
+class ApplicationCore;
+class SettingsManager;
+struct GcodeMove;
 class ConnectionPanel;
 class StatusPanel;
 class ControlPanel;
@@ -15,6 +15,8 @@ class JogPanel;
 class ConsolePanel;
 class ToolpathPanel;
 class SettingsPanel;
+class DockPanel;
+class CustomTitleBar;
 
 class MainWindow : public QMainWindow
 {
@@ -27,20 +29,27 @@ public:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private:
     void setupUi();
+    void setupTitleBar();
+    void setupDocks();
     void setupMenuBar();
     void setupStatusBar();
     void setupConnections();
     void saveLayout();
     void restoreLayout();
     void loadAndParseFile(const QString &filePath);
+    void updateTitleBarButtons();
 
     /// Create a dock panel for the given widget.
     DockPanel *createDock(const QString &title, QWidget *widget,
                           Qt::DockWidgetArea area,
                           bool closable = true);
+
+    Ui::MainWindow *ui;
+    CustomTitleBar *m_titleBar;
 
     ApplicationCore *m_core;
     SettingsManager *m_settings;
@@ -51,8 +60,6 @@ private:
     DockPanel *m_dockStatus;
     DockPanel *m_dockControl;
     DockPanel *m_dockJog;
-    DockPanel *m_dockConsole;
-    DockPanel *m_dockToolpath;
     DockPanel *m_dockSettings;
 
     // Inner widgets (owned by docks)
@@ -60,7 +67,5 @@ private:
     StatusPanel     *m_statusPanel;
     ControlPanel    *m_controlPanel;
     JogPanel        *m_jogPanel;
-    ConsolePanel    *m_consolePanel;
-    ToolpathPanel   *m_toolpathPanel;
     SettingsPanel   *m_settingsPanel;
 };

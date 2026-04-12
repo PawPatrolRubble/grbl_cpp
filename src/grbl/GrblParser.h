@@ -12,13 +12,14 @@ class GrblParser : public QObject
 
 public:
     explicit GrblParser(MachineState *machineState, QObject *parent = nullptr);
+    ~GrblParser() override = default;
 
     void parseResponse(const QString &response);
     void requestStatusReport();
 
-    static MachineState::State parseState(const QString &stateStr);
-    static QVector3D parsePosition(const QString &posStr);
-    static QVector3D parseWco(const QString &wcoStr);
+    [[nodiscard]] static MachineState::State parseState(const QString &stateStr);
+    [[nodiscard]] static QVector3D parsePosition(const QString &posStr);
+    [[nodiscard]] static QVector3D parseWco(const QString &wcoStr);
 
 private:
     void parseStatusReport(const QString &report);

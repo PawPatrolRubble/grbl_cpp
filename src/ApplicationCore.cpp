@@ -18,8 +18,6 @@ ApplicationCore::ApplicationCore(QObject *parent)
     wireServices();
 }
 
-ApplicationCore::~ApplicationCore() = default;
-
 void ApplicationCore::wireServices()
 {
     // SerialManager → GrblParser (parse status reports)

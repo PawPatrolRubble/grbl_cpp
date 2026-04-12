@@ -3,6 +3,7 @@
 #include <QListView>
 #include <QAbstractListModel>
 #include <QStringList>
+#include <QLabel>
 
 class GcodeListModel : public QAbstractListModel
 {
@@ -16,12 +17,15 @@ public:
 
     void setLines(const QStringList &lines);
     int lineCount() const;
+    int executingLine() const;
+    void setExecutingLine(int line);
 
 private:
     QStringList m_lines;
+    int m_executingLine = -1;
 };
 
-class GcodeListWidget : public QListView
+class GcodeListWidget : public QWidget
 {
     Q_OBJECT
 
@@ -31,6 +35,7 @@ public:
     void setLines(const QStringList &lines);
     void highlightLine(int lineNumber);
     void selectLine(int lineNumber);
+    void setExecutingLine(int lineNumber);
 
 signals:
     void lineClicked(int lineNumber);
@@ -40,5 +45,7 @@ private slots:
 
 private:
     GcodeListModel *m_model;
+    QListView *m_listView;
+    QLabel *m_countLabel;
     int m_lastHighlight = -1;
 };

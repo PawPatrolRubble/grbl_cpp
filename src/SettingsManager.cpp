@@ -12,8 +12,6 @@ SettingsManager::SettingsManager(QObject *parent)
     m_settings = new QSettings("GrblSender", "GrblSender", this);
 }
 
-SettingsManager::~SettingsManager() = default;
-
 void SettingsManager::saveLayout(const QByteArray &dockState, const QByteArray &geometry)
 {
     m_settings->setValue("MainWindow/dockState", dockState);

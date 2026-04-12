@@ -10,12 +10,14 @@ class GcodeStreamer : public QObject
 
 public:
     explicit GcodeStreamer(QObject *parent = nullptr);
+    ~GcodeStreamer() override = default;
 
     void startStreaming(const QStringList &lines);
     void pauseStreaming();
     void resumeStreaming();
     void stopStreaming();
-    bool isStreaming() const;
+    [[nodiscard]] bool isStreaming() const;
+    [[nodiscard]] bool isPaused() const;
 
 signals:
     void sendCommandRequested(const QString &command);

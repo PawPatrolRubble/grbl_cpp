@@ -51,6 +51,7 @@ set(GRBL_HEADERS
     src/grbl/GcodeStreamer.h
     src/grbl/GcodeParser.h
     src/grbl/FileManager.h
+    src/grbl/GrblConstants.h
     src/grbl/types.h
     src/grbl/TextToGcode/VectorFontParser.h
     src/grbl/TextToGcode/HersheyFontParser.h
@@ -65,6 +66,7 @@ set(GRBL_HEADERS
 set(UI_SOURCES
     src/ui/MainWindow.cpp
     src/ui/DockPanel.cpp
+    src/ui/CustomTitleBar.cpp
     src/ui/ToolpathCanvas.cpp
     src/ui/GcodeListWidget.cpp
     src/ui/ToolpathPanel.cpp
@@ -79,12 +81,14 @@ set(UI_SOURCES
 )
 
 set(UI_FILES
+    src/ui/MainWindow.ui
     src/ui/TextToGcodeDialog.ui
 )
 
 set(UI_HEADERS
     src/ui/MainWindow.h
     src/ui/DockPanel.h
+    src/ui/CustomTitleBar.h
     src/ui/ToolpathCanvas.h
     src/ui/GcodeListWidget.h
     src/ui/ToolpathPanel.h
@@ -96,6 +100,10 @@ set(UI_HEADERS
     src/ui/panels/JogPanel.h
     src/ui/panels/ConsolePanel.h
     src/ui/panels/SettingsPanel.h
+)
+
+set(RESOURCES
+    resources/resources.qrc
 )
 
 set(SOURCES
@@ -114,7 +122,7 @@ set(HEADERS
     ${UI_HEADERS}
 )
 
-add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS} ${RESOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 

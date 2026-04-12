@@ -1,5 +1,4 @@
 #include "ControlPanel.h"
-#include <QGroupBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -7,8 +6,10 @@
 ControlPanel::ControlPanel(QWidget *parent)
     : QWidget(parent)
 {
-    auto *group = new QGroupBox("Streaming Control");
-    auto *ctrlLayout = new QVBoxLayout(group);
+    setObjectName("controlPanel");
+    setAttribute(Qt::WA_StyledBackground, true);
+    auto *ctrlLayout = new QVBoxLayout(this);
+    ctrlLayout->setContentsMargins(8, 8, 8, 8);
 
     // Load button
     m_loadBtn = new QPushButton("Load G-Code File");
@@ -35,33 +36,37 @@ ControlPanel::ControlPanel(QWidget *parent)
     m_progressLabel = new QLabel("No file loaded");
     ctrlLayout->addWidget(m_progressLabel);
 
-    // Overrides
-    auto *overrideGroup = new QGroupBox("Overrides");
-    auto *overrideLayout = new QFormLayout(overrideGroup);
+    // Overrides section
+    auto *overrideLabel = new QLabel("Overrides");
+    overrideLabel->setObjectName("sectionTitle");
+    ctrlLayout->addWidget(overrideLabel);
 
     m_feedOverrideSlider = new QSlider(Qt::Horizontal);
     m_feedOverrideSlider->setRange(0, 200);
     m_feedOverrideSlider->setValue(100);
     m_feedOverrideLabel = new QLabel("100%");
     auto *feedLayout = new QHBoxLayout();
+    feedLayout->addWidget(new QLabel("Feed:"));
     feedLayout->addWidget(m_feedOverrideSlider);
     feedLayout->addWidget(m_feedOverrideLabel);
-    overrideLayout->addRow("Feed:", feedLayout);
+    ctrlLayout->addLayout(feedLayout);
 
     m_spindleOverrideSlider = new QSlider(Qt::Horizontal);
     m_spindleOverrideSlider->setRange(0, 200);
     m_spindleOverrideSlider->setValue(100);
     m_spindleOverrideLabel = new QLabel("100%");
     auto *spindleLayout = new QHBoxLayout();
+    spindleLayout->addWidget(new QLabel("Spindle:"));
     spindleLayout->addWidget(m_spindleOverrideSlider);
     spindleLayout->addWidget(m_spindleOverrideLabel);
-    overrideLayout->addRow("Spindle:", spindleLayout);
+    ctrlLayout->addLayout(spindleLayout);
 
-    ctrlLayout->addWidget(overrideGroup);
+    // Quick Commands section
+    auto *cmdLabel = new QLabel("Quick Commands");
+    cmdLabel->setObjectName("sectionTitle");
+    ctrlLayout->addWidget(cmdLabel);
 
-    // Quick commands
-    auto *cmdGroup = new QGroupBox("Quick Commands");
-    auto *cmdLayout = new QHBoxLayout(cmdGroup);
+    auto *cmdLayout = new QHBoxLayout();
     auto *homeBtn = new QPushButton("Home ($H)");
     auto *unlockBtn = new QPushButton("Unlock ($X)");
     auto *resetBtn = new QPushButton("Reset");
@@ -70,12 +75,7 @@ ControlPanel::ControlPanel(QWidget *parent)
     cmdLayout->addWidget(unlockBtn);
     cmdLayout->addWidget(resetBtn);
     cmdLayout->addWidget(statusBtn);
-    ctrlLayout->addWidget(cmdGroup);
-
-    // Outer layout
-    auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(group);
+    ctrlLayout->addLayout(cmdLayout);
 
     // Connections
     connect(m_loadBtn, &QPushButton::clicked, this, &ControlPanel::loadFileRequested);
@@ -137,4 +137,3 @@ void ControlPanel::setStreamingResumed()
     m_resumeBtn->setEnabled(false);
     m_progressLabel->setText("Streaming resumed");
 }
-

@@ -64,7 +64,7 @@ void ToolpathPanel::setMoves(const QList<GcodeMove> &moves)
 
 void ToolpathPanel::setExecutingLine(int lineNumber)
 {
-    m_listWidget->highlightLine(lineNumber);
+    m_listWidget->setExecutingLine(lineNumber);
     m_canvas->setExecutingLine(lineNumber);
 }
 

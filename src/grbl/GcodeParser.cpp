@@ -14,7 +14,7 @@ GcodeParser::GcodeParser(QObject *parent)
 // Main parser — fully stateless, thread-safe, reentrant
 // ---------------------------------------------------------------------------
 
-QList<GcodeMove> GcodeParser::parse(const QStringList &lines)
+QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
 {
     QList<GcodeMove> moves;
 
@@ -24,7 +24,12 @@ QList<GcodeMove> GcodeParser::parse(const QStringList &lines)
     double spindleSpeed = 0.0;
     bool absolute = true;
 
-    QStringList cleaned = cleanLines(lines);
+    // Convert to QStringList for cleanLines which expects it
+    QStringList stringListLines;
+    for (const QString &line : lines) {
+        stringListLines.append(line);
+    }
+    QStringList cleaned = cleanLines(stringListLines);
 
     for (int i = 0; i < cleaned.size(); ++i) {
         GcodeMove move;

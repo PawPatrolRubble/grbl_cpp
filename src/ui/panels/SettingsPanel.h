@@ -5,8 +5,6 @@
 #include <QDoubleSpinBox>
 #include <QCheckBox>
 
-class QGroupBox;
-
 class SettingsPanel : public QWidget
 {
     Q_OBJECT
@@ -22,9 +20,6 @@ signals:
     void jogDefaultsChanged(double stepSize, double feedRate);
 
 private:
-    QGroupBox *createJogDefaultsGroup();
-    QGroupBox *createAppearanceGroup();
-
     QDoubleSpinBox *m_jogStepSpin;
     QDoubleSpinBox *m_jogFeedSpin;
 };

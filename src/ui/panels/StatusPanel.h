@@ -3,7 +3,6 @@
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
-#include <QVector3D>
 #include "grbl/MachineState.h"
 
 class StatusPanel : public QWidget
@@ -24,9 +23,11 @@ signals:
     void zeroAxisRequested(const QString &axis);
     void zeroAllRequested();
     void goToZeroRequested();
+    void resetWorkOffsetRequested();  // Set work = machine (G10 L2 P1)
 
 private:
-    QLabel *createAxisLabel(const QString &axis, const QString &color);
+    QLabel *createAxisLabel(const QString &axis, const QString &objectName);
+    QLabel *createSideLabel(const QString &text, const QString &objectName);
     QPushButton *createZeroButton(const QString &axis);
 
     QLabel *m_stateLabel;

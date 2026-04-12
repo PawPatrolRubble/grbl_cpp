@@ -1,19 +1,32 @@
 #include "ConsolePanel.h"
-#include <QGroupBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QLabel>
 
 ConsolePanel::ConsolePanel(QWidget *parent)
     : QWidget(parent)
 {
-    auto *group = new QGroupBox("Console");
-    auto *vLayout = new QVBoxLayout(group);
+    setObjectName("consolePanel");
+    setAttribute(Qt::WA_StyledBackground, true);
+    auto *vLayout = new QVBoxLayout(this);
+    vLayout->setContentsMargins(0, 0, 0, 0);
+    vLayout->setSpacing(0);
+
+    // Title bar matching dock style
+    auto *titleLabel = new QLabel("Console");
+    titleLabel->setObjectName("consoleTitle");
+    vLayout->addWidget(titleLabel);
+
+    // Console content area
+    auto *contentLayout = new QVBoxLayout();
+    contentLayout->setContentsMargins(8, 8, 8, 8);
+    contentLayout->setSpacing(4);
 
     m_consoleEdit = new QTextEdit();
     m_consoleEdit->setReadOnly(true);
     m_consoleEdit->setFont(QFont("Consolas", 9));
-    m_consoleEdit->setMaximumHeight(200);
-    vLayout->addWidget(m_consoleEdit);
+    m_consoleEdit->setObjectName("consoleEdit");
+    contentLayout->addWidget(m_consoleEdit);
 
     auto *cmdLayout = new QHBoxLayout();
     m_commandEdit = new QLineEdit();
@@ -21,11 +34,9 @@ ConsolePanel::ConsolePanel(QWidget *parent)
     auto *sendBtn = new QPushButton("Send");
     cmdLayout->addWidget(m_commandEdit);
     cmdLayout->addWidget(sendBtn);
-    vLayout->addLayout(cmdLayout);
+    contentLayout->addLayout(cmdLayout);
 
-    auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(group);
+    vLayout->addLayout(contentLayout);
 
     auto sendCommand = [this]() {
         QString cmd = m_commandEdit->text().trimmed();

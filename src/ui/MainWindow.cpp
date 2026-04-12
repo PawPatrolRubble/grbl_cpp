@@ -1,5 +1,8 @@
 #include "MainWindow.h"
 #include "DockPanel.h"
+#include "CustomTitleBar.h"
+#include "ApplicationCore.h"
+#include "SettingsManager.h"
 #include "panels/ConnectionPanel.h"
 #include "panels/StatusPanel.h"
 #include "panels/ControlPanel.h"
@@ -13,89 +16,88 @@
 #include "grbl/SerialManager.h"
 #include "grbl/GcodeParser.h"
 #include "grbl/FileManager.h"
+#include "grbl/GrblConstants.h"
 
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QKeyEvent>
-#include <QMenuBar>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , ui(new Ui::MainWindow)
+    , m_titleBar(nullptr)
     , m_core(new ApplicationCore(this))
     , m_settings(new SettingsManager(this))
     , m_parseWatcher(new QFutureWatcher<QList<GcodeMove>>(this))
 {
-    setWindowTitle("GRBL G-Code Sender");
-    resize(1200, 800);
-    setupUi();
+    // Frameless window for custom title bar
+    setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground, false);
+
+    // Setup UI first - creates centralWidget with toolpathPanel and consolePanel
+    ui->setupUi(this);
+
+    // Now wrap the central widget with title bar
+    QWidget *originalCentral = centralWidget();
+    originalCentral->setObjectName("centralContent");
+
+    // Create new container with title bar at top
+    auto *mainContainer = new QWidget();
+    auto *mainLayout = new QVBoxLayout(mainContainer);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
+
+    // Title bar spans full width at top
+    m_titleBar = new CustomTitleBar();
+    mainLayout->addWidget(m_titleBar);
+
+    // Add original central content below title bar
+    mainLayout->addWidget(originalCentral, 1);
+
+    // Set new central widget
+    setCentralWidget(mainContainer);
+
+    // Setup remaining components
+    setupDocks();
     setupMenuBar();
     setupStatusBar();
     setupConnections();
     restoreLayout();
+
+    // Connect title bar buttons
+    connect(m_titleBar, &CustomTitleBar::minimizeRequested, this, [this]() {
+        showMinimized();
+    });
+    connect(m_titleBar, &CustomTitleBar::maximizeRequested, this, [this]() {
+        if (isMaximized()) {
+            showNormal();
+        } else {
+            showMaximized();
+        }
+    });
+    connect(m_titleBar, &CustomTitleBar::closeRequested, this, &QWidget::close);
 }
 
 MainWindow::~MainWindow()
 {
     saveLayout();
+    delete ui;
 }
 
 // ---------------------------------------------------------------------------
-// UI Layout — Dock-based
+// Custom Title Bar - uses embedded menu bar
 // ---------------------------------------------------------------------------
-
-void MainWindow::setupUi()
-{
-    // Central widget: ToolpathPanel (always visible, not dockable)
-    m_toolpathPanel = new ToolpathPanel();
-    setCentralWidget(m_toolpathPanel);
-
-    // --- Left side docks (tabified) ---
-
-    m_connectionPanel = new ConnectionPanel();
-    m_connectionPanel->setAvailablePorts(SerialManager::availablePorts());
-    m_connectionPanel->setAvailableBaudRates(SerialManager::commonBaudRates());
-    m_connectionPanel->setDefaultBaudRate("115200");
-
-    m_dockConnection = createDock("Connection", m_connectionPanel, Qt::LeftDockWidgetArea);
-    m_dockConnection->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-
-    m_statusPanel = new StatusPanel();
-    m_dockStatus = createDock("Machine Status", m_statusPanel, Qt::LeftDockWidgetArea);
-
-    m_controlPanel = new ControlPanel();
-    m_dockControl = createDock("Streaming Control", m_controlPanel, Qt::LeftDockWidgetArea);
-
-    m_jogPanel = new JogPanel();
-    m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea);
-
-    // --- Bottom dock ---
-
-    m_consolePanel = new ConsolePanel();
-    m_dockConsole = createDock("Console", m_consolePanel, Qt::BottomDockWidgetArea);
-    m_dockConsole->setMinimumHeight(150);
-
-    // --- Right dock (hidden by default) ---
-
-    m_settingsPanel = new SettingsPanel();
-    m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
-    m_dockSettings->hide();  // Hidden by default, toggle via menu
-}
-
-DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
-                                   Qt::DockWidgetArea area, bool closable)
-{
-    auto *dock = new DockPanel(title, widget, area, closable, true, this);
-    addDockWidget(area, dock);
-    return dock;
-}
 
 void MainWindow::setupMenuBar()
 {
+    // Use title bar's embedded menu bar instead of QMainWindow's menu bar
+    auto *menuBar = m_titleBar->menuBar();
+
     // --- File menu ---
-    auto *fileMenu = menuBar()->addMenu("&File");
+    auto *fileMenu = menuBar->addMenu("&File");
     fileMenu->addAction("Open...", this, [this]() {
         emit m_controlPanel->loadFileRequested();
     }, QKeySequence::Open);
@@ -104,9 +106,9 @@ void MainWindow::setupMenuBar()
         TextToGcodeDialog dialog(this);
         connect(&dialog, &TextToGcodeDialog::gcodeGenerated, this, [this](const QStringList &lines) {
             m_core->fileManager()->loadLines("TextToGcode", lines);
-            m_toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
+            ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
             m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
-            m_consolePanel->appendMessage("Generated Text to G-code loaded.");
+            ui->consolePanel->appendMessage("Generated Text to G-code loaded.");
 
             QStringList parseLines = m_core->fileManager()->lines();
             QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
@@ -121,7 +123,7 @@ void MainWindow::setupMenuBar()
     fileMenu->addAction("Exit", this, &QWidget::close, QKeySequence::Quit);
 
     // --- View menu (dock visibility toggles) ---
-    auto *viewMenu = menuBar()->addMenu("&View");
+    auto *viewMenu = menuBar->addMenu("&View");
 
     auto *actConnection = viewMenu->addAction("Connection", this, [this]() {
         m_dockConnection->setVisible(!m_dockConnection->isVisible());
@@ -155,14 +157,6 @@ void MainWindow::setupMenuBar()
             actJog, &QAction::setChecked);
     actJog->setChecked(true);
 
-    auto *actConsole = viewMenu->addAction("Console", this, [this]() {
-        m_dockConsole->setVisible(!m_dockConsole->isVisible());
-    });
-    actConsole->setCheckable(true);
-    connect(m_dockConsole, &QDockWidget::visibilityChanged,
-            actConsole, &QAction::setChecked);
-    actConsole->setChecked(true);
-
     auto *actSettings = viewMenu->addAction("Settings", this, [this]() {
         m_dockSettings->setVisible(!m_dockSettings->isVisible());
     });
@@ -172,23 +166,20 @@ void MainWindow::setupMenuBar()
 
     viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
-        // Restore default: remove all saved dock state
         m_settings->resetToDefaults();
-        // Re-add docks in default positions
-        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockConsole, m_dockSettings}) {
+        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings}) {
             removeDockWidget(dock);
         }
         addDockWidget(Qt::LeftDockWidgetArea, m_dockConnection);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockStatus);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockControl);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockJog);
-        addDockWidget(Qt::BottomDockWidgetArea, m_dockConsole);
         addDockWidget(Qt::RightDockWidgetArea, m_dockSettings);
         m_dockSettings->hide();
     });
 
     // --- Help menu ---
-    auto *helpMenu = menuBar()->addMenu("&Help");
+    auto *helpMenu = menuBar->addMenu("&Help");
     helpMenu->addAction("About", this, [this]() {
         QMessageBox::about(this, "About", "GRBL G-Code Sender v1.0\nBuilt with Qt6");
     });
@@ -197,6 +188,49 @@ void MainWindow::setupMenuBar()
 void MainWindow::setupStatusBar()
 {
     statusBar()->showMessage("Ready");
+}
+
+// ---------------------------------------------------------------------------
+// Dock Widgets — created in code (DockPanel has custom constructor)
+// ---------------------------------------------------------------------------
+
+void MainWindow::setupDocks()
+{
+    // --- Left side docks (tabified) ---
+    m_connectionPanel = new ConnectionPanel();
+    m_connectionPanel->setAvailablePorts(SerialManager::availablePorts());
+    m_connectionPanel->setAvailableBaudRates(SerialManager::commonBaudRates());
+    m_connectionPanel->setDefaultBaudRate("115200");
+
+    m_dockConnection = createDock("Connection", m_connectionPanel, Qt::LeftDockWidgetArea);
+    m_dockConnection->setObjectName("dockConnection");
+    m_dockConnection->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+
+    m_statusPanel = new StatusPanel();
+    m_dockStatus = createDock("Machine Status", m_statusPanel, Qt::LeftDockWidgetArea);
+    m_dockStatus->setObjectName("dockStatus");
+
+    m_controlPanel = new ControlPanel();
+    m_dockControl = createDock("Streaming Control", m_controlPanel, Qt::LeftDockWidgetArea);
+    m_dockControl->setObjectName("dockControl");
+
+    m_jogPanel = new JogPanel();
+    m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea);
+    m_dockJog->setObjectName("dockJog");
+
+    // --- Right dock (hidden by default) ---
+    m_settingsPanel = new SettingsPanel();
+    m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
+    m_dockSettings->setObjectName("dockSettings");
+    m_dockSettings->hide();
+}
+
+DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
+                                   Qt::DockWidgetArea area, bool closable)
+{
+    auto *dock = new DockPanel(title, widget, area, closable, true, this);
+    addDockWidget(area, dock);
+    return dock;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,13 +276,13 @@ void MainWindow::setupConnections()
             m_connectionPanel, &ConnectionPanel::setConnected);
     connect(serial, &SerialManager::connectedChanged,
             this, [this](bool connected) {
-                m_consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
+                ui->consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
             });
 
     // --- Core responses → console ---
     connect(m_core, &ApplicationCore::responseReceived,
             this, [this](const QString &response) {
-                m_consolePanel->appendMessage(response);
+                ui->consolePanel->appendMessage(response);
             });
 
     // --- Core streaming → UI ---
@@ -256,7 +290,7 @@ void MainWindow::setupConnections()
             m_controlPanel, &ControlPanel::setStreamingProgress);
     connect(m_core, &ApplicationCore::streamingProgress,
             this, [this](int current, int /*total*/) {
-                m_toolpathPanel->setExecutingLine(current);
+                ui->toolpathPanel->setExecutingLine(current);
             });
     connect(m_core, &ApplicationCore::streamingStarted,
             m_controlPanel, &ControlPanel::setStreamingStarted);
@@ -267,7 +301,7 @@ void MainWindow::setupConnections()
     connect(m_core, &ApplicationCore::streamingFinished,
             this, [this]() {
                 m_controlPanel->setStreamingFinished();
-                m_consolePanel->appendMessage("Streaming finished");
+                ui->consolePanel->appendMessage("Streaming finished");
                 statusBar()->showMessage("Streaming complete");
             });
 
@@ -275,7 +309,7 @@ void MainWindow::setupConnections()
     connect(state, &MachineState::machinePositionChanged,
             m_statusPanel, &StatusPanel::setMachinePosition);
     connect(state, &MachineState::machinePositionChanged,
-            m_toolpathPanel, &ToolpathPanel::setCutterPosition);
+            ui->toolpathPanel, &ToolpathPanel::setCutterPosition);
     connect(state, &MachineState::workPositionChanged,
             m_statusPanel, &StatusPanel::setWorkPosition);
     connect(state, &MachineState::stateChanged,
@@ -301,32 +335,38 @@ void MainWindow::setupConnections()
             this, [this](const QString &axis) {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand(QString("G10 L20 P0 %1%2").arg(axis).arg(0));
-                m_consolePanel->appendMessage(QString("Set %1 work position to zero").arg(axis));
+                ui->consolePanel->appendMessage(QString("Set %1 work position to zero").arg(axis));
             });
     connect(m_statusPanel, &StatusPanel::zeroAllRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L20 P0 X0 Y0 Z0");
-                m_consolePanel->appendMessage("Set all work positions to zero");
+                ui->consolePanel->appendMessage("Set all work positions to zero");
             });
     connect(m_statusPanel, &StatusPanel::goToZeroRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G90 G0 X0 Y0 Z0");
-                m_consolePanel->appendMessage("Moving to zero position");
+                ui->consolePanel->appendMessage("Moving to zero position");
+            });
+    connect(m_statusPanel, &StatusPanel::resetWorkOffsetRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand("G10 L2 P1 X0 Y0 Z0");
+                ui->consolePanel->appendMessage("Reset work offset — work position now equals machine position");
             });
 
     // --- ToolpathPanel → transform feedback ---
-    connect(m_toolpathPanel, &ToolpathPanel::gcodeTransformed,
+    connect(ui->toolpathPanel, &ToolpathPanel::gcodeTransformed,
             this, [this](const QStringList &newLines) {
                 m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), newLines.size());
-                m_consolePanel->appendMessage(QString("Transform applied — %1 lines").arg(newLines.size()));
+                ui->consolePanel->appendMessage(QString("Transform applied — %1 lines").arg(newLines.size()));
             });
 
     // --- Core errors → console + statusbar ---
     connect(m_core, &ApplicationCore::errorOccurred,
             this, [this](const QString &err) {
-                m_consolePanel->appendMessage("ERROR: " + err);
+                ui->consolePanel->appendMessage("ERROR: " + err);
                 statusBar()->showMessage("Error: " + err);
             });
 
@@ -346,7 +386,7 @@ void MainWindow::setupConnections()
             QMessageBox::warning(this, "No File", "Please load a G-code file first.");
             return;
         }
-        m_core->startStreaming(m_toolpathPanel->currentGcodeLines());
+        m_core->startStreaming(ui->toolpathPanel->currentGcodeLines());
     });
     connect(m_controlPanel, &ControlPanel::pauseRequested,  this, [this]() { m_core->pauseStreaming(); });
     connect(m_controlPanel, &ControlPanel::resumeRequested, this, [this]() { m_core->resumeStreaming(); });
@@ -358,11 +398,11 @@ void MainWindow::setupConnections()
     connect(m_controlPanel, &ControlPanel::unlockRequested,
             this, [this]() { m_core->sendCommand("$X"); });
     connect(m_controlPanel, &ControlPanel::resetRequested,
-            this, [this]() { m_core->sendRealtime(0x18); });
+            this, [this]() { m_core->sendRealtime(GrblRealtime::Reset); });
     connect(m_controlPanel, &ControlPanel::statusRequested,
             this, [this]() {
                 if (m_core->serialManager()->isConnected())
-                    m_core->sendRealtime('?');
+                    m_core->sendRealtime(GrblRealtime::StatusReport);
             });
 
     // --- JogPanel → SerialManager ---
@@ -383,7 +423,7 @@ void MainWindow::setupConnections()
             });
 
     // --- ConsolePanel → SerialManager ---
-    connect(m_consolePanel, &ConsolePanel::commandEntered,
+    connect(ui->consolePanel, &ConsolePanel::commandEntered,
             this, [this](const QString &cmd) {
                 if (m_core->serialManager()->isConnected())
                     m_core->sendCommand(cmd);
@@ -392,7 +432,7 @@ void MainWindow::setupConnections()
     // --- Async parse ---
     connect(m_parseWatcher, &QFutureWatcher<QList<GcodeMove>>::finished,
             this, [this]() {
-                m_toolpathPanel->setMoves(m_parseWatcher->result());
+                ui->toolpathPanel->setMoves(m_parseWatcher->result());
                 statusBar()->showMessage("File loaded: " + m_core->fileManager()->fileName());
             });
 }
@@ -405,9 +445,9 @@ void MainWindow::loadAndParseFile(const QString &filePath)
 {
     auto *fm = m_core->fileManager();
     if (fm->loadFile(filePath)) {
-        m_toolpathPanel->setGcodeLines(fm->lines());
+        ui->toolpathPanel->setGcodeLines(fm->lines());
         m_controlPanel->setFileLoaded(fm->fileName(), fm->lines().size());
-        m_consolePanel->appendMessage("File loaded: " + fm->fileName());
+        ui->consolePanel->appendMessage("File loaded: " + fm->fileName());
         statusBar()->showMessage("Parsing G-code...");
 
         QStringList lines = fm->lines();
@@ -435,4 +475,9 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
     if (m_core->serialManager()->isConnected() && m_jogPanel->handleKeyRelease(event))
         return;
     QMainWindow::keyReleaseEvent(event);
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
 }

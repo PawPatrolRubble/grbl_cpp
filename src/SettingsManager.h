@@ -12,21 +12,16 @@ class SettingsManager : public QObject
 
 public:
     explicit SettingsManager(QObject *parent = nullptr);
-    ~SettingsManager() override;
+    ~SettingsManager() override = default;
 
-    /// Save the main window's dock layout and geometry.
     void saveLayout(const QByteArray &dockState, const QByteArray &geometry);
+    [[nodiscard]] QByteArray restoreLayout(QByteArray &geometry) const;
 
-    /// Restore the main window's dock layout. Returns the saved dock state.
-    QByteArray restoreLayout(QByteArray &geometry) const;
-
-    // Jog defaults
     void setJogStepSize(double mm);
     void setJogFeedRate(double mmPerMin);
-    double jogStepSize() const;
-    double jogFeedRate() const;
+    [[nodiscard]] double jogStepSize() const;
+    [[nodiscard]] double jogFeedRate() const;
 
-    /// Reset all settings to defaults.
     void resetToDefaults();
 
 private:

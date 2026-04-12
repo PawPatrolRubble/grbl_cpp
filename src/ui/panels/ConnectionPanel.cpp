@@ -1,13 +1,14 @@
 #include "ConnectionPanel.h"
-#include <QGroupBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 
 ConnectionPanel::ConnectionPanel(QWidget *parent)
     : QWidget(parent)
 {
-    auto *group = new QGroupBox("Connection");
-    auto *form = new QFormLayout(group);
+    setObjectName("connectionPanel");
+    setAttribute(Qt::WA_StyledBackground, true);
+    auto *form = new QFormLayout(this);
+    form->setContentsMargins(8, 8, 8, 8);
 
     m_portCombo = new QComboBox();
     m_portCombo->setEditable(true);
@@ -18,15 +19,13 @@ ConnectionPanel::ConnectionPanel(QWidget *parent)
 
     auto *btnLayout = new QHBoxLayout();
     m_connectBtn = new QPushButton("Connect");
+    m_connectBtn->setObjectName("connectBtn");
     m_disconnectBtn = new QPushButton("Disconnect");
+    m_disconnectBtn->setObjectName("disconnectBtn");
     m_disconnectBtn->setEnabled(false);
     btnLayout->addWidget(m_connectBtn);
     btnLayout->addWidget(m_disconnectBtn);
     form->addRow(btnLayout);
-
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->addWidget(group);
 
     connect(m_connectBtn, &QPushButton::clicked, this, [this]() {
         emit connectRequested(extractPortName(m_portCombo->currentText()),
@@ -64,7 +63,6 @@ void ConnectionPanel::setConnected(bool connected)
 
 QString ConnectionPanel::extractPortName(const QString &portString)
 {
-    // "COM3 - USB2.0-Serial" -> "COM3"
     int dashIdx = portString.indexOf(QLatin1String(" - "));
     if (dashIdx > 0) {
         return portString.left(dashIdx).trimmed();

@@ -1,5 +1,6 @@
 #include "SerialManager.h"
 #include "MachineState.h"
+#include "GrblConstants.h"
 
 #include <QDebug>
 #include <QEventLoop>
@@ -18,7 +19,7 @@ SerialManager::SerialManager(MachineState *machineState, QObject *parent)
     connect(m_pollTimer, &QTimer::timeout, this, &SerialManager::pollStatus);
 }
 
-SerialManager::~SerialManager()
+SerialManager::~SerialManager() noexcept
 {
     disconnectFromGrbl();
 }
@@ -46,7 +47,6 @@ bool SerialManager::connectToGrbl(const QString &portName, int baudRate)
 
     QMutexLocker locker(&m_mutex);
 
-    // Extract just the port name (strip description if present)
     QString cleanPortName = portName;
     int dashIdx = portName.indexOf(QLatin1String(" - "));
     if (dashIdx > 0) {
@@ -68,7 +68,6 @@ bool SerialManager::connectToGrbl(const QString &portName, int baudRate)
     m_port->setRequestToSend(true);
     m_port->setDataTerminalReady(true);
 
-    // Small delay to let GRBL reset
     QEventLoop loop;
     QTimer::singleShot(500, &loop, &QEventLoop::quit);
     loop.exec();
@@ -98,7 +97,7 @@ void SerialManager::disconnectFromGrbl()
     }
 }
 
-bool SerialManager::isConnected() const
+bool SerialManager::isConnected() const noexcept
 {
     QMutexLocker locker(&m_mutex);
     return m_port && m_port->isOpen();
@@ -130,28 +129,20 @@ void SerialManager::sendRealtimeCommand(char command)
 void SerialManager::jogStep(const QString &axis, double step, double feedRate)
 {
     if (!isConnected()) return;
-    QString cmd = QString("$J=G91 %1%2 F%3")
-        .arg(axis)
-        .arg(step, 0, 'f', 3)
-        .arg(feedRate, 0, 'f', 0);
-    sendCommand(cmd);
+    sendCommand(QString("$J=G91 %1%2 F%3").arg(axis).arg(step, 0, 'f', 3).arg(feedRate, 0, 'f', 0));
 }
 
 void SerialManager::jogContinuous(const QString &axis, int direction, double feedRate)
 {
     if (!isConnected()) return;
     double dist = (direction >= 0) ? 9999.0 : -9999.0;
-    QString cmd = QString("$J=G91 %1%2 F%3")
-        .arg(axis)
-        .arg(dist, 0, 'f', 0)
-        .arg(feedRate, 0, 'f', 0);
-    sendCommand(cmd);
+    sendCommand(QString("$J=G91 %1%2 F%3").arg(axis).arg(dist, 0, 'f', 0).arg(feedRate, 0, 'f', 0));
 }
 
 void SerialManager::jogCancel()
 {
     if (!isConnected()) return;
-    sendRealtimeCommand(static_cast<char>(0x85));
+    sendRealtimeCommand(GrblRealtime::JogCancel);
 }
 
 void SerialManager::handleReadyRead()
@@ -170,26 +161,23 @@ void SerialManager::handleSerialError(QSerialPort::SerialPortError error)
 {
     if (error == QSerialPort::NoError) return;
 
-    QString msg;
     if (error == QSerialPort::ResourceError) {
-        msg = tr("Device disconnected");
         disconnectFromGrbl();
+        emit errorOccurred(tr("Device disconnected"));
     } else {
-        msg = tr("Serial error: %1").arg(m_port->errorString());
+        emit errorOccurred(tr("Serial error: %1").arg(m_port->errorString()));
     }
-    emit errorOccurred(msg);
 }
 
 void SerialManager::pollStatus()
 {
-    sendRealtimeCommand('?');
+    sendRealtimeCommand(GrblRealtime::StatusReport);
 }
 
 void SerialManager::processBuffer()
 {
     QMutexLocker locker(&m_mutex);
 
-    // Process line-based responses
     while (true) {
         int nlPos = m_buffer.indexOf('\n');
         int crPos = m_buffer.indexOf('\r');
@@ -215,15 +203,15 @@ void SerialManager::processBuffer()
         locker.unlock();
 
         if (!line.isEmpty()) {
-            if (line.startsWith(QLatin1String("<")) && line.endsWith(QLatin1String(">"))) {
+            if (line.startsWith(GrblResponse::StatusStart) && line.endsWith(GrblResponse::StatusEnd)) {
                 emit responseReceived(line);
-            } else if (line.startsWith(QLatin1String("ok"))) {
+            } else if (line.startsWith(GrblResponse::OkPrefix)) {
                 emit ackReceived();
                 emit responseReceived(line);
-            } else if (line.startsWith(QLatin1String("error"))) {
+            } else if (line.startsWith(GrblResponse::ErrorPrefix)) {
                 emit commandErrorReceived(line);
                 emit responseReceived(line);
-            } else if (line.startsWith(QLatin1String("Grbl"))) {
+            } else if (line.startsWith(GrblResponse::WelcomeStart)) {
                 m_grblReady = true;
                 emit responseReceived(line);
             } else {

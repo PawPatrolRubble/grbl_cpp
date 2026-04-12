@@ -1,4 +1,5 @@
 #include "GcodeStreamer.h"
+#include "GrblConstants.h"
 
 GcodeStreamer::GcodeStreamer(QObject *parent)
     : QObject(parent)
@@ -25,7 +26,7 @@ void GcodeStreamer::pauseStreaming()
 {
     if (m_streaming && !m_paused) {
         m_paused = true;
-        emit sendRealtimeRequested('!');
+        emit sendRealtimeRequested(GrblRealtime::FeedHold);
         emit streamingPaused();
     }
 }
@@ -34,7 +35,7 @@ void GcodeStreamer::resumeStreaming()
 {
     if (m_streaming && m_paused) {
         m_paused = false;
-        emit sendRealtimeRequested('~');
+        emit sendRealtimeRequested(GrblRealtime::CycleStart);
         emit streamingResumed();
     }
 }
@@ -54,6 +55,11 @@ void GcodeStreamer::stopStreaming()
 bool GcodeStreamer::isStreaming() const
 {
     return m_streaming;
+}
+
+bool GcodeStreamer::isPaused() const
+{
+    return m_paused;
 }
 
 void GcodeStreamer::onAckReceived()

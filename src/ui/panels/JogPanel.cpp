@@ -1,5 +1,4 @@
 #include "JogPanel.h"
-#include <QGroupBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -9,8 +8,10 @@
 JogPanel::JogPanel(QWidget *parent)
     : QWidget(parent)
 {
-    auto *group = new QGroupBox("Jog Control");
-    auto *jogLayout = new QVBoxLayout(group);
+    setObjectName("jogPanel");
+    setAttribute(Qt::WA_StyledBackground, true);
+    auto *jogLayout = new QVBoxLayout(this);
+    jogLayout->setContentsMargins(8, 8, 8, 8);
 
     // Mode / Step row
     auto *modeRow = new QHBoxLayout();
@@ -83,11 +84,6 @@ JogPanel::JogPanel(QWidget *parent)
     setupJogBtn(btnYMinus, "Y", -1);
     setupJogBtn(btnZPlus, "Z", 1);
     setupJogBtn(btnZMinus, "Z", -1);
-
-    // Outer layout
-    auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(group);
 }
 
 void JogPanel::doJog(const QString &axis, int direction)
