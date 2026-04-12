@@ -12,10 +12,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent)
+# Added SerialPort — replaces platform-specific Win32 serial API
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent SerialPort)
 find_package(Qt6CorePrivate REQUIRED)
 
 qt_standard_project_setup()
+
+# ApplicationCore — service container that wires backend services together
+set(APP_SOURCES
+    src/ApplicationCore.cpp
+)
+
+set(APP_HEADERS
+    src/ApplicationCore.h
+)
 
 set(GRBL_SOURCES
     src/grbl/MachineState.cpp
@@ -84,6 +94,7 @@ set(UI_HEADERS
 set(SOURCES
     src/main.cpp
     src/App.cpp
+    ${APP_SOURCES}
     ${GRBL_SOURCES}
     ${UI_SOURCES}
     ${UI_FILES}
@@ -91,6 +102,7 @@ set(SOURCES
 
 set(HEADERS
     src/App.h
+    ${APP_HEADERS}
     ${GRBL_HEADERS}
     ${UI_HEADERS}
 )
@@ -99,6 +111,7 @@ add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
+# Removed setupapi — QSerialPort handles this cross-platform
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
@@ -107,11 +120,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::OpenGLWidgets
     Qt6::CorePrivate
     Qt6::Concurrent
+    Qt6::SerialPort
 )
 
 if(WIN32)
     target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE)
-    target_link_libraries(${PROJECT_NAME} PRIVATE setupapi)
     target_compile_options(${PROJECT_NAME} PRIVATE /Zi)
     target_link_options(${PROJECT_NAME} PRIVATE /DEBUG)
     set_target_properties(${PROJECT_NAME} PROPERTIES

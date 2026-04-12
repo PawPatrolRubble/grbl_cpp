@@ -1,22 +1,18 @@
 #pragma once
 
 #include <QMainWindow>
-#include "ToolpathPanel.h"
 #include <QSplitter>
 #include <QFutureWatcher>
 
-#include "grbl/MachineState.h"
-#include "grbl/SerialManager.h"
-#include "grbl/GcodeStreamer.h"
-#include "grbl/GrblParser.h"
+#include "ApplicationCore.h"
 #include "grbl/GcodeParser.h"
-#include "grbl/FileManager.h"
 
 class ConnectionPanel;
 class StatusPanel;
 class ControlPanel;
 class JogPanel;
 class ConsolePanel;
+class ToolpathPanel;
 
 class MainWindow : public QMainWindow
 {
@@ -24,7 +20,7 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    ~MainWindow() override;
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -37,25 +33,14 @@ private:
     void setupConnections();
     void loadAndParseFile(const QString &filePath);
 
-private slots:
-    void onParseFinished();
-
-private:
-
-    // Backend services
-    MachineState *m_machineState;
-    SerialManager *m_serialManager;
-    GcodeStreamer *m_streamer;
-    GrblParser *m_grblParser;
-    GcodeParser *m_gcodeParser;
-    FileManager *m_fileManager;
+    ApplicationCore *m_core;
     QFutureWatcher<QList<GcodeMove>> *m_parseWatcher;
 
-    // UI panels
+    // UI panels only — no backend services
     ConnectionPanel *m_connectionPanel;
-    StatusPanel *m_statusPanel;
-    ControlPanel *m_controlPanel;
-    JogPanel *m_jogPanel;
-    ConsolePanel *m_consolePanel;
-    ToolpathPanel *m_toolpathPanel;
+    StatusPanel     *m_statusPanel;
+    ControlPanel    *m_controlPanel;
+    JogPanel        *m_jogPanel;
+    ConsolePanel    *m_consolePanel;
+    ToolpathPanel   *m_toolpathPanel;
 };

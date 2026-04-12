@@ -2,16 +2,20 @@
 #include "MachineState.h"
 
 #include <QDebug>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
+#include <QEventLoop>
 
 SerialManager::SerialManager(MachineState *machineState, QObject *parent)
     : QObject(parent)
     , m_machineState(machineState)
-    , m_handle(nullptr)
+    , m_port(new QSerialPort(this))
+    , m_pollTimer(new QTimer(this))
 {
+    connect(m_port, &QSerialPort::readyRead, this, &SerialManager::handleReadyRead, Qt::DirectConnection);
+    connect(m_port, QOverload<QSerialPort::SerialPortError>::of(&QSerialPort::errorOccurred),
+            this, &SerialManager::handleSerialError, Qt::DirectConnection);
+
+    m_pollTimer->setInterval(250);
+    connect(m_pollTimer, &QTimer::timeout, this, &SerialManager::pollStatus);
 }
 
 SerialManager::~SerialManager()
@@ -21,29 +25,14 @@ SerialManager::~SerialManager()
 
 QStringList SerialManager::availablePorts()
 {
-    QStringList ports;
-#ifdef Q_OS_WIN
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\SERIALCOMM", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        DWORD index = 0;
-        WCHAR name[256];
-        BYTE data[256];
-        DWORD nameSize, dataSize;
-        while (true) {
-            nameSize = sizeof(name);
-            dataSize = sizeof(data);
-            LONG result = RegEnumValueW(hKey, index, name, &nameSize, nullptr, nullptr, data, &dataSize);
-            if (result != ERROR_SUCCESS)
-                break;
-            QString portName = QString::fromWCharArray(reinterpret_cast<wchar_t*>(data), dataSize / sizeof(wchar_t));
-            ports << portName;
-            index++;
-        }
-        RegCloseKey(hKey);
+    QStringList result;
+    const auto ports = QSerialPortInfo::availablePorts();
+    for (const auto &info : ports) {
+        QString desc = info.description().isEmpty() ? info.portName() : info.description();
+        result << QString("%1 - %2").arg(info.portName(), desc);
     }
-#endif
-    std::sort(ports.begin(), ports.end());
-    return ports;
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 QStringList SerialManager::commonBaudRates()
@@ -55,113 +44,52 @@ bool SerialManager::connectToGrbl(const QString &portName, int baudRate)
 {
     disconnectFromGrbl();
 
-    m_baudRate = baudRate;
+    QMutexLocker locker(&m_mutex);
 
-#ifdef Q_OS_WIN
-    QString path = "\\\\.\\" + portName;
-    HANDLE hPort = CreateFileW(
-        reinterpret_cast<LPCWSTR>(path.utf16()),
-        GENERIC_READ | GENERIC_WRITE,
-        0,
-        nullptr,
-        OPEN_EXISTING,
-        0,
-        nullptr
-    );
+    // Extract just the port name (strip description if present)
+    QString cleanPortName = portName;
+    int dashIdx = portName.indexOf(QLatin1String(" - "));
+    if (dashIdx > 0) {
+        cleanPortName = portName.left(dashIdx).trimmed();
+    }
 
-    if (hPort == INVALID_HANDLE_VALUE) {
-        emit errorOccurred(tr("Failed to open port %1: %2").arg(portName).arg(GetLastError()));
+    m_port->setPortName(cleanPortName);
+    m_port->setBaudRate(baudRate);
+    m_port->setDataBits(QSerialPort::Data8);
+    m_port->setParity(QSerialPort::NoParity);
+    m_port->setStopBits(QSerialPort::OneStop);
+    m_port->setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!m_port->open(QIODevice::ReadWrite)) {
+        emit errorOccurred(tr("Failed to open port %1: %2").arg(cleanPortName, m_port->errorString()));
         return false;
     }
 
-    DCB dcb = {};
-    dcb.DCBlength = sizeof(DCB);
-    if (!GetCommState(hPort, &dcb)) {
-        CloseHandle(hPort);
-        emit errorOccurred(tr("Failed to get comm state"));
-        return false;
-    }
+    m_port->setRequestToSend(true);
+    m_port->setDataTerminalReady(true);
 
-    dcb.BaudRate = baudRate;
-    dcb.ByteSize = 8;
-    dcb.Parity = NOPARITY;
-    dcb.StopBits = ONESTOPBIT;
-    dcb.fDtrControl = DTR_CONTROL_ENABLE;
-    dcb.fRtsControl = RTS_CONTROL_ENABLE;
+    // Small delay to let GRBL reset
+    QEventLoop loop;
+    QTimer::singleShot(500, &loop, &QEventLoop::quit);
+    loop.exec();
 
-    if (!SetCommState(hPort, &dcb)) {
-        CloseHandle(hPort);
-        emit errorOccurred(tr("Failed to set comm state"));
-        return false;
-    }
-
-    COMMTIMEOUTS timeouts = {};
-    timeouts.ReadIntervalTimeout = MAXDWORD;
-    timeouts.ReadTotalTimeoutMultiplier = 0;
-    timeouts.ReadTotalTimeoutConstant = 10;
-    timeouts.WriteTotalTimeoutMultiplier = 0;
-    timeouts.WriteTotalTimeoutConstant = 1000;
-    SetCommTimeouts(hPort, &timeouts);
-
-    PurgeComm(hPort, PURGE_RXCLEAR | PURGE_TXCLEAR | PURGE_RXABORT | PURGE_TXABORT);
-    SetCommMask(hPort, EV_RXCHAR);
-
-    {
-        QMutexLocker locker(&m_handleMutex);
-        m_handle = hPort;
-    }
-#endif
-
+    m_port->clear();
     m_buffer.clear();
     m_grblReady = false;
+    locker.unlock();
+
     m_machineState->setConnected(true);
     m_machineState->setState(MachineState::State::Idle);
-
-    m_readTimer = new QTimer();
-    m_readTimer->moveToThread(&m_ioThread);
-    connect(m_readTimer, &QTimer::timeout, this, &SerialManager::handleReadData, Qt::DirectConnection);
-
-    m_pollTimer = new QTimer();
-    m_pollTimer->moveToThread(&m_ioThread);
-    connect(m_pollTimer, &QTimer::timeout, this, &SerialManager::pollStatus, Qt::DirectConnection);
-
-    m_ioThread.start();
-
-    QMetaObject::invokeMethod(m_readTimer, "start", Qt::QueuedConnection, Q_ARG(int, 20));
-    QMetaObject::invokeMethod(m_pollTimer, "start", Qt::QueuedConnection, Q_ARG(int, 250));
-
     emit connectedChanged(true);
+
+    m_pollTimer->start();
     return true;
 }
 
 void SerialManager::disconnectFromGrbl()
 {
-    if (m_readTimer) {
-        QMetaObject::invokeMethod(m_readTimer, "stop", Qt::BlockingQueuedConnection);
-        m_readTimer->deleteLater();
-        m_readTimer = nullptr;
-    }
-
-    if (m_pollTimer) {
-        QMetaObject::invokeMethod(m_pollTimer, "stop", Qt::BlockingQueuedConnection);
-        m_pollTimer->deleteLater();
-        m_pollTimer = nullptr;
-    }
-
-    if (m_ioThread.isRunning()) {
-        m_ioThread.quit();
-        m_ioThread.wait();
-    }
-
-    {
-        QMutexLocker locker(&m_handleMutex);
-#ifdef Q_OS_WIN
-        if (m_handle) {
-            CloseHandle(m_handle);
-            m_handle = nullptr;
-        }
-#endif
-    }
+    m_pollTimer->stop();
+    closePort();
 
     if (m_machineState->isConnected()) {
         m_machineState->setConnected(false);
@@ -172,34 +100,31 @@ void SerialManager::disconnectFromGrbl()
 
 bool SerialManager::isConnected() const
 {
-    QMutexLocker locker(&m_handleMutex);
-    return m_handle != nullptr;
+    QMutexLocker locker(&m_mutex);
+    return m_port && m_port->isOpen();
 }
 
 void SerialManager::sendCommand(const QString &command)
 {
-    QMutexLocker locker(&m_handleMutex);
-#ifdef Q_OS_WIN
-    if (!m_handle) return;
+    QMutexLocker locker(&m_mutex);
+    if (!m_port || !m_port->isOpen()) return;
 
     QString cmd = command.trimmed();
     if (cmd.isEmpty()) return;
 
     QByteArray data = cmd.toUtf8() + "\r\n";
-    DWORD bytesWritten = 0;
-    WriteFile(m_handle, data.constData(), data.size(), &bytesWritten, nullptr);
+    m_port->write(data);
+    m_port->flush();
     locker.unlock();
     emit commandSent(cmd);
-#endif
 }
 
 void SerialManager::sendRealtimeCommand(char command)
 {
-    QMutexLocker locker(&m_handleMutex);
-#ifdef Q_OS_WIN
-    if (!m_handle) return;
-    WriteFile(m_handle, &command, 1, nullptr, nullptr);
-#endif
+    QMutexLocker locker(&m_mutex);
+    if (!m_port || !m_port->isOpen()) return;
+    m_port->write(&command, 1);
+    m_port->flush();
 }
 
 void SerialManager::jogStep(const QString &axis, double step, double feedRate)
@@ -229,39 +154,30 @@ void SerialManager::jogCancel()
     sendRealtimeCommand(static_cast<char>(0x85));
 }
 
-void SerialManager::handleReadData()
+void SerialManager::handleReadyRead()
 {
-#ifdef Q_OS_WIN
-    QMutexLocker locker(&m_handleMutex);
-    if (!m_handle) return;
+    QByteArray data = m_port->readAll();
+    if (data.isEmpty()) return;
 
-    DWORD errors = 0;
-    COMSTAT comstat = {};
-    ClearCommError(m_handle, &errors, &comstat);
+    QMutexLocker locker(&m_mutex);
+    m_buffer.append(data);
+    locker.unlock();
 
-    if (comstat.cbInQue == 0)
-        return;
+    processBuffer();
+}
 
-    char buf[4096];
-    DWORD bytesRead = 0;
+void SerialManager::handleSerialError(QSerialPort::SerialPortError error)
+{
+    if (error == QSerialPort::NoError) return;
 
-    while (comstat.cbInQue > 0) {
-        DWORD toRead = qMin(comstat.cbInQue, static_cast<DWORD>(sizeof(buf) - 1));
-        BOOL result = ReadFile(m_handle, buf, toRead, &bytesRead, nullptr);
-        if (!result || bytesRead == 0)
-            break;
-
-        buf[bytesRead] = '\0';
-        m_buffer += QString::fromUtf8(buf, bytesRead);
-        locker.unlock();
-        processBuffer();
-        locker.relock();
-
-        ClearCommError(m_handle, &errors, &comstat);
-        if (comstat.cbInQue == 0)
-            break;
+    QString msg;
+    if (error == QSerialPort::ResourceError) {
+        msg = tr("Device disconnected");
+        disconnectFromGrbl();
+    } else {
+        msg = tr("Serial error: %1").arg(m_port->errorString());
     }
-#endif
+    emit errorOccurred(msg);
 }
 
 void SerialManager::pollStatus()
@@ -271,36 +187,64 @@ void SerialManager::pollStatus()
 
 void SerialManager::processBuffer()
 {
-    while (m_buffer.contains('\n') || m_buffer.contains('\r')) {
-        int newlinePos = m_buffer.indexOf('\n');
+    QMutexLocker locker(&m_mutex);
+
+    // Process line-based responses
+    while (true) {
+        // Find first newline or carriage return
+        int nlPos = m_buffer.indexOf('\n');
         int crPos = m_buffer.indexOf('\r');
-        int splitPos;
 
-        if (newlinePos >= 0 && crPos >= 0)
-            splitPos = qMin(newlinePos, crPos);
-        else if (newlinePos >= 0)
-            splitPos = newlinePos;
-        else
+        int splitPos = -1;
+        if (nlPos >= 0 && crPos >= 0)
+            splitPos = qMin(nlPos, crPos);
+        else if (nlPos >= 0)
+            splitPos = nlPos;
+        else if (crPos >= 0)
             splitPos = crPos;
+        else
+            break;  // No line terminator found
 
-        QString line = m_buffer.left(splitPos).trimmed();
-        m_buffer.remove(0, splitPos + 1);
+        // Extract line (handle \r\n case)
+        int endPos = splitPos;
+        if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\r' && m_buffer[splitPos + 1] == '\n')
+            endPos = splitPos + 1;
+        else if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\n' && m_buffer[splitPos + 1] == '\r')
+            endPos = splitPos + 1;
 
-        if (line.isEmpty()) continue;
+        QString line = QString::fromUtf8(m_buffer.left(splitPos)).trimmed();
+        m_buffer.remove(0, endPos + 1);
+        locker.unlock();
 
-        if (line.startsWith('<') && line.endsWith('>')) {
-            emit responseReceived(line);
-        } else if (line.startsWith("ok")) {
-            emit ackReceived();
-            emit responseReceived(line);
-        } else if (line.startsWith("error")) {
-            emit commandErrorReceived(line);
-            emit responseReceived(line);
-        } else if (line.startsWith("Grbl")) {
-            m_grblReady = true;
-            emit responseReceived(line);
-        } else {
-            emit responseReceived(line);
+        if (!line.isEmpty()) {
+            if (line.startsWith(QLatin1String("<")) && line.endsWith(QLatin1String(">"))) {
+                // Status report — GrblParser handles this
+                emit responseReceived(line);
+            } else if (line.startsWith(QLatin1String("ok"))) {
+                emit ackReceived();
+                emit responseReceived(line);
+            } else if (line.startsWith(QLatin1String("error"))) {
+                emit commandErrorReceived(line);
+                emit responseReceived(line);
+            } else if (line.startsWith(QLatin1String("Grbl"))) {
+                m_grblReady = true;
+                emit responseReceived(line);
+            } else {
+                // Info messages, settings echo, etc.
+                emit responseReceived(line);
+            }
         }
+
+        locker.relock();
     }
+}
+
+void SerialManager::closePort()
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_port && m_port->isOpen()) {
+        m_port->close();
+    }
+    m_buffer.clear();
+    m_grblReady = false;
 }

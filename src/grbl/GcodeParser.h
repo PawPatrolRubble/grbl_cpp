@@ -21,6 +21,8 @@ struct GcodeMove
     int lineNumber = 0;
 };
 
+/// G-code file parser for visualization.
+/// Thread-safe: call parse() multiple times; each call starts from a clean state.
 class GcodeParser : public QObject
 {
     Q_OBJECT
@@ -28,14 +30,27 @@ class GcodeParser : public QObject
 public:
     explicit GcodeParser(QObject *parent = nullptr);
 
+    /// Parse a list of G-code lines. Thread-safe and reentrant.
     QList<GcodeMove> parse(const QStringList &lines);
-    GcodeMove parseLine(const QString &line, int lineNumber);
 
+    /// Static utility: parse a single line (stateless).
+    static GcodeMove parseLine(const QString &line, int lineNumber,
+                               const QVector3D &currentPos,
+                               double feedRate,
+                               double spindleSpeed,
+                               bool absolute,
+                               bool arcAbsolute);
+
+    /// Remove comments and blank lines.
     static QStringList cleanLines(const QStringList &lines);
+
+    /// Strip comments from a single line.
     static QString stripComments(const QString &line);
 
-    // Transform helpers
+    /// Serialize moves back to G-code.
     static QStringList movesToGcode(const QList<GcodeMove> &moves);
+
+    /// Apply geometric transforms to a list of moves.
     static QList<GcodeMove> transformMoves(const QList<GcodeMove> &moves,
                                            double scaleX, double scaleY,
                                            double offsetX, double offsetY,
@@ -45,12 +60,5 @@ signals:
     void parseError(int line, const QString &error);
 
 private:
-    QHash<QChar, double> m_modalCodes;
-    QVector3D m_currentPos;
-    double m_feedRate = 0.0;
-    double m_spindleSpeed = 0.0;
-    bool m_absolute = true;
-    bool m_arcAbsolute = false;
-
-    static const QRegularExpression s_regex;
+    QRegularExpression m_regex;
 };
