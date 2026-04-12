@@ -191,7 +191,6 @@ void SerialManager::processBuffer()
 
     // Process line-based responses
     while (true) {
-        // Find first newline or carriage return
         int nlPos = m_buffer.indexOf('\n');
         int crPos = m_buffer.indexOf('\r');
 
@@ -203,9 +202,8 @@ void SerialManager::processBuffer()
         else if (crPos >= 0)
             splitPos = crPos;
         else
-            break;  // No line terminator found
+            break;
 
-        // Extract line (handle \r\n case)
         int endPos = splitPos;
         if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\r' && m_buffer[splitPos + 1] == '\n')
             endPos = splitPos + 1;
@@ -218,7 +216,6 @@ void SerialManager::processBuffer()
 
         if (!line.isEmpty()) {
             if (line.startsWith(QLatin1String("<")) && line.endsWith(QLatin1String(">"))) {
-                // Status report — GrblParser handles this
                 emit responseReceived(line);
             } else if (line.startsWith(QLatin1String("ok"))) {
                 emit ackReceived();
@@ -230,7 +227,6 @@ void SerialManager::processBuffer()
                 m_grblReady = true;
                 emit responseReceived(line);
             } else {
-                // Info messages, settings echo, etc.
                 emit responseReceived(line);
             }
         }

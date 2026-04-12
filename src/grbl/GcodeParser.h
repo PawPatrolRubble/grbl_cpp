@@ -4,8 +4,6 @@
 #include <QString>
 #include <QStringList>
 #include <QVector3D>
-#include <QHash>
-#include <QRegularExpression>
 
 struct GcodeMove
 {
@@ -58,7 +56,4 @@ public:
 
 signals:
     void parseError(int line, const QString &error);
-
-private:
-    QRegularExpression m_regex;
 };

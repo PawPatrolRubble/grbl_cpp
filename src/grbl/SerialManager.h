@@ -22,7 +22,6 @@ public:
     ~SerialManager() override;
 
     /// Get list of available serial ports with descriptions.
-    /// Returns a list of "portName - description" strings.
     static QStringList availablePorts();
     static QStringList commonBaudRates();
 

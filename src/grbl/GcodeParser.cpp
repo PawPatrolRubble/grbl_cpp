@@ -2,7 +2,8 @@
 #include <QRegularExpression>
 #include <cmath>
 
-const QRegularExpression GcodeParser::m_regex("([A-Za-z])([+-]?[0-9]*\\.?[0-9]+)");
+// Regex for parsing G-code letters and numbers: e.g., "X10.5", "G01", "F100"
+static const QRegularExpression s_regex("([A-Za-z])([+-]?[0-9]*\\.?[0-9]+)");
 
 GcodeParser::GcodeParser(QObject *parent)
     : QObject(parent)
@@ -39,7 +40,7 @@ QList<GcodeMove> GcodeParser::parse(const QStringList &lines)
         GcodeMove::Type motionType = GcodeMove::Type::Linear;
         double iVal = 0.0, jVal = 0.0, rVal = 0.0;
 
-        QRegularExpressionMatchIterator it = m_regex.globalMatch(stripped);
+        QRegularExpressionMatchIterator it = s_regex.globalMatch(stripped);
 
         while (it.hasNext()) {
             QRegularExpressionMatch match = it.next();
@@ -113,7 +114,7 @@ GcodeMove GcodeParser::parseLine(const QString &line, int lineNumber,
     bool hasMotion = false;
     GcodeMove::Type motionType = GcodeMove::Type::Linear;
 
-    QRegularExpressionMatchIterator it = m_regex.globalMatch(stripped);
+    QRegularExpressionMatchIterator it = s_regex.globalMatch(stripped);
 
     while (it.hasNext()) {
         QRegularExpressionMatch match = it.next();

@@ -20,10 +20,13 @@ public slots:
     void setConnected(bool connected);
 
 signals:
-    void connectRequested(const QString &port, int baudRate);
+    void connectRequested(const QString &portName, int baudRate);
     void disconnectRequested();
 
 private:
+    /// Extract port name from "COM3 - USB2.0-Serial" format.
+    static QString extractPortName(const QString &portString);
+
     QComboBox *m_portCombo;
     QComboBox *m_baudCombo;
     QPushButton *m_connectBtn;

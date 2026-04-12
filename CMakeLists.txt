@@ -12,21 +12,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# Added SerialPort — replaces platform-specific Win32 serial API
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent SerialPort)
 find_package(Qt6CorePrivate REQUIRED)
 
 qt_standard_project_setup()
 
-# ApplicationCore — service container that wires backend services together
+# --- ApplicationCore (service container) ---
 set(APP_SOURCES
     src/ApplicationCore.cpp
+    src/SettingsManager.cpp
 )
 
 set(APP_HEADERS
     src/ApplicationCore.h
+    src/SettingsManager.h
 )
 
+# --- GRBL backend ---
 set(GRBL_SOURCES
     src/grbl/MachineState.cpp
     src/grbl/GrblParser.cpp
@@ -59,8 +61,10 @@ set(GRBL_HEADERS
     src/grbl/TextToGcode/TextToGcodeGenerator.h
 )
 
+# --- UI ---
 set(UI_SOURCES
     src/ui/MainWindow.cpp
+    src/ui/DockPanel.cpp
     src/ui/ToolpathCanvas.cpp
     src/ui/GcodeListWidget.cpp
     src/ui/ToolpathPanel.cpp
@@ -71,6 +75,7 @@ set(UI_SOURCES
     src/ui/panels/ControlPanel.cpp
     src/ui/panels/JogPanel.cpp
     src/ui/panels/ConsolePanel.cpp
+    src/ui/panels/SettingsPanel.cpp
 )
 
 set(UI_FILES
@@ -79,6 +84,7 @@ set(UI_FILES
 
 set(UI_HEADERS
     src/ui/MainWindow.h
+    src/ui/DockPanel.h
     src/ui/ToolpathCanvas.h
     src/ui/GcodeListWidget.h
     src/ui/ToolpathPanel.h
@@ -89,6 +95,7 @@ set(UI_HEADERS
     src/ui/panels/ControlPanel.h
     src/ui/panels/JogPanel.h
     src/ui/panels/ConsolePanel.h
+    src/ui/panels/SettingsPanel.h
 )
 
 set(SOURCES
@@ -111,7 +118,6 @@ add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
 
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
-# Removed setupapi — QSerialPort handles this cross-platform
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
@@ -125,6 +131,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 if(WIN32)
     target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE)
+    # Removed setupapi — QSerialPort handles cross-platform serial
     target_compile_options(${PROJECT_NAME} PRIVATE /Zi)
     target_link_options(${PROJECT_NAME} PRIVATE /DEBUG)
     set_target_properties(${PROJECT_NAME} PROPERTIES

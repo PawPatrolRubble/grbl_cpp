@@ -29,7 +29,7 @@ ConnectionPanel::ConnectionPanel(QWidget *parent)
     mainLayout->addWidget(group);
 
     connect(m_connectBtn, &QPushButton::clicked, this, [this]() {
-        emit connectRequested(m_portCombo->currentText(),
+        emit connectRequested(extractPortName(m_portCombo->currentText()),
                               m_baudCombo->currentText().toInt());
     });
     connect(m_disconnectBtn, &QPushButton::clicked, this, [this]() {
@@ -60,4 +60,14 @@ void ConnectionPanel::setConnected(bool connected)
     m_disconnectBtn->setEnabled(connected);
     m_portCombo->setEnabled(!connected);
     m_baudCombo->setEnabled(!connected);
+}
+
+QString ConnectionPanel::extractPortName(const QString &portString)
+{
+    // "COM3 - USB2.0-Serial" -> "COM3"
+    int dashIdx = portString.indexOf(QLatin1String(" - "));
+    if (dashIdx > 0) {
+        return portString.left(dashIdx).trimmed();
+    }
+    return portString.trimmed();
 }
