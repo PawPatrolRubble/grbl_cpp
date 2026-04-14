@@ -19,6 +19,7 @@ class GraphicsDesignPanel;
 class DockPanel;
 class TabWidget;
 class MainPage;
+class GraphicsDesignPage;
 
 class MainWindow : public QMainWindow
 {
@@ -51,4 +52,7 @@ private:
     // Tab navigation
     TabWidget *m_tabs;
     MainPage *m_mainPage;
+
+    // Active design tabs (for tracking multiple open designs)
+    QList<GraphicsDesignPage*> m_designPages;
 };
