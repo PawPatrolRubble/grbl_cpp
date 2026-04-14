@@ -1,5 +1,5 @@
 #include "GraphicsDesignPage.h"
-#include "panels/GraphicsDesignPanel.h"
+#include "ui/panels/GraphicsDesignPanel.h"
 
 #include <QVBoxLayout>
 

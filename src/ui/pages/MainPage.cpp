@@ -1,10 +1,10 @@
 #include "MainPage.h"
-#include "panels/ConnectionPanel.h"
-#include "panels/StatusPanel.h"
-#include "panels/ControlPanel.h"
-#include "panels/JogPanel.h"
-#include "panels/ConsolePanel.h"
-#include "ToolpathPanel.h"
+#include "ui/panels/ConnectionPanel.h"
+#include "ui/panels/StatusPanel.h"
+#include "ui/panels/ControlPanel.h"
+#include "ui/panels/JogPanel.h"
+#include "ui/panels/ConsolePanel.h"
+#include "ui/ToolpathPanel.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
