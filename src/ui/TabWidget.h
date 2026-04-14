@@ -3,9 +3,11 @@
 #include <QWidget>
 #include <QTabBar>
 #include <QStackedWidget>
+#include <QVector>
 
 /// Custom tab widget combining tab bar with stacked page container.
 /// Main tab (index 0) is non-closable. Other tabs have close buttons.
+/// Uses QVector to track page associations and maintain index consistency.
 class TabWidget : public QWidget
 {
     Q_OBJECT
@@ -34,4 +36,5 @@ private slots:
 private:
     QTabBar *m_tabBar;
     QStackedWidget *m_stack;
+    QVector<QWidget*> m_pages;  // Track page associations to prevent index mismatch
 };
