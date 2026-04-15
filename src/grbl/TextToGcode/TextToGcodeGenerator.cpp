@@ -96,10 +96,9 @@ QStringList TextToGcodeGenerator::generate(const QString& text,
             double x0 = cursorX + (p0.x() + m.offsetX) * m.scale;
             double y0 = cursorY + (p0.y() + m.offsetY) * m.scale;
 
-            gcode << QString("G1 X%1 Y%2 F%3")
+            gcode << QString("G0 X%1 Y%2")
                      .arg(x0, 0, 'f', 3)
-                     .arg(y0, 0, 'f', 3)
-                     .arg(options.feedRateXY, 0, 'f', 0);
+                     .arg(y0, 0, 'f', 3);
 
             if (options.toolMode == ToolMode::PenPlotter) {
                 gcode << QString("G1 Z%1 F%2").arg(options.cutZ, 0, 'f', 2).arg(options.plungeRateZ, 0, 'f', 0);
@@ -163,10 +162,9 @@ QStringList TextToGcodeGenerator::generateFromSystemFont(const QString& text, co
         if (stroke.isEmpty()) continue;
 
         QPointF p0 = stroke.first();
-        gcode << QString("G1 X%1 Y%2 F%3")
+        gcode << QString("G0 X%1 Y%2")
                  .arg(cursorX + p0.x(), 0, 'f', 2)
-                 .arg(cursorY - p0.y(), 0, 'f', 2)
-                 .arg(options.feedRateXY, 0, 'f', 0);
+                 .arg(cursorY - p0.y(), 0, 'f', 2);
 
         if (options.toolMode == ToolMode::PenPlotter) {
             gcode << QString("G1 Z%1 F%2").arg(options.cutZ, 0, 'f', 2).arg(options.plungeRateZ, 0, 'f', 0);

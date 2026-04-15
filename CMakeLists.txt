@@ -203,3 +203,11 @@ if(WIN32 AND EXISTS "${Qt6_DIR}/../../../bin/windeployqt.exe")
         COMMENT "Deploying Qt dependencies..."
     )
 endif()
+
+# --- Unit tests (minimal, only GcodeParser) ---
+add_executable(TestGcodeParser tests/test_gcode_parser.cpp src/grbl/GcodeParser.cpp)
+target_include_directories(TestGcodeParser PRIVATE src)
+target_link_libraries(TestGcodeParser PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent)
+if(WIN32)
+    target_compile_definitions(TestGcodeParser PRIVATE UNICODE _UNICODE)
+endif()
