@@ -9,6 +9,7 @@
 #include "panels/JogPanel.h"
 #include "panels/ConsolePanel.h"
 #include "panels/SettingsPanel.h"
+#include "panels/GraphicsDesignPanel.h"
 #include "ToolpathPanel.h"
 #include "TextToGcodeDialog.h"
 
@@ -164,6 +165,13 @@ void MainWindow::setupMenuBar()
     connect(m_dockSettings, &QDockWidget::visibilityChanged,
             actSettings, &QAction::setChecked);
 
+    auto *actGraphicsDesign = viewMenu->addAction("Graphics Design", this, [this]() {
+        m_dockGraphicsDesign->setVisible(!m_dockGraphicsDesign->isVisible());
+    });
+    actGraphicsDesign->setCheckable(true);
+    connect(m_dockGraphicsDesign, &QDockWidget::visibilityChanged,
+            actGraphicsDesign, &QAction::setChecked);
+
     viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
         m_settings->resetToDefaults();
@@ -217,6 +225,12 @@ void MainWindow::setupDocks()
     m_jogPanel = new JogPanel();
     m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea);
     m_dockJog->setObjectName("dockJog");
+
+    // --- Graphics Design dock ---
+    m_graphicsDesignPanel = new GraphicsDesignPanel();
+    m_dockGraphicsDesign = createDock("Graphics Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea);
+    m_dockGraphicsDesign->setObjectName("dockGraphicsDesign");
+    m_dockGraphicsDesign->hide();
 
     // --- Right dock (hidden by default) ---
     m_settingsPanel = new SettingsPanel();
@@ -434,6 +448,23 @@ void MainWindow::setupConnections()
             this, [this]() {
                 ui->toolpathPanel->setMoves(m_parseWatcher->result());
                 statusBar()->showMessage("File loaded: " + m_core->fileManager()->fileName());
+            });
+
+    // --- GraphicsDesignPanel → G-code generation ---
+    connect(m_graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
+            this, [this](const QStringList &lines) {
+                m_core->fileManager()->loadLines("GraphicsDesign", lines);
+                ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
+                m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
+                ui->consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
+                statusBar()->showMessage("Graphics Design G-code loaded");
+
+                QStringList parseLines = m_core->fileManager()->lines();
+                QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
+                    GcodeParser parser;
+                    return parser.parse(parseLines);
+                });
+                m_parseWatcher->setFuture(future);
             });
 }
 

@@ -42,6 +42,24 @@ set(GRBL_SOURCES
     src/grbl/TextToGcode/JsonFontParser.cpp
     src/grbl/TextToGcode/VectorFontLoader.cpp
     src/grbl/TextToGcode/TextToGcodeGenerator.cpp
+    src/grbl/GraphicsDesign/Entity.cpp
+    src/grbl/GraphicsDesign/Shape.cpp
+    src/grbl/GraphicsDesign/Document.cpp
+    src/grbl/GraphicsDesign/CommandStack.cpp
+    src/grbl/GraphicsDesign/ShapeModel.cpp
+    src/grbl/GraphicsDesign/LineEntity.cpp
+    src/grbl/GraphicsDesign/RectangleEntity.cpp
+    src/grbl/GraphicsDesign/CircleEntity.cpp
+    src/grbl/GraphicsDesign/ArcEntity.cpp
+    src/grbl/GraphicsDesign/LineShape.cpp
+    src/grbl/GraphicsDesign/RectShape.cpp
+    src/grbl/GraphicsDesign/CircleShape.cpp
+    src/grbl/GraphicsDesign/ArcShape.cpp
+    src/grbl/GraphicsDesign/Tools/SelectTool.cpp
+    src/grbl/GraphicsDesign/Tools/LineTool.cpp
+    src/grbl/GraphicsDesign/Tools/RectangleTool.cpp
+    src/grbl/GraphicsDesign/Tools/CircleTool.cpp
+    src/grbl/GraphicsDesign/Tools/ArcTool.cpp
 )
 
 set(GRBL_HEADERS
@@ -60,6 +78,25 @@ set(GRBL_HEADERS
     src/grbl/TextToGcode/JsonFontParser.h
     src/grbl/TextToGcode/VectorFontLoader.h
     src/grbl/TextToGcode/TextToGcodeGenerator.h
+    src/grbl/GraphicsDesign/Entity.h
+    src/grbl/GraphicsDesign/Shape.h
+    src/grbl/GraphicsDesign/Document.h
+    src/grbl/GraphicsDesign/CommandStack.h
+    src/grbl/GraphicsDesign/ShapeModel.h
+    src/grbl/GraphicsDesign/LineEntity.h
+    src/grbl/GraphicsDesign/RectangleEntity.h
+    src/grbl/GraphicsDesign/CircleEntity.h
+    src/grbl/GraphicsDesign/ArcEntity.h
+    src/grbl/GraphicsDesign/LineShape.h
+    src/grbl/GraphicsDesign/RectShape.h
+    src/grbl/GraphicsDesign/CircleShape.h
+    src/grbl/GraphicsDesign/ArcShape.h
+    src/grbl/GraphicsDesign/Tools/Tool.h
+    src/grbl/GraphicsDesign/Tools/SelectTool.h
+    src/grbl/GraphicsDesign/Tools/LineTool.h
+    src/grbl/GraphicsDesign/Tools/RectangleTool.h
+    src/grbl/GraphicsDesign/Tools/CircleTool.h
+    src/grbl/GraphicsDesign/Tools/ArcTool.h
 )
 
 # --- UI ---
@@ -78,11 +115,16 @@ set(UI_SOURCES
     src/ui/panels/JogPanel.cpp
     src/ui/panels/ConsolePanel.cpp
     src/ui/panels/SettingsPanel.cpp
+    src/ui/panels/GraphicsDesignPanel.cpp
+    src/ui/DesignCanvas.cpp
+    src/ui/GraphicsDesignDialog.cpp
+    src/ui/LineNumberPlainTextEdit.cpp
 )
 
 set(UI_FILES
     src/ui/MainWindow.ui
     src/ui/TextToGcodeDialog.ui
+    src/ui/GraphicsDesignDialog.ui
 )
 
 set(UI_HEADERS
@@ -100,6 +142,10 @@ set(UI_HEADERS
     src/ui/panels/JogPanel.h
     src/ui/panels/ConsolePanel.h
     src/ui/panels/SettingsPanel.h
+    src/ui/panels/GraphicsDesignPanel.h
+    src/ui/DesignCanvas.h
+    src/ui/GraphicsDesignDialog.h
+    src/ui/LineNumberPlainTextEdit.h
 )
 
 set(RESOURCES

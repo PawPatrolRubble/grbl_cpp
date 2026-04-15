@@ -15,6 +15,7 @@ class JogPanel;
 class ConsolePanel;
 class ToolpathPanel;
 class SettingsPanel;
+class GraphicsDesignPanel;
 class DockPanel;
 class CustomTitleBar;
 
@@ -61,6 +62,7 @@ private:
     DockPanel *m_dockControl;
     DockPanel *m_dockJog;
     DockPanel *m_dockSettings;
+    DockPanel *m_dockGraphicsDesign;
 
     // Inner widgets (owned by docks)
     ConnectionPanel *m_connectionPanel;
@@ -68,4 +70,5 @@ private:
     ControlPanel    *m_controlPanel;
     JogPanel        *m_jogPanel;
     SettingsPanel   *m_settingsPanel;
+    GraphicsDesignPanel *m_graphicsDesignPanel;
 };
