@@ -40,6 +40,7 @@ private slots:
     void onLoadDesignClicked();
     void onDeleteSelectedClicked();
     void onClearAllClicked();
+    void onExportGcodeClicked();
 
 private:
     QStringList m_generatedLines;
@@ -52,6 +53,7 @@ private:
     QPushButton *m_clearBtn;
     QPushButton *m_saveBtn;
     QPushButton *m_loadBtn;
+    QPushButton *m_exportBtn;
     QPushButton *m_generateBtn;
     QLabel *m_shapeInfoLabel;
     QLabel *m_lineCountLabel;

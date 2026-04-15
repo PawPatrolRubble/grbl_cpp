@@ -4,6 +4,7 @@
 #include <QAbstractListModel>
 #include <QStringList>
 #include <QLabel>
+#include <QPushButton>
 
 class GcodeListModel : public QAbstractListModel
 {
@@ -16,6 +17,7 @@ public:
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     void setLines(const QStringList &lines);
+    QStringList lines() const;
     int lineCount() const;
     int executingLine() const;
     void setExecutingLine(int line);
@@ -33,6 +35,7 @@ public:
     explicit GcodeListWidget(QWidget *parent = nullptr);
 
     void setLines(const QStringList &lines);
+    QStringList lines() const;
     void highlightLine(int lineNumber);
     void selectLine(int lineNumber);
     void setExecutingLine(int lineNumber);
@@ -42,10 +45,12 @@ signals:
 
 private slots:
     void onItemClicked(const QModelIndex &index);
+    void onExportClicked();
 
 private:
     GcodeListModel *m_model;
     QListView *m_listView;
     QLabel *m_countLabel;
+    QPushButton *m_exportBtn;
     int m_lastHighlight = -1;
 };

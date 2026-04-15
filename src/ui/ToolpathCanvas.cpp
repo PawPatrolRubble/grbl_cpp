@@ -46,6 +46,14 @@ void ToolpathCanvas::setMoves(const QList<GcodeMove> &moves)
     update();
 }
 
+void ToolpathCanvas::setMovesNoFit(const QList<GcodeMove> &moves)
+{
+    m_moves = moves;
+    m_bboxDirty = true;
+    m_pathsDirty = true;
+    update();
+}
+
 void ToolpathCanvas::setExecutingLine(int lineNumber)
 {
     m_executingLine = lineNumber;

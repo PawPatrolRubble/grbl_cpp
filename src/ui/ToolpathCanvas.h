@@ -16,6 +16,7 @@ public:
     explicit ToolpathCanvas(QWidget *parent = nullptr);
 
     void setMoves(const QList<GcodeMove> &moves);
+    void setMovesNoFit(const QList<GcodeMove> &moves);  // No autoFit - preserve zoom/pan
     void setExecutingLine(int lineNumber);
     void setCutterPosition(const QVector3D &pos);
     void highlightSegment(int lineNumber);

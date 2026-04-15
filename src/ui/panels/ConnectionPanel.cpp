@@ -59,6 +59,22 @@ void ConnectionPanel::setConnected(bool connected)
     m_disconnectBtn->setEnabled(connected);
     m_portCombo->setEnabled(!connected);
     m_baudCombo->setEnabled(!connected);
+
+    if (connected) {
+        m_connectBtn->setStyleSheet(
+            "QPushButton#connectBtn { background-color: #9ca3af; border-color: #9ca3af; color: #ffffff; }"
+            "QPushButton#connectBtn:hover { background-color: #9ca3af; border-color: #9ca3af; }"
+            "QPushButton#connectBtn:pressed { background-color: #9ca3af; border-color: #9ca3af; }"
+            "QPushButton#connectBtn:disabled { background-color: #9ca3af; border-color: #9ca3af; }");
+        m_disconnectBtn->setStyleSheet(
+            "QPushButton#disconnectBtn { background-color: #22c55e; border-color: #22c55e; color: #ffffff; }"
+            "QPushButton#disconnectBtn:hover { background-color: #16a34a; border-color: #16a34a; }"
+            "QPushButton#disconnectBtn:pressed { background-color: #15803d; border-color: #15803d; }"
+            "QPushButton#disconnectBtn:disabled { background-color: #22c55e; border-color: #22c55e; }");
+    } else {
+        m_connectBtn->setStyleSheet(QString());
+        m_disconnectBtn->setStyleSheet(QString());
+    }
 }
 
 QString ConnectionPanel::extractPortName(const QString &portString)

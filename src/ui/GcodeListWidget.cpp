@@ -2,7 +2,10 @@
 #include <QFont>
 #include <QScrollBar>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QRegularExpression>
+#include <QFileDialog>
+#include <QMessageBox>
 
 // G-code type detection for coloring
 enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
@@ -88,6 +91,11 @@ void GcodeListModel::setLines(const QStringList &lines)
     endResetModel();
 }
 
+QStringList GcodeListModel::lines() const
+{
+    return m_lines;
+}
+
 int GcodeListModel::lineCount() const
 {
     return m_lines.size();
@@ -119,6 +127,7 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     , m_model(new GcodeListModel(this))
     , m_listView(new QListView(this))
     , m_countLabel(new QLabel("0 lines", this))
+    , m_exportBtn(new QPushButton("Export"))
 {
     // Setup count label
     m_countLabel->setObjectName("gcodeCountLabel");
@@ -126,6 +135,9 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     QFont countFont = m_countLabel->font();
     countFont.setBold(true);
     m_countLabel->setFont(countFont);
+
+    // Setup export button
+    m_exportBtn->setObjectName("exportBtn");
 
     // Setup list view
     m_listView->setModel(m_model);
@@ -147,11 +159,17 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
         "}"
     );
 
+    // Header layout (count + export button)
+    auto *headerLayout = new QHBoxLayout();
+    headerLayout->addWidget(m_countLabel);
+    headerLayout->addStretch();
+    headerLayout->addWidget(m_exportBtn);
+
     // Layout
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
-    layout->addWidget(m_countLabel);
+    layout->addLayout(headerLayout);
     layout->addWidget(m_listView, 1);
 
     // Max width constraint
@@ -159,6 +177,7 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     setMinimumWidth(200);
 
     connect(m_listView, &QListView::clicked, this, &GcodeListWidget::onItemClicked);
+    connect(m_exportBtn, &QPushButton::clicked, this, &GcodeListWidget::onExportClicked);
 }
 
 void GcodeListWidget::setLines(const QStringList &lines)
@@ -166,6 +185,11 @@ void GcodeListWidget::setLines(const QStringList &lines)
     m_lastHighlight = -1;
     m_model->setLines(lines);
     m_countLabel->setText(QString("%1 lines").arg(lines.size()));
+}
+
+QStringList GcodeListWidget::lines() const
+{
+    return m_model->lines();
 }
 
 void GcodeListWidget::highlightLine(int lineNumber)
@@ -208,4 +232,24 @@ void GcodeListWidget::setExecutingLine(int lineNumber)
 void GcodeListWidget::onItemClicked(const QModelIndex &index)
 {
     emit lineClicked(index.row());
+}
+
+void GcodeListWidget::onExportClicked()
+{
+    QString file = QFileDialog::getSaveFileName(this, "Export G-code",
+        QString(), "G-code Files (*.nc *.ngc *.gcode *.txt)");
+    if (!file.isEmpty()) {
+        QFile f(file);
+        if (f.open(QIODevice::WriteOnly)) {
+            for (const QString &line : m_model->lines()) {
+                f.write(line.toUtf8());
+                f.write("\r\n");
+            }
+            f.close();
+            QMessageBox::information(this, "Export Complete",
+                QString("Exported %1 lines to %2").arg(m_model->lineCount()).arg(file));
+        } else {
+            QMessageBox::warning(this, "Export Failed", "Could not write file.");
+        }
+    }
 }

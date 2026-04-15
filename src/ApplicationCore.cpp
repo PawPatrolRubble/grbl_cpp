@@ -15,6 +15,7 @@ ApplicationCore::ApplicationCore(QObject *parent)
     , m_gcodeParser(new GcodeParser(this))
     , m_fileManager(new FileManager(this))
 {
+    m_streamer->setSerialManager(m_serialManager);
     wireServices();
 }
 

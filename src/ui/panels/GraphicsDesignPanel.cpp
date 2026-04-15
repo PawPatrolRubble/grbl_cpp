@@ -121,6 +121,9 @@ void GraphicsDesignPanel::setupUi()
     m_loadBtn = new QPushButton("Load Design");
     buttonBar->addWidget(m_loadBtn);
 
+    m_exportBtn = new QPushButton("Export G-code");
+    buttonBar->addWidget(m_exportBtn);
+
     buttonBar->addStretch();
 
     m_generateBtn = new QPushButton("Generate & Load");
@@ -145,6 +148,7 @@ void GraphicsDesignPanel::setupConnections()
     connect(m_clearBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onClearAllClicked);
     connect(m_saveBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onSaveDesignClicked);
     connect(m_loadBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onLoadDesignClicked);
+    connect(m_exportBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onExportGcodeClicked);
     connect(m_generateBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onGenerateClicked);
 }
 
@@ -251,4 +255,23 @@ void GraphicsDesignPanel::onClearAllClicked()
     m_canvas->clearDocument();
     updatePreview();
     m_shapeInfoLabel->setText("No selection");
+}
+
+void GraphicsDesignPanel::onExportGcodeClicked()
+{
+    QString file = QFileDialog::getSaveFileName(this, "Export G-code",
+        QString(), "G-code Files (*.nc *.ngc *.gcode *.txt)");
+    if (!file.isEmpty()) {
+        QFile f(file);
+        if (f.open(QIODevice::WriteOnly)) {
+            for (const QString &line : m_generatedLines) {
+                f.write(line.toUtf8());
+                f.write("\r\n");
+            }
+            f.close();
+            m_statusLabel->setText(QString("Exported %1 lines to %2").arg(m_generatedLines.size()).arg(file));
+        } else {
+            QMessageBox::warning(this, "Export Failed", "Could not write file.");
+        }
+    }
 }
