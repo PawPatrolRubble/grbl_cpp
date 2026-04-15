@@ -341,7 +341,7 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
     if (m_pathsDirty || scaleChanged)
         rebuildPaths();
 
-    painter.setPen(QPen(QColor("#aaaaaa"), 1.8, Qt::DashLine));
+    painter.setPen(QPen(QColor("#ff8800"), 1.8, Qt::DashLine));  // Orange dashed for rapid moves
     painter.drawPath(m_rapidPath);
 
     painter.setPen(QPen(QColor("#2266aa"), 1.8));
