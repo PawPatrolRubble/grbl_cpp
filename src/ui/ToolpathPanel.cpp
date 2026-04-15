@@ -38,6 +38,7 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
         m_currentMoves = newMoves;
         m_currentLines = GcodeParser::movesToGcode(m_currentMoves);
         m_listWidget->setLines(m_currentLines);
+        m_canvas->setMoves(newMoves);  // Re-render toolpath on canvas
         emit gcodeTransformed(m_currentLines);
     });
 }
