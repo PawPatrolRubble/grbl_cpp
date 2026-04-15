@@ -1,0 +1,151 @@
+<h2>Panel Layout Options</h2>
+<p class="subtitle">How should the dock panels be arranged in the main window?</p>
+
+<div class="cards">
+  <div class="card" data-choice="current" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Current: Multi-Dock Layout</div>
+        <div class="mockup-body">
+          <div style="display:flex;height:200px;">
+            <div class="mock-sidebar" style="width:200px;background:#f5f5f7;">
+              <div style="background:#3b82f6;color:white;padding:8px;font-size:10px;">Connection</div>
+              <div style="background:white;padding:8px;border:1px solid #3b82f6;border-top:none;margin:2px;">Serial: COM3</div>
+              <div style="background:#22c55e;color:white;padding:8px;font-size:10px;margin-top:4px;">Status</div>
+              <div style="background:white;padding:8px;border:1px solid #22c55e;border-top:none;">X: 0.00</div>
+              <div style="background:#6366f1;color:white;padding:8px;font-size:10px;margin-top:4px;">Control</div>
+              <div style="background:white;padding:8px;border:1px solid #6366f1;border-top:none;">Start | Stop</div>
+            </div>
+            <div class="mock-content" style="flex:1;background:#fff;border:1px solid #e5e7eb;margin:8px;">
+              <div style="padding:8px;background:#f5f5f7;">Toolpath Canvas</div>
+              <div style="height:150px;display:flex;align-items:center;justify-content:center;color:#9ca3af;">G-code Visualization</div>
+            </div>
+            <div class="mock-sidebar" style="width:180px;background:#f5f5f7;">
+              <div style="background:#f97316;color:white;padding:8px;font-size:10px;">Jog</div>
+              <div style="background:white;padding:8px;border:1px solid #f97316;border-top:none;">XYZ Controls</div>
+              <div style="background:#14b8a6;color:white;padding:8px;font-size:10px;margin-top:4px;">Settings</div>
+              <div style="background:white;padding:8px;border:1px solid #14b8a6;border-top:none;">Config</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Current: Multi-Dock</h3>
+      <p>Separate dock panels on left and right sides. Each has colored title bar.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tabbed" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option A: Tabbed Sidebar</div>
+        <div class="mockup-body">
+          <div style="display:flex;height:200px;">
+            <div class="mock-sidebar" style="width:220px;background:#fff;border:1px solid #e5e7eb;">
+              <div style="display:flex;border-bottom:1px solid #e5e7eb;">
+                <div style="padding:8px 12px;background:#6366f1;color:white;font-size:10px;">Connect</div>
+                <div style="padding:8px 12px;font-size:10px;color:#6b7280;">Status</div>
+                <div style="padding:8px 12px;font-size:10px;color:#6b7280;">Control</div>
+                <div style="padding:8px 12px;font-size:10px;color:#6b7280;">Jog</div>
+              </div>
+              <div style="padding:12px;">
+                <div style="margin-bottom:8px;color:#6b7280;font-size:11px;">Serial Port</div>
+                <div style="border:1px solid #d1d5db;padding:4px;border-radius:4px;margin-bottom:8px;">COM3</div>
+                <div style="margin-bottom:8px;color:#6b7280;font-size:11px;">Baud Rate</div>
+                <div style="border:1px solid #d1d5db;padding:4px;border-radius:4px;">115200</div>
+                <button class="mock-button" style="margin-top:12px;width:100%;background:#6366f1;color:white;">Connect</button>
+              </div>
+            </div>
+            <div class="mock-content" style="flex:1;background:#fff;border:1px solid #e5e7eb;margin:8px;">
+              <div style="padding:8px;background:#f5f5f7;">Toolpath Canvas</div>
+              <div style="height:150px;display:flex;align-items:center;justify-content:center;color:#9ca3af;">G-code Visualization</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option A: Tabbed Sidebar</h3>
+      <p>Single sidebar with tabs. Cleaner, more modern. Saves screen space.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="ribbon" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option B: Top Ribbon + Status Bar</div>
+        <div class="mockup-body">
+          <div style="height:200px;">
+            <div style="background:#fff;border-bottom:1px solid #e5e7eb;padding:8px;">
+              <div style="display:flex;gap:16px;">
+                <div style="border:1px solid #d1d5db;padding:4px 8px;border-radius:4px;">COM3</div>
+                <button class="mock-button" style="background:#6366f1;color:white;padding:4px 12px;">Connect</button>
+                <button class="mock-button" style="background:#22c55e;color:white;padding:4px 12px;">Start</button>
+                <button class="mock-button" style="background:#ef4444;color:white;padding:4px 12px;">Stop</button>
+                <div style="flex:1;"></div>
+                <div style="padding:4px 8px;color:#6b7280;">X: 0.00 | Y: 0.00 | Z: 0.00</div>
+              </div>
+            </div>
+            <div style="display:flex;flex:1;">
+              <div class="mock-sidebar" style="width:200px;background:#fff;border:1px solid #e5e7eb;margin:8px;">
+                <div style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:bold;">Jog Controls</div>
+                <div style="padding:12px;text-align:center;">
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+                    <div></div><button class="mock-button">Y+</button><div></div>
+                    <button class="mock-button">X-</button><button class="mock-button">Z+</button><button class="mock-button">X+</button>
+                    <div></div><button class="mock-button">Y-</button><div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mock-content" style="flex:1;background:#fff;border:1px solid #e5e7eb;margin:8px;">
+                <div style="height:130px;display:flex;align-items:center;justify-content:center;color:#9ca3af;">G-code Visualization</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option B: Top Ribbon</h3>
+      <p>Control bar at top like CAM software. Status inline. Jog sidebar remains.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="stacked" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option C: Stacked Panels</div>
+        <div class="mockup-body">
+          <div style="display:flex;height:200px;">
+            <div class="mock-sidebar" style="width:280px;background:#f5f5f7;">
+              <div style="background:#3b82f6;color:white;padding:8px;font-size:10px;display:flex;justify-content:space-between;">
+                <span>Connection</span>
+                <span style="opacity:0.7;">▼</span>
+              </div>
+              <div style="background:white;padding:8px;border:1px solid #e5e7eb;">COM3 | Connect</div>
+              <div style="background:#22c55e;color:white;padding:8px;font-size:10px;margin-top:2px;">Status</div>
+              <div style="background:white;padding:8px;border:1px solid #e5e7eb;">X:0 Y:0 Z:0</div>
+              <div style="background:#6366f1;color:white;padding:8px;font-size:10px;margin-top:2px;">Control</div>
+              <div style="background:white;padding:8px;border:1px solid #e5e7eb;">Start | Stop</div>
+              <div style="background:#f97316;color:white;padding:8px;font-size:10px;margin-top:2px;">Jog</div>
+              <div style="background:white;padding:12px;border:1px solid #e5e7eb;">
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;">
+                  <div></div><button class="mock-button" style="font-size:9px;">Y+</button><div></div>
+                  <button class="mock-button" style="font-size:9px;">X-</button><div></div><button class="mock-button" style="font-size:9px;">X+</button>
+                </div>
+              </div>
+            </div>
+            <div class="mock-content" style="flex:1;background:#fff;border:1px solid #e5e7eb;margin:8px;">
+              <div style="height:180px;display:flex;align-items:center;justify-content:center;color:#9ca3af;">G-code Visualization</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option C: Stacked Left</h3>
+      <p>All panels stacked on left. Compact, keeps current colors. Single sidebar.</p>
+    </div>
+  </div>
+</div>

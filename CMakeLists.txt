@@ -107,7 +107,6 @@ set(UI_SOURCES
     src/ui/ToolpathCanvas.cpp
     src/ui/GcodeListWidget.cpp
     src/ui/ToolpathPanel.cpp
-    src/ui/TransformToolbar.cpp
     src/ui/TextToGcodeDialog.cpp
     src/ui/panels/ConnectionPanel.cpp
     src/ui/panels/StatusPanel.cpp
@@ -134,7 +133,6 @@ set(UI_HEADERS
     src/ui/ToolpathCanvas.h
     src/ui/GcodeListWidget.h
     src/ui/ToolpathPanel.h
-    src/ui/TransformToolbar.h
     src/ui/TextToGcodeDialog.h
     src/ui/panels/ConnectionPanel.h
     src/ui/panels/StatusPanel.h

@@ -1,0 +1,170 @@
+<h2>Top-Level Tab Pages</h2>
+<p class="subtitle">Main window as one tab, new pages open as additional tabs</p>
+
+<div class="cards">
+  <div class="card" data-choice="main-tabs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option A: Top Tab Pages</div>
+        <div class="mockup-body">
+          <div style="height:240px;background:#f5f5f7;">
+            <!-- Menu bar -->
+            <div style="background:#fff;border-bottom:1px solid #e5e7eb;padding:4px 8px;">
+              <span style="margin-right:16px;">File</span>
+              <span style="margin-right:16px;">Edit</span>
+              <span style="margin-right:16px;">View</span>
+              <span>Help</span>
+            </div>
+            <!-- Tab bar -->
+            <div style="background:#fff;display:flex;border-bottom:1px solid #e5e7eb;padding:4px 8px 0;">
+              <div style="padding:8px 24px;background:#6366f1;color:white;border-radius:8px 8px 0 0;font-weight:500;position:relative;">
+                Main
+                <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.7);">×</span>
+              </div>
+              <div style="padding:8px 24px;color:#6b7280;border:1px solid #e5e7eb;border-bottom:none;border-radius:8px 8px 0 0;margin-left:2px;position:relative;">
+                Graphics Design
+                <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#9ca3af">×</span>
+              </div>
+              <div style="padding:8px 12px;color:#6b7280;margin-left:4px;">+</div>
+            </div>
+            <!-- Main page content (current layout) -->
+            <div style="display:flex;padding:8px;height:180px;">
+              <div style="width:220px;background:#f5f5f7;">
+                <div style="background:#3b82f6;color:white;padding:6px 8px;font-size:10px;">Connection</div>
+                <div style="background:white;padding:6px;border:1px solid #e5e7eb;font-size:10px;">COM3 | Connect</div>
+                <div style="background:#22c55e;color:white;padding:6px 8px;font-size:10px;margin-top:4px;">Status</div>
+                <div style="background:white;padding:6px;border:1px solid #e5e7eb;font-size:10px;">X:0 Y:0 Z:0</div>
+                <div style="background:#6366f1;color:white;padding:6px 8px;font-size:10px;margin-top:4px;">Control</div>
+                <div style="background:white;padding:6px;border:1px solid #e5e7eb;font-size:10px;">Start | Stop</div>
+              </div>
+              <div style="flex:1;background:#fff;border:1px solid #e5e7eb;margin-left:8px;padding:8px;">
+                <div style="font-weight:500;margin-bottom:8px;">Toolpath Canvas</div>
+                <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#9ca3af;">
+                  G-code Visualization
+                </div>
+              </div>
+              <div style="width:180px;background:#f5f5f7;">
+                <div style="background:#f97316;color:white;padding:6px 8px;font-size:10px;">Jog</div>
+                <div style="background:white;padding:8px;border:1px solid #e5e7eb;">
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;">
+                    <div></div><button style="font-size:9px;padding:4px;">Y+</button><div></div>
+                    <button style="font-size:9px;padding:4px;">X-</button><button style="font-size:9px;padding:4px;">Z</button><button style="font-size:9px;padding:4px;">X+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option A: Top Tab Pages</h3>
+      <p>Tab bar below menu. "Main" tab contains current layout. New pages open as new tabs with close button.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="document-tabs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option B: Document-style Tabs</div>
+        <div class="mockup-body">
+          <div style="height:240px;background:#f5f5f7;">
+            <!-- Menu bar -->
+            <div style="background:#fff;border-bottom:1px solid #e5e7eb;padding:4px 8px;">
+              <span style="margin-right:16px;">File</span>
+              <span style="margin-right:16px;">Edit</span>
+              <span style="margin-right:16px;">View</span>
+              <span>Help</span>
+            </div>
+            <!-- Tab bar - document style -->
+            <div style="background:#e5e7eb;display:flex;padding:4px 8px;">
+              <div style="padding:8px 32px;background:#fff;border-radius:4px;font-weight:500;position:relative;margin-right:2px;">
+                📋 Main Controller
+                <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#9ca3af">×</span>
+              </div>
+              <div style="padding:8px 32px;background:#f5f5f7;border-radius:4px;color:#6b7280;position:relative;margin-right:2px;">
+                🎨 Design
+                <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#9ca3af">×</span>
+              </div>
+              <div style="padding:8px 32px;background:#f5f5f7;border-radius:4px;color:#6b7280;margin-right:2px;">
+                ⚙️ Settings
+              </div>
+              <div style="padding:8px 12px;color:#6366f1;font-weight:bold;">+</div>
+            </div>
+            <!-- Content area -->
+            <div style="background:#fff;margin:8px;height:150px;display:flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;">
+              <div style="color:#6b7280;">Active Tab Content (Main Controller with all panels)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option B: Document Tabs</h3>
+      <p>Chrome/Firefox style tabs. Each tab is a complete page. Icon + title. Close button on hover.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="sidebar-tabs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">Option C: Sidebar Navigation + Content Tabs</div>
+        <div class="mockup-body">
+          <div style="display:flex;height:240px;background:#f5f5f7;">
+            <!-- Sidebar navigation -->
+            <div style="width:160px;background:#fff;border-right:1px solid #e5e7eb;">
+              <div style="padding:12px;border-bottom:1px solid #e5e7eb;font-weight:500;">Navigation</div>
+              <div style="padding:10px 12px;background:#6366f1;color:white;border-radius:4px;margin:4px;">📋 Main</div>
+              <div style="padding:10px 12px;color:#6b7280;border-radius:4px;margin:4px;">🎨 Graphics Design</div>
+              <div style="padding:10px 12px;color:#6b7280;border-radius:4px;margin:4px;">⚙️ Settings</div>
+              <div style="padding:10px 12px;color:#6b7280;border-radius:4px;margin:4px;">📝 Console</div>
+            </div>
+            <!-- Content area with page -->
+            <div style="flex:1;display:flex;flex-direction:column;">
+              <!-- Page header -->
+              <div style="background:#fff;border-bottom:1px solid #e5e7eb;padding:8px 16px;display:flex;justify-content:space-between;">
+                <span style="font-weight:500;">Main Controller</span>
+                <span style="color:#ef4444;">● Connected to COM3</span>
+              </div>
+              <!-- Page content (current layout) -->
+              <div style="flex:1;display:flex;padding:8px;">
+                <div style="width:200px;background:#fff;border:1px solid #e5e7eb;padding:8px;">
+                  <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">Connection</div>
+                  <select style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:10px;"><option>COM3</option></select>
+                  <button style="width:100%;margin-top:8px;padding:4px;background:#6366f1;color:white;border-radius:4px;font-size:10px;">Connect</button>
+                  <div style="font-size:11px;color:#6b7280;margin-top:12px;">Position</div>
+                  <div style="font-family:monospace;font-size:12px;">X: 0 Y: 0 Z: 0</div>
+                </div>
+                <div style="flex:1;background:#fff;border:1px solid #e5e7eb;margin-left:8px;display:flex;align-items:center;justify-content:center;color:#9ca3af;">
+                  Toolpath Canvas
+                </div>
+                <div style="width:150px;background:#fff;border:1px solid #e5e7eb;padding:8px;margin-left:8px;">
+                  <div style="font-size:11px;color:#6b7280;">Jog</div>
+                  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:4px;">
+                    <div></div><button style="font-size:8px;padding:2px;">Y+</button><div></div>
+                    <button style="font-size:8px;padding:2px;">X-</button><button style="font-size:8px;padding:2px;">X+</button><div></div>
+                    <button style="font-size:8px;padding:2px;">Y-</button><div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Option C: Sidebar + Tabs</h3>
+      <p>Left sidebar for page navigation. Each page has its own layout. Clicking sidebar switches pages.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>How it works:</h3>
+  <ul style="color:#6b7280;">
+    <li><strong>Main tab</strong> - Contains current controller (Connection, Status, Control, Jog panels + Toolpath canvas)</li>
+    <li><strong>Graphics Design tab</strong> - Opens when you create/open a design. Full page with design canvas.</li>
+    <li><strong>Settings tab</strong> - Configuration page</li>
+    <li>New pages open as tabs, can be closed with × button</li>
+  </ul>
+</div>

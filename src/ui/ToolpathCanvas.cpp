@@ -4,6 +4,7 @@
 #include <QPen>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QResizeEvent>
 #include <QtMath>
 #include <algorithm>
 #include <cmath>
@@ -17,7 +18,7 @@ ToolpathCanvas::ToolpathCanvas(QWidget *parent)
     setMinimumSize(200, 200);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
-    setStyleSheet("background-color: #1e1e2e;");
+    setStyleSheet("background-color: #f5f5f7;");
 
     // Throttle repaints to max ~20 FPS during streaming
     m_repaintTimer.setSingleShot(true);
@@ -86,7 +87,9 @@ void ToolpathCanvas::autoFit()
 {
     if (m_moves.isEmpty()) {
         m_scale = 1.0;
-        m_offset = QPointF(0, 0);
+        // Set origin at bottom-left corner with some margin
+        m_offset = QPointF(50, height() - 50);
+        m_pathsDirty = true;
         return;
     }
 
@@ -284,7 +287,7 @@ void ToolpathCanvas::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(rect(), QColor("#1e1e2e"));
+    painter.fillRect(rect(), QColor("#f5f5f7"));
 
     drawGridAndRulers(painter);
     drawWorktable(painter);
@@ -470,15 +473,15 @@ void ToolpathCanvas::drawGridAndRulers(QPainter &painter)
     double startY = std::floor(machineBR.y() / stepMachine) * stepMachine;
     double endY   = std::ceil(machineTL.y() / stepMachine) * stepMachine;
 
-    painter.setPen(QPen(QColor("#313244"), 1));
+    painter.setPen(QPen(QColor("#d1d5db"), 1));
     for (double x = startX; x <= endX; x += stepMachine) {
         QPointF p1 = machineToScreen(QPointF(x, startY));
         QPointF p2 = machineToScreen(QPointF(x, endY));
         painter.drawLine(p1, p2);
 
-        painter.setPen(QColor("#a6adc8"));
+        painter.setPen(QColor("#6b7280"));
         painter.drawText(QPointF(p1.x() + 4, height() - 4), QString::number(x));
-        painter.setPen(QPen(QColor("#313244"), 1));
+        painter.setPen(QPen(QColor("#d1d5db"), 1));
     }
 
     for (double y = startY; y <= endY; y += stepMachine) {
@@ -486,9 +489,9 @@ void ToolpathCanvas::drawGridAndRulers(QPainter &painter)
         QPointF p2 = machineToScreen(QPointF(endX, y));
         painter.drawLine(p1, p2);
 
-        painter.setPen(QColor("#a6adc8"));
+        painter.setPen(QColor("#6b7280"));
         painter.drawText(QPointF(4, p1.y() - 4), QString::number(y));
-        painter.setPen(QPen(QColor("#313244"), 1));
+        painter.setPen(QPen(QColor("#d1d5db"), 1));
     }
 }
 
@@ -499,7 +502,7 @@ void ToolpathCanvas::drawWorktable(QPainter &painter)
     QPointF tl = machineToScreen(QPointF(0, m_worktableSize.height()));
     QPointF tr = machineToScreen(QPointF(m_worktableSize.width(), m_worktableSize.height()));
 
-    painter.setPen(QPen(QColor("#6c7086"), 1.5, Qt::DotLine));
+    painter.setPen(QPen(QColor("#9ca3af"), 1.5, Qt::DotLine));
     painter.drawLine(bl, br);
     painter.drawLine(br, tr);
     painter.drawLine(tr, tl);
@@ -759,4 +762,15 @@ void ToolpathCanvas::wheelEvent(QWheelEvent *event)
     m_scale *= factor;
     m_pathsDirty = true;
     update();
+}
+
+void ToolpathCanvas::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    // Keep origin at bottom-left corner when widget is resized
+    if (m_moves.isEmpty()) {
+        m_offset = QPointF(50, height() - 50);
+        m_pathsDirty = true;
+        update();
+    }
 }

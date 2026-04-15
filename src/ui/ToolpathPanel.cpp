@@ -1,7 +1,6 @@
 #include "ToolpathPanel.h"
 #include "GcodeListWidget.h"
 #include "ToolpathCanvas.h"
-#include "TransformToolbar.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -10,7 +9,6 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
     : QWidget(parent)
     , m_listWidget(new GcodeListWidget(this))
     , m_canvas(new ToolpathCanvas(this))
-    , m_toolbar(new TransformToolbar(this))
     , m_splitter(new QSplitter(Qt::Horizontal, this))
 {
     m_splitter->addWidget(m_listWidget);
@@ -21,7 +19,6 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
-    layout->addWidget(m_toolbar, 0);
     layout->addWidget(m_splitter, 1);
 
     // Bidirectional sync
@@ -35,10 +32,6 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
             this, &ToolpathPanel::lineSelected);
     connect(m_canvas, &ToolpathCanvas::segmentClicked,
             this, &ToolpathPanel::lineSelected);
-
-    // Transform controls (toolbar)
-    connect(m_toolbar, &TransformToolbar::applyRequested, this, &ToolpathPanel::applyTransform);
-    connect(m_toolbar, &TransformToolbar::resetRequested, this, &ToolpathPanel::resetTransform);
 
     // Interactive canvas transform (drag handles)
     connect(m_canvas, &ToolpathCanvas::movesTransformed, this, [this](const QList<GcodeMove> &newMoves) {
@@ -76,42 +69,4 @@ void ToolpathPanel::setCutterPosition(const QVector3D &pos)
 QStringList ToolpathPanel::currentGcodeLines() const
 {
     return m_currentLines;
-}
-
-void ToolpathPanel::applyTransform()
-{
-    if (m_originalMoves.isEmpty())
-        return;
-
-    // Apply transform to the ORIGINAL moves (not cumulative)
-    QList<GcodeMove> transformed = GcodeParser::transformMoves(
-        m_originalMoves,
-        m_toolbar->scaleX(), m_toolbar->scaleY(),
-        m_toolbar->offsetX(), m_toolbar->offsetY(),
-        m_toolbar->rotation());
-
-    m_currentMoves = transformed;
-
-    // Update canvas
-    m_canvas->setMoves(m_currentMoves);
-
-    // Regenerate G-code text and update line list
-    m_currentLines = GcodeParser::movesToGcode(m_currentMoves);
-    m_listWidget->setLines(m_currentLines);
-
-    emit gcodeTransformed(m_currentLines);
-}
-
-void ToolpathPanel::resetTransform()
-{
-    if (m_originalMoves.isEmpty())
-        return;
-
-    m_currentMoves = m_originalMoves;
-    m_canvas->setMoves(m_currentMoves);
-
-    m_currentLines = GcodeParser::movesToGcode(m_currentMoves);
-    m_listWidget->setLines(m_currentLines);
-
-    emit gcodeTransformed(m_currentLines);
 }

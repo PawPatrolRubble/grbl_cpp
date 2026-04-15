@@ -1,6 +1,5 @@
 #include "MainWindow.h"
 #include "DockPanel.h"
-#include "CustomTitleBar.h"
 #include "ApplicationCore.h"
 #include "SettingsManager.h"
 #include "panels/ConnectionPanel.h"
@@ -12,6 +11,7 @@
 #include "panels/GraphicsDesignPanel.h"
 #include "ToolpathPanel.h"
 #include "TextToGcodeDialog.h"
+#include "GraphicsDesignDialog.h"
 
 #include "grbl/MachineState.h"
 #include "grbl/SerialManager.h"
@@ -23,63 +23,25 @@
 #include <QMessageBox>
 #include <QKeyEvent>
 #include <QStatusBar>
+#include <QMenuBar>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
-    , m_titleBar(nullptr)
     , m_core(new ApplicationCore(this))
     , m_settings(new SettingsManager(this))
     , m_parseWatcher(new QFutureWatcher<QList<GcodeMove>>(this))
 {
-    // Frameless window for custom title bar
-    setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground, false);
-
-    // Setup UI first - creates centralWidget with toolpathPanel and consolePanel
+    // Use default system title bar
     ui->setupUi(this);
 
-    // Now wrap the central widget with title bar
-    QWidget *originalCentral = centralWidget();
-    originalCentral->setObjectName("centralContent");
-
-    // Create new container with title bar at top
-    auto *mainContainer = new QWidget();
-    auto *mainLayout = new QVBoxLayout(mainContainer);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
-
-    // Title bar spans full width at top
-    m_titleBar = new CustomTitleBar();
-    mainLayout->addWidget(m_titleBar);
-
-    // Add original central content below title bar
-    mainLayout->addWidget(originalCentral, 1);
-
-    // Set new central widget
-    setCentralWidget(mainContainer);
-
-    // Setup remaining components
     setupDocks();
     setupMenuBar();
     setupStatusBar();
     setupConnections();
     restoreLayout();
-
-    // Connect title bar buttons
-    connect(m_titleBar, &CustomTitleBar::minimizeRequested, this, [this]() {
-        showMinimized();
-    });
-    connect(m_titleBar, &CustomTitleBar::maximizeRequested, this, [this]() {
-        if (isMaximized()) {
-            showNormal();
-        } else {
-            showMaximized();
-        }
-    });
-    connect(m_titleBar, &CustomTitleBar::closeRequested, this, &QWidget::close);
 }
 
 MainWindow::~MainWindow()
@@ -89,18 +51,21 @@ MainWindow::~MainWindow()
 }
 
 // ---------------------------------------------------------------------------
-// Custom Title Bar - uses embedded menu bar
+// Menu Bar
 // ---------------------------------------------------------------------------
 
 void MainWindow::setupMenuBar()
 {
-    // Use title bar's embedded menu bar instead of QMainWindow's menu bar
-    auto *menuBar = m_titleBar->menuBar();
+    // Use QMainWindow's standard menu bar
+    auto *menuBar = this->menuBar();
 
     // --- File menu ---
     auto *fileMenu = menuBar->addMenu("&File");
     fileMenu->addAction("Open...", this, [this]() {
-        emit m_controlPanel->loadFileRequested();
+        QString path = QFileDialog::getOpenFileName(this, "Open G-Code File",
+                                                     QString(), "G-Code (*.nc *.ngc *.gcode *.txt)");
+        if (!path.isEmpty())
+            loadAndParseFile(path);
     }, QKeySequence::Open);
     fileMenu->addSeparator();
     fileMenu->addAction("Text to G-code...", this, [this]() {
@@ -120,62 +85,41 @@ void MainWindow::setupMenuBar()
         });
         dialog.exec();
     }, QKeySequence(Qt::CTRL | Qt::Key_T));
+    auto *graphicsAction = new QAction("Graphics Design", this);
+    graphicsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
+    connect(graphicsAction, &QAction::triggered, this, [this]() {
+        GraphicsDesignDialog dialog(this);
+        connect(&dialog, &GraphicsDesignDialog::gcodeGenerated, this, [this](const QStringList &lines) {
+            m_core->fileManager()->loadLines("GraphicsDesign", lines);
+            ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
+            m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
+            ui->consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
+
+            QStringList parseLines = m_core->fileManager()->lines();
+            QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
+                GcodeParser parser;
+                return parser.parse(parseLines);
+            });
+            m_parseWatcher->setFuture(future);
+        });
+        dialog.exec();
+    });
+    fileMenu->addAction(graphicsAction);
     fileMenu->addSeparator();
     fileMenu->addAction("Exit", this, &QWidget::close, QKeySequence::Quit);
 
     // --- View menu (dock visibility toggles) ---
     auto *viewMenu = menuBar->addMenu("&View");
-
-    auto *actConnection = viewMenu->addAction("Connection", this, [this]() {
-        m_dockConnection->setVisible(!m_dockConnection->isVisible());
-    });
-    actConnection->setCheckable(true);
-    connect(m_dockConnection, &QDockWidget::visibilityChanged,
-            actConnection, &QAction::setChecked);
-    actConnection->setChecked(true);
-
-    auto *actStatus = viewMenu->addAction("Machine Status", this, [this]() {
-        m_dockStatus->setVisible(!m_dockStatus->isVisible());
-    });
-    actStatus->setCheckable(true);
-    connect(m_dockStatus, &QDockWidget::visibilityChanged,
-            actStatus, &QAction::setChecked);
-    actStatus->setChecked(true);
-
-    auto *actControl = viewMenu->addAction("Streaming Control", this, [this]() {
-        m_dockControl->setVisible(!m_dockControl->isVisible());
-    });
-    actControl->setCheckable(true);
-    connect(m_dockControl, &QDockWidget::visibilityChanged,
-            actControl, &QAction::setChecked);
-    actControl->setChecked(true);
-
-    auto *actJog = viewMenu->addAction("Jog Control", this, [this]() {
-        m_dockJog->setVisible(!m_dockJog->isVisible());
-    });
-    actJog->setCheckable(true);
-    connect(m_dockJog, &QDockWidget::visibilityChanged,
-            actJog, &QAction::setChecked);
-    actJog->setChecked(true);
-
-    auto *actSettings = viewMenu->addAction("Settings", this, [this]() {
-        m_dockSettings->setVisible(!m_dockSettings->isVisible());
-    });
-    actSettings->setCheckable(true);
-    connect(m_dockSettings, &QDockWidget::visibilityChanged,
-            actSettings, &QAction::setChecked);
-
-    auto *actGraphicsDesign = viewMenu->addAction("Graphics Design", this, [this]() {
-        m_dockGraphicsDesign->setVisible(!m_dockGraphicsDesign->isVisible());
-    });
-    actGraphicsDesign->setCheckable(true);
-    connect(m_dockGraphicsDesign, &QDockWidget::visibilityChanged,
-            actGraphicsDesign, &QAction::setChecked);
-
+    viewMenu->addAction("Connection", m_dockConnection, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Machine Status", m_dockStatus, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Streaming Control", m_dockControl, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Jog Control", m_dockJog, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Settings", m_dockSettings, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Graphics Design", m_dockGraphicsDesign, &QDockWidget::toggleViewAction);
     viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
         m_settings->resetToDefaults();
-        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings}) {
+        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings, m_dockGraphicsDesign}) {
             removeDockWidget(dock);
         }
         addDockWidget(Qt::LeftDockWidgetArea, m_dockConnection);
@@ -183,7 +127,9 @@ void MainWindow::setupMenuBar()
         addDockWidget(Qt::LeftDockWidgetArea, m_dockControl);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockJog);
         addDockWidget(Qt::RightDockWidgetArea, m_dockSettings);
+        addDockWidget(Qt::RightDockWidgetArea, m_dockGraphicsDesign);
         m_dockSettings->hide();
+        m_dockGraphicsDesign->hide();
     });
 
     // --- Help menu ---
@@ -199,44 +145,45 @@ void MainWindow::setupStatusBar()
 }
 
 // ---------------------------------------------------------------------------
-// Dock Widgets — created in code (DockPanel has custom constructor)
+// Dock Widgets
 // ---------------------------------------------------------------------------
 
 void MainWindow::setupDocks()
 {
-    // --- Left side docks (tabified) ---
+    // Connection panel (left)
     m_connectionPanel = new ConnectionPanel();
     m_connectionPanel->setAvailablePorts(SerialManager::availablePorts());
     m_connectionPanel->setAvailableBaudRates(SerialManager::commonBaudRates());
     m_connectionPanel->setDefaultBaudRate("115200");
-
     m_dockConnection = createDock("Connection", m_connectionPanel, Qt::LeftDockWidgetArea);
-    m_dockConnection->setObjectName("dockConnection");
-    m_dockConnection->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 
+    // Status panel (left)
     m_statusPanel = new StatusPanel();
     m_dockStatus = createDock("Machine Status", m_statusPanel, Qt::LeftDockWidgetArea);
-    m_dockStatus->setObjectName("dockStatus");
 
+    // Control panel (left)
     m_controlPanel = new ControlPanel();
     m_dockControl = createDock("Streaming Control", m_controlPanel, Qt::LeftDockWidgetArea);
-    m_dockControl->setObjectName("dockControl");
 
+    // Jog panel (left)
     m_jogPanel = new JogPanel();
     m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea);
-    m_dockJog->setObjectName("dockJog");
 
-    // --- Graphics Design dock ---
-    m_graphicsDesignPanel = new GraphicsDesignPanel();
-    m_dockGraphicsDesign = createDock("Graphics Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea);
-    m_dockGraphicsDesign->setObjectName("dockGraphicsDesign");
-    m_dockGraphicsDesign->hide();
-
-    // --- Right dock (hidden by default) ---
+    // Settings panel (right, hidden by default)
     m_settingsPanel = new SettingsPanel();
     m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
-    m_dockSettings->setObjectName("dockSettings");
     m_dockSettings->hide();
+
+    // Graphics Design panel (right, hidden by default)
+    m_graphicsDesignPanel = new GraphicsDesignPanel();
+    m_dockGraphicsDesign = createDock("Graphics Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea);
+    m_dockGraphicsDesign->hide();
+
+    // Tabify left docks
+    tabifyDockWidget(m_dockConnection, m_dockStatus);
+    tabifyDockWidget(m_dockStatus, m_dockControl);
+    tabifyDockWidget(m_dockControl, m_dockJog);
+    m_dockConnection->raise();
 }
 
 DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
@@ -253,23 +200,23 @@ DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
 
 void MainWindow::saveLayout()
 {
-    m_settings->saveLayout(saveState(), saveGeometry());
+    QByteArray geometry = saveGeometry();
+    QByteArray dockState = saveState();
+    m_settings->saveLayout(dockState, geometry);
 }
 
 void MainWindow::restoreLayout()
 {
-    QByteArray geom;
-    QByteArray dockState = m_settings->restoreLayout(geom);
-    if (!dockState.isEmpty()) {
-        restoreState(dockState);
-    }
-    if (!geom.isEmpty()) {
-        restoreGeometry(geom);
-    }
+    QByteArray geometry;
+    QByteArray state = m_settings->restoreLayout(geometry);
+    if (!state.isEmpty())
+        restoreState(state);
+    if (!geometry.isEmpty())
+        restoreGeometry(geometry);
 }
 
 // ---------------------------------------------------------------------------
-// Signal / Slot Wiring
+// Signal connections
 // ---------------------------------------------------------------------------
 
 void MainWindow::setupConnections()
@@ -370,70 +317,45 @@ void MainWindow::setupConnections()
                 ui->consolePanel->appendMessage("Reset work offset — work position now equals machine position");
             });
 
-    // --- ToolpathPanel → transform feedback ---
-    connect(ui->toolpathPanel, &ToolpathPanel::gcodeTransformed,
-            this, [this](const QStringList &newLines) {
-                m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), newLines.size());
-                ui->consolePanel->appendMessage(QString("Transform applied — %1 lines").arg(newLines.size()));
-            });
-
-    // --- Core errors → console + statusbar ---
-    connect(m_core, &ApplicationCore::errorOccurred,
-            this, [this](const QString &err) {
-                ui->consolePanel->appendMessage("ERROR: " + err);
-                statusBar()->showMessage("Error: " + err);
-            });
-
-    // --- ControlPanel → file loading / streaming ---
-    connect(m_controlPanel, &ControlPanel::loadFileRequested, this, [this]() {
-        QString filePath = QFileDialog::getOpenFileName(this, "Open G-Code File", QString(),
-            "G-Code Files (*.nc *.gcode *.ngc *.txt);;All Files (*)");
-        if (filePath.isEmpty()) return;
-        loadAndParseFile(filePath);
-    });
-    connect(m_controlPanel, &ControlPanel::startRequested, this, [this]() {
-        if (!m_core->serialManager()->isConnected()) {
-            QMessageBox::warning(this, "Not Connected", "Please connect to GRBL first.");
-            return;
-        }
-        if (!m_core->fileManager()->isLoaded()) {
-            QMessageBox::warning(this, "No File", "Please load a G-code file first.");
-            return;
-        }
-        m_core->startStreaming(ui->toolpathPanel->currentGcodeLines());
-    });
-    connect(m_controlPanel, &ControlPanel::pauseRequested,  this, [this]() { m_core->pauseStreaming(); });
-    connect(m_controlPanel, &ControlPanel::resumeRequested, this, [this]() { m_core->resumeStreaming(); });
-    connect(m_controlPanel, &ControlPanel::stopRequested,   this, [this]() { m_core->stopStreaming(); });
-
-    // --- ControlPanel → quick commands ---
-    connect(m_controlPanel, &ControlPanel::homeRequested,
-            this, [this]() { m_core->sendCommand("$H"); });
-    connect(m_controlPanel, &ControlPanel::unlockRequested,
-            this, [this]() { m_core->sendCommand("$X"); });
-    connect(m_controlPanel, &ControlPanel::resetRequested,
-            this, [this]() { m_core->sendRealtime(GrblRealtime::Reset); });
-    connect(m_controlPanel, &ControlPanel::statusRequested,
+    // --- ControlPanel → Core ---
+    connect(m_controlPanel, &ControlPanel::loadFileRequested,
             this, [this]() {
-                if (m_core->serialManager()->isConnected())
-                    m_core->sendRealtime(GrblRealtime::StatusReport);
+                QString path = QFileDialog::getOpenFileName(this, "Open G-Code File",
+                                                             QString(), "G-Code (*.nc *.ngc *.gcode *.txt)");
+                if (!path.isEmpty())
+                    loadAndParseFile(path);
             });
+    connect(m_controlPanel, &ControlPanel::startRequested,
+            this, [this]() {
+                m_core->startStreaming(m_core->fileManager()->lines());
+            });
+    connect(m_controlPanel, &ControlPanel::pauseRequested,
+            m_core, &ApplicationCore::pauseStreaming);
+    connect(m_controlPanel, &ControlPanel::resumeRequested,
+            m_core, &ApplicationCore::resumeStreaming);
+    connect(m_controlPanel, &ControlPanel::stopRequested,
+            m_core, &ApplicationCore::stopStreaming);
 
     // --- JogPanel → SerialManager ---
-    connect(m_jogPanel, &JogPanel::jogContinuousRequested,
-            this, [this](const QString &axis, int dir, double feed) {
-                if (m_core->serialManager()->isConnected())
-                    m_core->serialManager()->jogContinuous(axis, dir, feed);
-            });
     connect(m_jogPanel, &JogPanel::jogStepRequested,
-            this, [this](const QString &axis, double dist, double feed) {
-                if (m_core->serialManager()->isConnected())
-                    m_core->serialManager()->jogStep(axis, dist, feed);
+            this, [this](const QString &axis, double distance, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString cmd = QString("G91 G0 %1%2 F%3").arg(axis).arg(distance).arg(feed);
+                m_core->serialManager()->sendCommand(cmd);
+                ui->consolePanel->appendMessage(cmd);
+            });
+    connect(m_jogPanel, &JogPanel::jogContinuousRequested,
+            this, [this](const QString &axis, int direction, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString cmd = QString("$J=G91 %1%2 F%3").arg(axis).arg(direction > 0 ? "" : "-").arg(feed);
+                m_core->serialManager()->sendCommand(cmd);
+                ui->consolePanel->appendMessage(cmd);
             });
     connect(m_jogPanel, &JogPanel::jogCancelRequested,
             this, [this]() {
-                if (m_core->serialManager()->isConnected())
-                    m_core->serialManager()->jogCancel();
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand("\x85");  // Jog cancel
+                ui->consolePanel->appendMessage("Jog cancel");
             });
 
     // --- ConsolePanel → SerialManager ---
@@ -487,11 +409,13 @@ void MainWindow::loadAndParseFile(const QString &filePath)
             return parser.parse(lines);
         });
         m_parseWatcher->setFuture(future);
+    } else {
+        QMessageBox::warning(this, "Error", "Could not load file: " + filePath);
     }
 }
 
 // ---------------------------------------------------------------------------
-// Keyboard Jog (delegated to JogPanel)
+// Keyboard handling for jog
 // ---------------------------------------------------------------------------
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
@@ -510,5 +434,7 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event)
 
 void MainWindow::changeEvent(QEvent *event)
 {
+    if (event->type() == QEvent::LanguageChange)
+        ui->retranslateUi(this);
     QMainWindow::changeEvent(event);
 }

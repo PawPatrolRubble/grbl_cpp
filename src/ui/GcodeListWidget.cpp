@@ -135,14 +135,15 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     m_listView->setSelectionMode(QAbstractItemView::SingleSelection);
     m_listView->setStyleSheet(
         "QListView {"
-        "  background-color: #1e1e2e;"
+        "  background-color: #ffffff;"
         "  border: none;"
         "}"
         "QListView::item:selected {"
-        "  background-color: #3366cc;"
+        "  background-color: #6366f1;"
+        "  color: #ffffff;"
         "}"
         "QListView::item:hover {"
-        "  background-color: #313244;"
+        "  background-color: #e5e7eb;"
         "}"
     );
 

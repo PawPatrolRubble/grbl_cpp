@@ -8,7 +8,6 @@
 
 class GcodeListWidget;
 class ToolpathCanvas;
-class TransformToolbar;
 
 class ToolpathPanel : public QWidget
 {
@@ -28,14 +27,9 @@ signals:
     void lineSelected(int lineNumber);
     void gcodeTransformed(const QStringList &newLines);
 
-private slots:
-    void applyTransform();
-    void resetTransform();
-
 private:
     GcodeListWidget *m_listWidget;
     ToolpathCanvas *m_canvas;
-    TransformToolbar *m_toolbar;
     QSplitter *m_splitter;
 
     // Original data preserved for cumulative transforms
