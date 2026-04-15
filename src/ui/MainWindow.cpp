@@ -240,9 +240,12 @@ void MainWindow::setupConnections()
                 ui->consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
             });
 
-    // --- Core responses → console ---
+    // --- Core responses → console (filter out status reports)
     connect(m_core, &ApplicationCore::responseReceived,
             this, [this](const QString &response) {
+                // Skip GRBL status reports: <Idle|WPos:...>
+                if (response.startsWith('<') && response.endsWith('>'))
+                    return;
                 ui->consolePanel->appendMessage(response);
             });
 
@@ -337,25 +340,20 @@ void MainWindow::setupConnections()
             m_core, &ApplicationCore::stopStreaming);
 
     // --- JogPanel → SerialManager ---
-    connect(m_jogPanel, &JogPanel::jogStepRequested,
-            this, [this](const QString &axis, double distance, double feed) {
-                if (!m_core->serialManager()->isConnected()) return;
-                QString cmd = QString("G91 G0 %1%2 F%3").arg(axis).arg(distance).arg(feed);
-                m_core->serialManager()->sendCommand(cmd);
-                ui->consolePanel->appendMessage(cmd);
-            });
     connect(m_jogPanel, &JogPanel::jogContinuousRequested,
             this, [this](const QString &axis, int direction, double feed) {
                 if (!m_core->serialManager()->isConnected()) return;
-                QString cmd = QString("$J=G91 %1%2 F%3").arg(axis).arg(direction > 0 ? "" : "-").arg(feed);
-                m_core->serialManager()->sendCommand(cmd);
-                ui->consolePanel->appendMessage(cmd);
+                m_core->serialManager()->jogContinuous(axis, direction, feed);
+            });
+    connect(m_jogPanel, &JogPanel::jogStepRequested,
+            this, [this](const QString &axis, double distance, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->jogStep(axis, distance, feed);
             });
     connect(m_jogPanel, &JogPanel::jogCancelRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
-                m_core->serialManager()->sendCommand("\x85");  // Jog cancel
-                ui->consolePanel->appendMessage("Jog cancel");
+                m_core->serialManager()->jogCancel();
             });
 
     // --- ConsolePanel → SerialManager ---
