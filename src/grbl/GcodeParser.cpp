@@ -23,6 +23,7 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
     double feedRate = 0.0;
     double spindleSpeed = 0.0;
     bool absolute = true;
+    GcodeMove::Type currentMotionType = GcodeMove::Type::Rapid;  // Modal G-code state
 
     // Convert to QStringList for cleanLines which expects it
     QStringList stringListLines;
@@ -42,7 +43,7 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
 
         QVector3D target = currentPos;
         bool hasMotion = false;
-        GcodeMove::Type motionType = GcodeMove::Type::Linear;
+        GcodeMove::Type motionType = currentMotionType;  // Start with modal state
         double iVal = 0.0, jVal = 0.0, rVal = 0.0;
 
         QRegularExpressionMatchIterator it = s_regex.globalMatch(stripped);
@@ -87,6 +88,7 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
             move.jOffset = jVal;
             move.radius = rVal;
             currentPos = target;
+            currentMotionType = motionType;  // Update modal state
             moves.append(move);
         }
     }
