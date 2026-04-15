@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>TextToGcodeDialog</class>
+ <customwidgets>
+  <customwidget>
+   <class>LineNumberPlainTextEdit</class>
+   <extends>QPlainTextEdit</extends>
+   <header>LineNumberPlainTextEdit.h</header>
+  </customwidget>
+ </customwidgets>
  <widget class="QDialog" name="TextToGcodeDialog">
   <property name="geometry">
    <rect>
@@ -24,11 +31,25 @@
       </widget>
      </item>
      <item row="0" column="1">
-      <widget class="QPlainTextEdit" name="textInput">
-       <property name="maximumHeight">
-        <number>80</number>
-       </property>
-      </widget>
+      <layout class="QVBoxLayout" name="textInputLayout">
+       <item>
+        <widget class="LineNumberPlainTextEdit" name="textInput">
+         <property name="minimumHeight">
+          <number>120</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="textStatsLabel">
+         <property name="text">
+          <string>0 lines, 0 characters</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
      </item>
      <item row="1" column="0">
       <widget class="QLabel" name="sourceLabel">
@@ -196,7 +217,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QPlainTextEdit" name="gcodePreview">
+    <widget class="LineNumberPlainTextEdit" name="gcodePreview">
      <property name="readOnly">
       <bool>true</bool>
      </property>

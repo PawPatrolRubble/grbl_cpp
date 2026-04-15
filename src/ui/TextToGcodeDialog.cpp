@@ -1,5 +1,6 @@
 #include "TextToGcodeDialog.h"
 #include "ui_TextToGcodeDialog.h"
+#include "LineNumberPlainTextEdit.h"
 #include "grbl/TextToGcode/VectorFontLoader.h"
 #include "grbl/TextToGcode/TextToGcodeGenerator.h"
 
@@ -31,6 +32,15 @@ TextToGcodeDialog::TextToGcodeDialog(QWidget *parent) :
     ui->fontSourceCombo->setCurrentIndex(static_cast<int>(FontSource::SystemFont));
     ui->fontPathInput->setVisible(false);
     ui->browseButton->setVisible(false);
+
+    // Update text statistics on input change
+    connect(ui->textInput, &QPlainTextEdit::textChanged, this, [this]() {
+        QString text = ui->textInput->toPlainText();
+        int lineCount = text.isEmpty() ? 0 : text.split('\n').size();
+        int charCount = text.length();
+        ui->textStatsLabel->setText(QString("%1 lines, %2 characters").arg(lineCount).arg(charCount));
+    });
+    ui->textStatsLabel->setText("0 lines, 0 characters");
 }
 
 TextToGcodeDialog::~TextToGcodeDialog()
