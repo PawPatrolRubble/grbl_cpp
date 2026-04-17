@@ -100,11 +100,18 @@ private:
     mutable QRectF m_cachedBBox;
     mutable bool m_bboxDirty = true;
 
-    // Cached painter paths (rebuilt when moves/view change)
-    QPainterPath m_rapidPath;
-    QPainterPath m_linearPath;
-    QPainterPath m_arcPath;
+    // Cached line vectors (rebuilt when moves/view change)
+    QVector<QLineF> m_rapidLines;
+    QVector<QLineF> m_linearLines;
+    QVector<QLineF> m_arcLines;
     bool m_pathsDirty = true;
     double m_pathScale = 0.0;
     QPointF m_pathOffset;
+
+    // Cached past-move segments for efficient batch drawing
+    QVector<QLineF> m_pastSegments;
+    int m_pastBuiltLine = -1;   // executing line when cache was last built
+
+    // lineNumber → move index lookup (O(1) highlight)
+    QHash<int, int> m_lineToIndex;
 };
