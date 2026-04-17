@@ -5,10 +5,6 @@
 
 class SerialManager;
 
-/// Maximum lines pushed into SerialManager's queue per sendNextLine() call.
-/// SerialManager handles actual byte-level throttling via its TX queue.
-constexpr int MAX_IN_FLIGHT_LINES = 16;
-
 class GcodeStreamer : public QObject
 {
     Q_OBJECT
@@ -43,6 +39,10 @@ public slots:
 private:
     void sendNextLine();
 
+    /// Max commands allowed in SerialManager's TX queue before we stop
+    /// feeding more. Prevents enqueueing thousands of lines in one burst.
+    static constexpr int MAX_PENDING_COMMANDS = 32;
+
     QStringList m_streamQueue;
     SerialManager *m_serialManager = nullptr;
     int m_linesSent = 0;       ///< Next index into m_streamQueue to process.
@@ -50,6 +50,7 @@ private:
     int m_commandsSent = 0;    ///< Number of actual G-code commands sent (excluding blanks/comments).
     int m_okCount = 0;         ///< Number of "ok" acks received from GRBL.
     int m_errorCount = 0;      ///< Number of "error:" responses received from GRBL.
+    int m_lastProgressLine = -1; ///< Last line number we emitted progress for (throttle).
     bool m_streaming = false;
     bool m_paused = false;
 };

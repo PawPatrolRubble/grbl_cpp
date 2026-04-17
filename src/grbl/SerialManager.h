@@ -71,6 +71,10 @@ public:
     /// Cancel an active jog move.
     void jogCancel();
 
+    /// Clear all queued outgoing commands and reset buffer tracking.
+    /// Used when aborting a streaming session.
+    void clearQueue();
+
 signals:
     void connectedChanged(bool connected);
     void responseReceived(const QString &response);

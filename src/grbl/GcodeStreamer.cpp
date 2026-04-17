@@ -20,6 +20,7 @@ void GcodeStreamer::startStreaming(const QStringList &lines)
     m_commandsSent = 0;
     m_okCount = 0;
     m_errorCount = 0;
+    m_lastProgressLine = -1;
     m_streaming = true;
     m_paused = false;
 
@@ -48,12 +49,24 @@ void GcodeStreamer::resumeStreaming()
 
 void GcodeStreamer::stopStreaming()
 {
+    if (!m_streaming) return;
+
     m_streaming = false;
+    m_paused = false;
     m_streamQueue.clear();
     m_linesSent = 0;
     m_commandsSent = 0;
     m_okCount = 0;
     m_errorCount = 0;
+
+    // Flush queued commands that haven't been sent yet.
+    if (m_serialManager)
+        m_serialManager->clearQueue();
+
+    // Feed hold → stop GRBL motion immediately, then soft reset
+    // to discard anything still in GRBL's planner buffer.
+    emit sendRealtimeRequested(GrblRealtime::Reset);
+
     emit streamingFinished();
 }
 
@@ -114,15 +127,12 @@ void GcodeStreamer::onDisconnected()
 }
 
 // ---------------------------------------------------------------------------
-// sendNextLine — Push the next batch of G-code lines into SerialManager.
+// sendNextLine — Push lines into SerialManager's TX queue in batches.
 //
-// SerialManager owns all buffer-level throttling via its internal TX queue
-// and the character-counting protocol.  The streamer simply feeds lines
-// into SerialManager::sendCommand(), which queues them if the GRBL RX
-// buffer is currently full and drains them automatically when acks arrive.
-//
-// We cap the number of lines pushed per call to MAX_IN_FLIGHT_LINES to
-// avoid loading the entire file into SerialManager's queue at once.
+// Instead of enqueuing all lines at once (which would block the UI thread
+// for thousands of lines), we limit to MAX_PENDING_COMMANDS per call.
+// When acks arrive, onAckReceived() calls this again to feed more lines.
+// Progress signals are also throttled to avoid per-line UI updates.
 // ---------------------------------------------------------------------------
 void GcodeStreamer::sendNextLine()
 {
@@ -135,23 +145,34 @@ void GcodeStreamer::sendNextLine()
         return;
     }
 
-    int pushed = 0;
-    while (m_linesSent < m_totalLines && !m_paused && pushed < MAX_IN_FLIGHT_LINES) {
+    // Limit how many commands we enqueue per call so we don't block
+    // the UI thread when thousands of lines are queued at once.
+    int pending = m_serialManager ? m_serialManager->pendingQueueSize() : 0;
+
+    while (m_linesSent < m_totalLines && !m_paused
+           && pending < MAX_PENDING_COMMANDS) {
         QString line = m_streamQueue[m_linesSent].trimmed();
 
         // Skip blank lines and comments — GRBL never sees these, so
         // they don't produce acks and don't count as commands.
         if (line.isEmpty() || line.startsWith(';')) {
             m_linesSent++;
-            emit streamingProgress(m_linesSent, m_totalLines);
             continue;
         }
 
         m_linesSent++;
         m_commandsSent++;
-        pushed++;
+        ++pending;
 
         emit sendCommandRequested(line);
+    }
+
+    // Throttle progress updates — emit at most every 1% or 50 lines,
+    // whichever is smaller, plus always on the final line.
+    int step = qMax(1, qMin(m_totalLines / 100, 50));
+    if (m_linesSent >= m_totalLines
+        || m_linesSent - m_lastProgressLine >= step) {
+        m_lastProgressLine = m_linesSent;
         emit streamingProgress(m_linesSent, m_totalLines);
     }
 }

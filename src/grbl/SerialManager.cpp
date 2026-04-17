@@ -190,6 +190,14 @@ void SerialManager::jogCancel()
     sendRealtimeCommand(GrblRealtime::JogCancel);
 }
 
+void SerialManager::clearQueue()
+{
+    QMutexLocker locker(&m_mutex);
+    m_txQueue.clear();
+    m_sentLineLengths.clear();
+    m_rxBufUsed = 0;
+}
+
 // ---------------------------------------------------------------------------
 // drainQueue — Write queued commands to the serial port while there is room
 //              in GRBL's RX buffer.
