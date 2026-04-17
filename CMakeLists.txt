@@ -51,6 +51,7 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/RectangleEntity.cpp
     src/grbl/GraphicsDesign/CircleEntity.cpp
     src/grbl/GraphicsDesign/ArcEntity.cpp
+    src/grbl/GraphicsDesign/TextEntity.cpp
     src/grbl/GraphicsDesign/LineShape.cpp
     src/grbl/GraphicsDesign/RectShape.cpp
     src/grbl/GraphicsDesign/CircleShape.cpp
@@ -60,6 +61,7 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/Tools/RectangleTool.cpp
     src/grbl/GraphicsDesign/Tools/CircleTool.cpp
     src/grbl/GraphicsDesign/Tools/ArcTool.cpp
+    src/grbl/GraphicsDesign/Tools/TextTool.cpp
 )
 
 set(GRBL_HEADERS
@@ -87,6 +89,7 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/RectangleEntity.h
     src/grbl/GraphicsDesign/CircleEntity.h
     src/grbl/GraphicsDesign/ArcEntity.h
+    src/grbl/GraphicsDesign/TextEntity.h
     src/grbl/GraphicsDesign/LineShape.h
     src/grbl/GraphicsDesign/RectShape.h
     src/grbl/GraphicsDesign/CircleShape.h
@@ -97,6 +100,7 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/Tools/RectangleTool.h
     src/grbl/GraphicsDesign/Tools/CircleTool.h
     src/grbl/GraphicsDesign/Tools/ArcTool.h
+    src/grbl/GraphicsDesign/Tools/TextTool.h
 )
 
 # --- UI ---

@@ -2,4 +2,16 @@
     <qresource prefix="/resources">
         <file>style.qss</file>
     </qresource>
+    <qresource prefix="/fonts">
+        <file>fonts/futural.jhf</file>
+        <file>fonts/futuram.jhf</file>
+        <file>fonts/scripts.jhf</file>
+        <file>fonts/scriptc.jhf</file>
+        <file>fonts/rowmans.jhf</file>
+        <file>fonts/rowmand.jhf</file>
+        <file>fonts/gothiceng.jhf</file>
+        <file>fonts/cursive.jhf</file>
+        <file>fonts/timesr.jhf</file>
+        <file>fonts/timesi.jhf</file>
+    </qresource>
 </RCC>
