@@ -7,26 +7,43 @@
 #include <QFileDialog>
 #include <QMessageBox>
 
-// G-code type detection for coloring
-enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
-
+// G-code type detection for coloring — fast string-based, no regex
 static GcodeType detectGcodeType(const QString &line)
 {
     QString stripped = line.trimmed();
     if (stripped.isEmpty() || stripped.startsWith(';') || stripped.startsWith('('))
         return GcodeType::Comment;
 
-    static const QRegularExpression gRegex("[Gg](\\d+)");
-    QRegularExpressionMatch match = gRegex.match(stripped);
-
-    if (match.hasMatch()) {
-        int code = match.captured(1).toInt();
-        if (code == 0) return GcodeType::Rapid;
-        if (code == 1) return GcodeType::Linear;
-        if (code == 2) return GcodeType::ArcCW;
-        if (code == 3) return GcodeType::ArcCCW;
+    // Scan for G<digits> pattern
+    for (int i = 0; i < stripped.size(); ++i) {
+        QChar ch = stripped[i];
+        if (ch == 'G' || ch == 'g') {
+            // Read the integer that follows
+            int j = i + 1;
+            while (j < stripped.size() && stripped[j].isDigit())
+                ++j;
+            if (j > i + 1) {
+                int code = QStringView(stripped).mid(i + 1, j - i - 1).toInt();
+                if (code == 0) return GcodeType::Rapid;
+                if (code == 1) return GcodeType::Linear;
+                if (code == 2) return GcodeType::ArcCW;
+                if (code == 3) return GcodeType::ArcCCW;
+            }
+        }
     }
     return GcodeType::Other;
+}
+
+static QColor colorForType(GcodeType type)
+{
+    switch (type) {
+    case GcodeType::Rapid:    return QColor("#f87171");
+    case GcodeType::Linear:   return QColor("#4ade80");
+    case GcodeType::ArcCW:    return QColor("#60a5fa");
+    case GcodeType::ArcCCW:   return QColor("#c084fc");
+    case GcodeType::Comment:  return QColor("#6b7280");
+    default:                  return QColor("#cdd6f4");
+    }
 }
 
 GcodeListModel::GcodeListModel(QObject *parent)
@@ -46,31 +63,20 @@ QVariant GcodeListModel::data(const QModelIndex &index, int role) const
         return {};
 
     const int row = index.row();
-    const QString &line = m_lines.at(row);
+    const GcodeLine &gl = m_lines.at(row);
 
     if (role == Qt::DisplayRole)
-        return QString("%1: %2").arg(row + 1, 5).arg(line);
+        return QString("%1: %2").arg(row + 1, 5).arg(gl.text);
 
     if (role == Qt::ForegroundRole) {
-        // Executing line - bright yellow highlight
         if (row == m_executingLine)
-            return QColor("#ffcc00");  // Bright yellow
-
-        GcodeType type = detectGcodeType(line);
-        switch (type) {
-        case GcodeType::Rapid:    return QColor("#f87171");  // Red - G0 rapid moves
-        case GcodeType::Linear:   return QColor("#4ade80");  // Green - G1 linear moves
-        case GcodeType::ArcCW:    return QColor("#60a5fa");  // Blue - G2 clockwise arcs
-        case GcodeType::ArcCCW:   return QColor("#c084fc");  // Purple - G3 counter-clockwise arcs
-        case GcodeType::Comment:  return QColor("#6b7280");  // Gray - comments
-        default:                  return QColor("#cdd6f4");  // Default text color
-        }
+            return QColor("#ffcc00");
+        return colorForType(gl.type);
     }
 
     if (role == Qt::BackgroundRole) {
-        // Executing line - highlighted background
         if (row == m_executingLine)
-            return QColor("#3d3d00");  // Dark yellow background
+            return QColor("#3d3d00");
     }
 
     if (role == Qt::FontRole) {
@@ -86,14 +92,25 @@ QVariant GcodeListModel::data(const QModelIndex &index, int role) const
 void GcodeListModel::setLines(const QStringList &lines)
 {
     beginResetModel();
-    m_lines = lines;
+    m_lines.clear();
+    m_lines.reserve(lines.size());
     m_executingLine = -1;
+    for (const QString &line : lines) {
+        GcodeLine gl;
+        gl.text = line;
+        gl.type = detectGcodeType(line);
+        m_lines.append(gl);
+    }
     endResetModel();
 }
 
 QStringList GcodeListModel::lines() const
 {
-    return m_lines;
+    QStringList result;
+    result.reserve(m_lines.size());
+    for (const auto &gl : m_lines)
+        result << gl.text;
+    return result;
 }
 
 int GcodeListModel::lineCount() const
@@ -222,10 +239,13 @@ void GcodeListWidget::setExecutingLine(int lineNumber)
 {
     m_model->setExecutingLine(lineNumber);
 
-    // Auto-scroll to keep executing line visible
+    // Throttle auto-scroll: only scroll every 20 lines or on the last line
+    // to avoid expensive layout recalculations that freeze the UI.
     if (lineNumber >= 0 && lineNumber < m_model->lineCount()) {
-        QModelIndex idx = m_model->index(lineNumber, 0);
-        m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        if (lineNumber % 20 == 0 || lineNumber == m_model->lineCount() - 1) {
+            QModelIndex idx = m_model->index(lineNumber, 0);
+            m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        }
     }
 }
 

@@ -6,6 +6,13 @@
 #include <QLabel>
 #include <QPushButton>
 
+enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
+
+struct GcodeLine {
+    QString text;
+    GcodeType type = GcodeType::Other;
+};
+
 class GcodeListModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -23,7 +30,7 @@ public:
     void setExecutingLine(int line);
 
 private:
-    QStringList m_lines;
+    QList<GcodeLine> m_lines;
     int m_executingLine = -1;
 };
 
