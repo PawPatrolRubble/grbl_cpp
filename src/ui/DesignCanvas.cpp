@@ -4,6 +4,7 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QKeyEvent>
+#include <QShowEvent>
 #include <algorithm>
 #include <cmath>
 
@@ -45,6 +46,7 @@ DesignCanvas::DesignCanvas(QWidget *parent)
     , m_rectangleTool(m_document, m_commandStack)
     , m_circleTool(m_document, m_commandStack)
     , m_arcTool(m_document, m_commandStack)
+    , m_textTool(m_document, m_commandStack)
 {
     setMinimumSize(300, 300);
     setMouseTracking(true);
@@ -115,6 +117,7 @@ void DesignCanvas::setTool(ToolType toolType)
     unsetCursor();
     emitToolStatus();
     scheduleUpdate();
+    emit toolChanged(toolType);
 }
 
 void DesignCanvas::clearDocument()
@@ -176,6 +179,12 @@ void DesignCanvas::setWorktableSize(const QSizeF &size)
     autoFit();
 }
 
+void DesignCanvas::setSnapEnabled(bool enabled)
+{
+    m_snapEnabled = enabled;
+    scheduleUpdate();
+}
+
 void DesignCanvas::autoFit()
 {
     double margin = 30.0;
@@ -195,12 +204,16 @@ void DesignCanvas::autoFit()
 
 QPointF DesignCanvas::toWorld(const QPointF& screenPos) const
 {
-    return (screenPos - m_panOffset) / m_zoom;
+    // World = Machine coordinates (Y-up)
+    return QPointF((screenPos.x() - m_panOffset.x()) / m_zoom,
+                   -(screenPos.y() - m_panOffset.y()) / m_zoom);
 }
 
 QPointF DesignCanvas::toScreen(const QPointF& worldPos) const
 {
-    return worldPos * m_zoom + m_panOffset;
+    // Screen coordinates (Y-down) from machine coordinates (Y-up)
+    return QPointF(worldPos.x() * m_zoom + m_panOffset.x(),
+                   -worldPos.y() * m_zoom + m_panOffset.y());
 }
 
 QPointF DesignCanvas::machineToScreen(const QPointF& pt) const
@@ -218,10 +231,11 @@ QPointF DesignCanvas::screenToMachine(const QPointF& pt) const
 
 void DesignCanvas::applyZoom(double factor, const QPointF& screenAnchor)
 {
-    const QPointF worldBefore = toWorld(screenAnchor);
-    m_zoom = std::clamp(m_zoom * factor, 0.2, 8.0);
-    m_panOffset = screenAnchor - worldBefore * m_zoom;
-    scheduleUpdate();
+    double newZoom = std::clamp(m_zoom * factor, 0.2, 8.0);
+    double actualFactor = newZoom / m_zoom;
+    m_panOffset = screenAnchor - actualFactor * (screenAnchor - m_panOffset);
+    m_zoom = newZoom;
+    update();
 }
 
 void DesignCanvas::scheduleUpdate()
@@ -235,7 +249,16 @@ void DesignCanvas::scheduleUpdate()
 void DesignCanvas::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    autoFit();
+    update();
+}
+
+void DesignCanvas::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (!m_initialFitDone) {
+        m_initialFitDone = true;
+        autoFit();
+    }
 }
 
 void DesignCanvas::paintEvent(QPaintEvent *)
@@ -244,11 +267,13 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     painter.fillRect(rect(), QColor(248, 246, 240));
     painter.setRenderHint(QPainter::Antialiasing, true);
 
+    // Rulers are drawn in screen coordinates
+    drawGridAndRulers(painter);
+
     painter.save();
     painter.translate(m_panOffset);
-    painter.scale(m_zoom, m_zoom);
+    painter.scale(m_zoom, -m_zoom);  // Y-up for machine coordinates
 
-    drawGrid(painter);
     drawWorktable(painter);
     drawAxisOrigin(painter);
     drawEntities(painter);
@@ -261,56 +286,119 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     painter.restore();
 }
 
-void DesignCanvas::drawGrid(QPainter& painter)
+void DesignCanvas::drawGridAndRulers(QPainter& painter)
 {
-    painter.setPen(QColor(226, 221, 211));
-
-    const QRectF worldBounds = QRectF(toWorld(QPointF(0.0, 0.0)),
-                                       toWorld(QPointF(width(), height()))).normalized();
-
-    const int startX = static_cast<int>(std::floor(worldBounds.left() / kGridStep)) * static_cast<int>(kGridStep);
-    const int endX = static_cast<int>(std::ceil(worldBounds.right() / kGridStep)) * static_cast<int>(kGridStep);
-    const int startY = static_cast<int>(std::floor(worldBounds.top() / kGridStep)) * static_cast<int>(kGridStep);
-    const int endY = static_cast<int>(std::ceil(worldBounds.bottom() / kGridStep)) * static_cast<int>(kGridStep);
-
-    for (int x = startX; x <= endX; x += static_cast<int>(kGridStep)) {
-        painter.drawLine(QPointF(x, worldBounds.top()), QPointF(x, worldBounds.bottom()));
+    // Adaptive step like ToolpathCanvas
+    double stepMachine = 10.0;
+    while (stepMachine * m_zoom < 30.0) {
+        stepMachine *= 2.0;
+        if (stepMachine * m_zoom >= 30.0) break;
+        stepMachine *= 2.5;
     }
-    for (int y = startY; y <= endY; y += static_cast<int>(kGridStep)) {
-        painter.drawLine(QPointF(worldBounds.left(), y), QPointF(worldBounds.right(), y));
+
+    QPointF machineTL = screenToMachine(QPointF(0, 0));
+    QPointF machineBR = screenToMachine(QPointF(width(), height()));
+
+    double startX = std::floor(std::min(machineTL.x(), machineBR.x()) / stepMachine) * stepMachine;
+    double endX   = std::ceil(std::max(machineTL.x(), machineBR.x()) / stepMachine) * stepMachine;
+    double startY = std::floor(std::min(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
+    double endY   = std::ceil(std::max(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
+
+    // Grid lines
+    painter.setPen(QPen(QColor("#d1d5db"), 1));
+    for (double x = startX; x <= endX; x += stepMachine) {
+        QPointF p1 = machineToScreen(QPointF(x, startY));
+        QPointF p2 = machineToScreen(QPointF(x, endY));
+        painter.drawLine(p1, p2);
+    }
+    for (double y = startY; y <= endY; y += stepMachine) {
+        QPointF p1 = machineToScreen(QPointF(startX, y));
+        QPointF p2 = machineToScreen(QPointF(endX, y));
+        painter.drawLine(p1, p2);
+    }
+
+    // Ruler labels along X-axis (bottom) and Y-axis (left)
+    QFont rulerFont("Sans Serif", 8);
+    painter.setFont(rulerFont);
+    painter.setPen(QColor("#6b7280"));
+
+    for (double x = startX; x <= endX; x += stepMachine) {
+        QPointF p = machineToScreen(QPointF(x, 0));
+        painter.drawText(QPointF(p.x() + 3, height() - 4), QString::number(x, 'g', 6));
+    }
+    for (double y = startY; y <= endY; y += stepMachine) {
+        QPointF p = machineToScreen(QPointF(0, y));
+        painter.drawText(QPointF(4, p.y() - 3), QString::number(y, 'g', 6));
     }
 }
 
 void DesignCanvas::drawWorktable(QPainter& painter)
 {
-    // Draw worktable boundary (machine coordinates)
+    // Draw worktable boundary in machine coordinates (Y-up)
     QPointF bl(0, 0);
     QPointF br(m_worktableSize.width(), 0);
     QPointF tr(m_worktableSize.width(), m_worktableSize.height());
     QPointF tl(0, m_worktableSize.height());
 
-    painter.setPen(QPen(QColor("#d1d5db"), 1.5, Qt::DotLine));
+    painter.setPen(QPen(QColor("#9ca3af"), 0.5, Qt::DotLine));
     painter.drawLine(bl, br);
     painter.drawLine(br, tr);
     painter.drawLine(tr, tl);
     painter.drawLine(tl, bl);
+
+    // Worktable size label (un-flip Y for text)
+    painter.save();
+    double invZoom = 1.0 / m_zoom;
+    QFont labelFont("Sans Serif", 8);
+    painter.setFont(labelFont);
+    painter.translate(tr);
+    painter.scale(invZoom, -invZoom);  // Un-flip Y for text
+    painter.setPen(QColor("#9ca3af"));
+    painter.drawText(QPointF(4, 12), QString("%1 x %2 mm")
+                     .arg(m_worktableSize.width(), 0, 'f', 0)
+                     .arg(m_worktableSize.height(), 0, 'f', 0));
+    painter.restore();
 }
 
 void DesignCanvas::drawAxisOrigin(QPainter& painter)
 {
     QPointF origin(0, 0);
+    double invZoom = 1.0 / m_zoom;
+    double arrowLen = 30.0 * invZoom;
+    double headLen = 5.0 * invZoom;
 
+    // X-axis (red, pointing right)
     painter.setPen(QPen(QColor("#f38ba8"), 2));
-    QPointF xEnd = origin + QPointF(25, 0);
+    QPointF xEnd = origin + QPointF(arrowLen, 0);
     painter.drawLine(origin, xEnd);
-    painter.drawLine(xEnd, xEnd + QPointF(-4, -4));
-    painter.drawLine(xEnd, xEnd + QPointF(-4, 4));
+    painter.drawLine(xEnd, xEnd + QPointF(-headLen, -headLen));
+    painter.drawLine(xEnd, xEnd + QPointF(-headLen, headLen));
 
+    // X label (un-flip Y for text)
+    painter.save();
+    painter.translate(xEnd + QPointF(3.0 * invZoom, 0));
+    painter.scale(invZoom, -invZoom);
+    QFont labelFont("Sans Serif", 9);
+    labelFont.setBold(true);
+    painter.setFont(labelFont);
+    painter.drawText(QPointF(0, 4), "X");
+    painter.restore();
+
+    // Y-axis (green, pointing up)
     painter.setPen(QPen(QColor("#a6e3a1"), 2));
-    QPointF yEnd = origin + QPointF(0, 25);
+    QPointF yEnd = origin + QPointF(0, arrowLen);
     painter.drawLine(origin, yEnd);
-    painter.drawLine(yEnd, yEnd + QPointF(-4, -4));
-    painter.drawLine(yEnd, yEnd + QPointF(4, -4));
+    painter.drawLine(yEnd, yEnd + QPointF(-headLen, -headLen));
+    painter.drawLine(yEnd, yEnd + QPointF(headLen, -headLen));
+
+    // Y label (un-flip Y for text)
+    painter.save();
+    painter.translate(yEnd + QPointF(0, 3.0 * invZoom));
+    painter.scale(invZoom, -invZoom);
+    painter.setPen(QColor("#a6e3a1"));
+    painter.setFont(labelFont);
+    painter.drawText(QPointF(-4, 0), "Y");
+    painter.restore();
 }
 
 void DesignCanvas::drawEntities(QPainter& painter)
@@ -487,6 +575,7 @@ Tool& DesignCanvas::activeTool()
         case ToolType::Rectangle: return m_rectangleTool;
         case ToolType::Circle:    return m_circleTool;
         case ToolType::Arc:       return m_arcTool;
+        case ToolType::Text:      return m_textTool;
         case ToolType::Line:
         default:                  return m_lineTool;
     }
@@ -499,6 +588,7 @@ const Tool& DesignCanvas::activeTool() const
         case ToolType::Rectangle: return m_rectangleTool;
         case ToolType::Circle:    return m_circleTool;
         case ToolType::Arc:       return m_arcTool;
+        case ToolType::Text:      return m_textTool;
         case ToolType::Line:
         default:                  return m_lineTool;
     }
@@ -522,7 +612,7 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
 {
     const QPointF rawWorldPos = toWorld(event->position());
 
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
         m_panning = true;
         m_lastPanScreenPos = event->position().toPoint();
         setCursor(Qt::ClosedHandCursor);
@@ -530,7 +620,11 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
     }
 
     if (event->button() == Qt::LeftButton) {
-        m_snapResult = computeSnap(rawWorldPos, true);
+        if (m_snapEnabled) {
+            m_snapResult = computeSnap(rawWorldPos, true);
+        } else {
+            m_snapResult = {};
+        }
         const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
 
         const int entityCountBefore = m_document.entityCount();
@@ -547,10 +641,6 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
         scheduleUpdate();
         return;
     }
-
-    if (event->button() == Qt::RightButton) {
-        cancelActiveTool();
-    }
 }
 
 void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
@@ -561,7 +651,7 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
         const QPoint delta = event->position().toPoint() - m_lastPanScreenPos;
         m_panOffset += QPointF(delta.x(), delta.y());
         m_lastPanScreenPos = event->position().toPoint();
-        scheduleUpdate();
+        update();
         return;
     }
 
@@ -569,7 +659,11 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
         updateHoverCursor(rawWorldPos);
     }
 
-    m_snapResult = computeSnap(rawWorldPos, true);
+    if (m_snapEnabled) {
+        m_snapResult = computeSnap(rawWorldPos, true);
+    } else {
+        m_snapResult = {};
+    }
     const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
     activeTool().mouseMove(snappedPos);
 
@@ -581,15 +675,21 @@ void DesignCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
     const QPointF rawWorldPos = toWorld(event->position());
 
-    if (event->button() == Qt::MiddleButton) {
-        m_panning = false;
-        unsetCursor();
-        event->accept();
-        return;
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+        if (m_panning) {
+            m_panning = false;
+            unsetCursor();
+            event->accept();
+            return;
+        }
     }
 
     if (event->button() == Qt::LeftButton) {
-        m_snapResult = computeSnap(rawWorldPos, true);
+        if (m_snapEnabled) {
+            m_snapResult = computeSnap(rawWorldPos, true);
+        } else {
+            m_snapResult = {};
+        }
         const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
         activeTool().mouseRelease(snappedPos);
         emitToolStatus();
@@ -626,6 +726,13 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
 
     if (event->key() == Qt::Key_Delete) {
         deleteSelectedEntity();
+        event->accept();
+        return;
+    }
+
+    if (event->key() == Qt::Key_S && event->modifiers() == Qt::NoModifier) {
+        setSnapEnabled(!m_snapEnabled);
+        emitToolStatus();
         event->accept();
         return;
     }

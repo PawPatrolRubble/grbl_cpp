@@ -8,6 +8,7 @@
 #include "../grbl/GraphicsDesign/Tools/RectangleTool.h"
 #include "../grbl/GraphicsDesign/Tools/CircleTool.h"
 #include "../grbl/GraphicsDesign/Tools/ArcTool.h"
+#include "../grbl/GraphicsDesign/Tools/TextTool.h"
 
 #include <QWidget>
 #include <QTimer>
@@ -26,7 +27,8 @@ public:
         Line,
         Rectangle,
         Circle,
-        Arc
+        Arc,
+        Text
     };
 
     struct SnapResult {
@@ -55,6 +57,8 @@ public:
     double zoom() const { return m_zoom; }
     void autoFit();
     void setWorktableSize(const QSizeF &size);
+    bool snapEnabled() const { return m_snapEnabled; }
+    void setSnapEnabled(bool enabled);
 
 public slots:
     void setTool(ToolType toolType);
@@ -69,6 +73,7 @@ signals:
     void undoRedoStateChanged(bool canUndo, bool canRedo);
     void selectedEntityChanged();
     void documentStateChanged();
+    void toolChanged(ToolType toolType);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -78,6 +83,7 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     Tool& activeTool();
@@ -96,7 +102,7 @@ private:
     void scheduleUpdate();
 
     // Drawing helpers
-    void drawGrid(QPainter& painter);
+    void drawGridAndRulers(QPainter& painter);
     void drawWorktable(QPainter& painter);
     void drawAxisOrigin(QPainter& painter);
     void drawEntities(QPainter& painter);
@@ -120,6 +126,7 @@ private:
     RectangleTool m_rectangleTool;
     CircleTool m_circleTool;
     ArcTool m_arcTool;
+    TextTool m_textTool;
     ToolType m_activeToolType = ToolType::Select;
 
     // View state
@@ -134,10 +141,12 @@ private:
 
     // Snap result
     SnapResult m_snapResult;
+    bool m_snapEnabled = false;
 
     // Repaint throttle
     QTimer m_repaintTimer;
     bool m_repaintPending = false;
+    bool m_initialFitDone = false;
 
     // Constants
     static constexpr double kHandleHalfSizePx = 6.0;
