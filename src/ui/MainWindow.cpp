@@ -11,7 +11,6 @@
 #include "panels/GraphicsDesignPanel.h"
 #include "ToolpathPanel.h"
 #include "TextToGcodeDialog.h"
-#include "GraphicsDesignDialog.h"
 
 #include "grbl/MachineState.h"
 #include "grbl/SerialManager.h"
@@ -85,26 +84,9 @@ void MainWindow::setupMenuBar()
         });
         dialog.exec();
     }, QKeySequence(Qt::CTRL | Qt::Key_T));
-    auto *graphicsAction = new QAction("Graphics Design", this);
-    graphicsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
-    connect(graphicsAction, &QAction::triggered, this, [this]() {
-        GraphicsDesignDialog dialog(this);
-        connect(&dialog, &GraphicsDesignDialog::gcodeGenerated, this, [this](const QStringList &lines) {
-            m_core->fileManager()->loadLines("GraphicsDesign", lines);
-            ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
-            m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
-            ui->consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
-
-            QStringList parseLines = m_core->fileManager()->lines();
-            QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
-                GcodeParser parser;
-                return parser.parse(parseLines);
-            });
-            m_parseWatcher->setFuture(future);
-        });
-        dialog.exec();
-    });
-    fileMenu->addAction(graphicsAction);
+    fileMenu->addAction("Graphics Design", this, [this]() {
+        ui->centralTabs->setCurrentIndex(TAB_DESIGN);
+    }, QKeySequence(Qt::CTRL | Qt::Key_G));
     fileMenu->addSeparator();
     fileMenu->addAction("Exit", this, &QWidget::close, QKeySequence::Quit);
 
@@ -115,11 +97,10 @@ void MainWindow::setupMenuBar()
     viewMenu->addAction("Streaming Control", m_dockControl, &QDockWidget::toggleViewAction);
     viewMenu->addAction("Jog Control", m_dockJog, &QDockWidget::toggleViewAction);
     viewMenu->addAction("Settings", m_dockSettings, &QDockWidget::toggleViewAction);
-    viewMenu->addAction("Graphics Design", m_dockGraphicsDesign, &QDockWidget::toggleViewAction);
     viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
         m_settings->resetToDefaults();
-        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings, m_dockGraphicsDesign}) {
+        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings}) {
             removeDockWidget(dock);
         }
         addDockWidget(Qt::LeftDockWidgetArea, m_dockConnection);
@@ -127,9 +108,8 @@ void MainWindow::setupMenuBar()
         addDockWidget(Qt::LeftDockWidgetArea, m_dockControl);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockJog);
         addDockWidget(Qt::RightDockWidgetArea, m_dockSettings);
-        addDockWidget(Qt::RightDockWidgetArea, m_dockGraphicsDesign);
         m_dockSettings->hide();
-        m_dockGraphicsDesign->hide();
+        ui->centralTabs->setCurrentIndex(TAB_TOOLPATH);
     });
 
     // --- Help menu ---
@@ -173,11 +153,6 @@ void MainWindow::setupDocks()
     m_settingsPanel = new SettingsPanel();
     m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
     m_dockSettings->hide();
-
-    // Graphics Design panel (right, hidden by default)
-    m_graphicsDesignPanel = new GraphicsDesignPanel();
-    m_dockGraphicsDesign = createDock("Graphics Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea);
-    m_dockGraphicsDesign->hide();
 
     // Tabify left docks
     tabifyDockWidget(m_dockConnection, m_dockStatus);
@@ -246,7 +221,8 @@ void MainWindow::setupConnections()
                 // Skip GRBL status reports: <Idle|WPos:...>
                 if (response.startsWith('<') && response.endsWith('>'))
                     return;
-                ui->consolePanel->appendMessage(response);
+                // During streaming, batch responses to avoid UI lag
+                ui->consolePanel->queueMessage(response);
             });
 
     // --- Core streaming → UI ---
@@ -370,14 +346,17 @@ void MainWindow::setupConnections()
                 statusBar()->showMessage("File loaded: " + m_core->fileManager()->fileName());
             });
 
-    // --- GraphicsDesignPanel → G-code generation ---
-    connect(m_graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
+    // --- GraphicsDesignPanel (tab) → G-code generation ---
+    connect(ui->graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
             this, [this](const QStringList &lines) {
                 m_core->fileManager()->loadLines("GraphicsDesign", lines);
                 ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
                 m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
                 ui->consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
                 statusBar()->showMessage("Graphics Design G-code loaded");
+
+                // Switch to toolpath tab to show result
+                ui->centralTabs->setCurrentIndex(TAB_TOOLPATH);
 
                 QStringList parseLines = m_core->fileManager()->lines();
                 QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
