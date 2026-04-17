@@ -6,11 +6,13 @@
 
 #include <QComboBox>
 #include <QPushButton>
+#include <QToolButton>
 #include <QLabel>
 #include <QDoubleSpinBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
+#include <QSplitter>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QJsonDocument>
@@ -26,11 +28,28 @@ GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
 
 void GraphicsDesignPanel::setupUi()
 {
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(8, 8, 8, 8);
-    mainLayout->setSpacing(6);
+    auto *outerLayout = new QHBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
 
-    // Tool bar
+    auto *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setChildrenCollapsible(false);
+
+    // ---- Left: Canvas ----
+    m_canvas = new DesignCanvas();
+    m_canvas->setMinimumWidth(300);
+    m_canvas->setMinimumHeight(200);
+    splitter->addWidget(m_canvas);
+
+    // ---- Right: Operations panel ----
+    auto *rightPanel = new QWidget();
+    rightPanel->setMinimumWidth(220);
+    rightPanel->setMaximumWidth(380);
+    auto *rightLayout = new QVBoxLayout(rightPanel);
+    rightLayout->setContentsMargins(8, 8, 8, 8);
+    rightLayout->setSpacing(6);
+
+    // Tool bar row
     auto *toolBar = new QHBoxLayout();
     m_toolCombo = new QComboBox();
     m_toolCombo->addItem("Select");
@@ -38,25 +57,41 @@ void GraphicsDesignPanel::setupUi()
     m_toolCombo->addItem("Rectangle");
     m_toolCombo->addItem("Circle");
     m_toolCombo->addItem("Arc");
+    m_toolCombo->addItem("Text");
     toolBar->addWidget(m_toolCombo);
+
+    m_snapBtn = new QToolButton();
+    m_snapBtn->setText("Snap");
+    m_snapBtn->setCheckable(true);
+    m_snapBtn->setChecked(false);
+    m_snapBtn->setToolTip("Toggle grid/entity snap (S)");
+    toolBar->addWidget(m_snapBtn);
+    toolBar->addStretch();
+    rightLayout->addLayout(toolBar);
+
+    // Action buttons row
+    auto *actionRow = new QHBoxLayout();
+    auto *undoBtn = new QPushButton("Undo");
+    undoBtn->setObjectName("undoBtn");
+    undoBtn->setShortcut(QKeySequence::Undo);
+    actionRow->addWidget(undoBtn);
+
+    auto *redoBtn = new QPushButton("Redo");
+    redoBtn->setObjectName("redoBtn");
+    redoBtn->setShortcut(QKeySequence::Redo);
+    actionRow->addWidget(redoBtn);
 
     m_deleteBtn = new QPushButton("Delete");
     m_deleteBtn->setEnabled(false);
-    toolBar->addWidget(m_deleteBtn);
+    actionRow->addWidget(m_deleteBtn);
 
-    m_clearBtn = new QPushButton("Clear All");
-    toolBar->addWidget(m_clearBtn);
+    m_clearBtn = new QPushButton("Clear");
+    actionRow->addWidget(m_clearBtn);
+    rightLayout->addLayout(actionRow);
 
+    // Shape info
     m_shapeInfoLabel = new QLabel("No selection");
-    toolBar->addWidget(m_shapeInfoLabel);
-
-    toolBar->addStretch();
-    mainLayout->addLayout(toolBar);
-
-    // Canvas
-    m_canvas = new DesignCanvas();
-    m_canvas->setMinimumHeight(200);
-    mainLayout->addWidget(m_canvas, 1);
+    rightLayout->addWidget(m_shapeInfoLabel);
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
@@ -69,11 +104,12 @@ void GraphicsDesignPanel::setupUi()
     m_toolModeCombo->addItem("Laser");
     optionsGrid->addWidget(m_toolModeCombo, row, 1);
 
-    optionsGrid->addWidget(new QLabel("Feed Speed:"), row, 2);
+    row++;
+    optionsGrid->addWidget(new QLabel("Feed Speed:"), row, 0);
     m_feedSpeedSpinBox = new QDoubleSpinBox();
     m_feedSpeedSpinBox->setRange(0, 10000);
     m_feedSpeedSpinBox->setValue(2000);
-    optionsGrid->addWidget(m_feedSpeedSpinBox, row, 3);
+    optionsGrid->addWidget(m_feedSpeedSpinBox, row, 1);
 
     row++;
     optionsGrid->addWidget(new QLabel("Plunge Speed:"), row, 0);
@@ -82,11 +118,12 @@ void GraphicsDesignPanel::setupUi()
     m_plungeSpeedSpinBox->setValue(1500);
     optionsGrid->addWidget(m_plungeSpeedSpinBox, row, 1);
 
-    optionsGrid->addWidget(new QLabel("Safe Z:"), row, 2);
+    row++;
+    optionsGrid->addWidget(new QLabel("Safe Z:"), row, 0);
     m_fastHeightSpinBox = new QDoubleSpinBox();
     m_fastHeightSpinBox->setRange(-100, 100);
     m_fastHeightSpinBox->setValue(-5);
-    optionsGrid->addWidget(m_fastHeightSpinBox, row, 3);
+    optionsGrid->addWidget(m_fastHeightSpinBox, row, 1);
 
     row++;
     optionsGrid->addWidget(new QLabel("Work Z:"), row, 0);
@@ -95,42 +132,45 @@ void GraphicsDesignPanel::setupUi()
     m_workHeightSpinBox->setValue(5);
     optionsGrid->addWidget(m_workHeightSpinBox, row, 1);
 
-    mainLayout->addLayout(optionsGrid);
+    rightLayout->addLayout(optionsGrid);
 
     // G-code preview
-    mainLayout->addWidget(new QLabel("G-code Preview:"));
+    rightLayout->addWidget(new QLabel("G-code Preview:"));
     m_gcodePreview = new LineNumberPlainTextEdit();
     m_gcodePreview->setReadOnly(true);
-    m_gcodePreview->setMaximumHeight(100);
     m_gcodePreview->setFont(QFont("Consolas", 10));
-    mainLayout->addWidget(m_gcodePreview);
+    rightLayout->addWidget(m_gcodePreview, 1);
 
     // Status line
     m_lineCountLabel = new QLabel("0 entities, 0 G-code lines");
     m_lineCountLabel->setAlignment(Qt::AlignRight);
-    mainLayout->addWidget(m_lineCountLabel);
+    rightLayout->addWidget(m_lineCountLabel);
 
     m_statusLabel = new QLabel();
-    mainLayout->addWidget(m_statusLabel);
+    rightLayout->addWidget(m_statusLabel);
 
     // Bottom buttons
     auto *buttonBar = new QHBoxLayout();
-    m_saveBtn = new QPushButton("Save Design");
+    m_saveBtn = new QPushButton("Save");
     buttonBar->addWidget(m_saveBtn);
 
-    m_loadBtn = new QPushButton("Load Design");
+    m_loadBtn = new QPushButton("Load");
     buttonBar->addWidget(m_loadBtn);
 
-    m_exportBtn = new QPushButton("Export G-code");
+    m_exportBtn = new QPushButton("Export");
     buttonBar->addWidget(m_exportBtn);
-
-    buttonBar->addStretch();
 
     m_generateBtn = new QPushButton("Generate & Load");
     m_generateBtn->setObjectName("startBtn");
     buttonBar->addWidget(m_generateBtn);
 
-    mainLayout->addLayout(buttonBar);
+    rightLayout->addLayout(buttonBar);
+
+    splitter->addWidget(rightPanel);
+    splitter->setStretchFactor(0, 3);  // Canvas gets 3x stretch
+    splitter->setStretchFactor(1, 1);  // Panel gets 1x stretch
+
+    outerLayout->addWidget(splitter);
 }
 
 void GraphicsDesignPanel::setupConnections()
@@ -138,6 +178,18 @@ void GraphicsDesignPanel::setupConnections()
     // Tool selection
     connect(m_toolCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &GraphicsDesignPanel::onToolChanged);
+
+    // Sync combo when canvas changes tool internally (e.g. auto-select after draw)
+    connect(m_canvas, &DesignCanvas::toolChanged, this, &GraphicsDesignPanel::onCanvasToolChanged);
+
+    // Snap toggle
+    connect(m_snapBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setSnapEnabled);
+
+    // Undo/Redo buttons
+    auto *undoBtn = findChild<QPushButton*>("undoBtn");
+    auto *redoBtn = findChild<QPushButton*>("redoBtn");
+    if (undoBtn) connect(undoBtn, &QPushButton::clicked, m_canvas, &DesignCanvas::undo);
+    if (redoBtn) connect(redoBtn, &QPushButton::clicked, m_canvas, &DesignCanvas::redo);
 
     // Document changes
     connect(m_canvas, &DesignCanvas::documentStateChanged, this, &GraphicsDesignPanel::updatePreview);
@@ -150,12 +202,35 @@ void GraphicsDesignPanel::setupConnections()
     connect(m_loadBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onLoadDesignClicked);
     connect(m_exportBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onExportGcodeClicked);
     connect(m_generateBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onGenerateClicked);
+
+    // Auto-update G-code preview when options change
+    connect(m_toolModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &GraphicsDesignPanel::updatePreview);
+    connect(m_feedSpeedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::updatePreview);
+    connect(m_plungeSpeedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::updatePreview);
+    connect(m_fastHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::updatePreview);
+    connect(m_workHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::updatePreview);
 }
 
 void GraphicsDesignPanel::onToolChanged(int index)
 {
     DesignCanvas::ToolType tool = static_cast<DesignCanvas::ToolType>(index);
     m_canvas->setTool(tool);
+}
+
+void GraphicsDesignPanel::onCanvasToolChanged()
+{
+    // Sync combo box when canvas changes tool internally (e.g. auto-select after drawing)
+    int index = static_cast<int>(m_canvas->currentToolType());
+    if (m_toolCombo->currentIndex() != index) {
+        m_toolCombo->blockSignals(true);
+        m_toolCombo->setCurrentIndex(index);
+        m_toolCombo->blockSignals(false);
+    }
 }
 
 void GraphicsDesignPanel::onSelectionChanged()
@@ -168,6 +243,7 @@ void GraphicsDesignPanel::onSelectionChanged()
             case Entity::Kind::Rectangle: typeName = "Rectangle"; break;
             case Entity::Kind::Circle: typeName = "Circle"; break;
             case Entity::Kind::Arc: typeName = "Arc"; break;
+            case Entity::Kind::Text: typeName = "Text"; break;
             default: typeName = "Entity"; break;
         }
         m_shapeInfoLabel->setText(QString("Selected: %1").arg(typeName));

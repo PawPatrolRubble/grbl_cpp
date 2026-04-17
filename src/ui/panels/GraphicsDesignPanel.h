@@ -6,6 +6,7 @@
 class DesignCanvas;
 class QComboBox;
 class QPushButton;
+class QToolButton;
 class QLabel;
 class QDoubleSpinBox;
 class LineNumberPlainTextEdit;
@@ -33,6 +34,7 @@ signals:
 
 private slots:
     void onToolChanged(int index);
+    void onCanvasToolChanged();
     void onSelectionChanged();
     void updatePreview();
     void onGenerateClicked();
@@ -55,6 +57,7 @@ private:
     QPushButton *m_loadBtn;
     QPushButton *m_exportBtn;
     QPushButton *m_generateBtn;
+    QToolButton *m_snapBtn;
     QLabel *m_shapeInfoLabel;
     QLabel *m_lineCountLabel;
     QLabel *m_statusLabel;
