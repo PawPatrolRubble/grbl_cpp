@@ -3,6 +3,7 @@
 #include "RectangleEntity.h"
 #include "CircleEntity.h"
 #include "ArcEntity.h"
+#include "TextEntity.h"
 
 Entity::Entity(Kind kind)
     : m_id(QUuid::createUuid())
@@ -22,6 +23,8 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
         return CircleEntity::fromJson(json);
     if (typeStr == "arc")
         return ArcEntity::fromJson(json);
+    if (typeStr == "text")
+        return TextEntity::fromJson(json);
 
     return nullptr;
 }
