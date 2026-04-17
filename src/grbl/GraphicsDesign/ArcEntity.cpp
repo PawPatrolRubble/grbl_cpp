@@ -6,7 +6,7 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kHandleOffset = 18.0;
+constexpr double kHandleOffset = 8.0;
 
 QPointF pointOnCircle(const QPointF& center, double radius, double angleDegrees) {
     const double radians = angleDegrees * kPi / 180.0;
@@ -46,48 +46,41 @@ void ArcEntity::draw(QPainter& painter) const
 {
     QRectF arcRect(m_center.x() - m_radius, m_center.y() - m_radius,
                    2.0 * m_radius, 2.0 * m_radius);
+
+    // Draw semi-transparent fill for the full circle (easier selection/move)
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(100, 149, 237, 30));
+    painter.drawEllipse(arcRect);
+    painter.restore();
+
+    // Draw the complement (non-arc portion) as dotted line
+    painter.save();
+    QPen dotPen = painter.pen();
+    dotPen.setStyle(Qt::DotLine);
+    dotPen.setColor(dotPen.color().lighter(160));
+    painter.setPen(dotPen);
+    double complementStart = m_startAngleDegrees + m_sweepAngleDegrees;
+    double complementSweep = (m_sweepAngleDegrees >= 0)
+        ? (360.0 - m_sweepAngleDegrees)
+        : -(360.0 + m_sweepAngleDegrees);
     painter.drawArc(arcRect,
-                    static_cast<int>(m_startAngleDegrees * 16),  // Qt uses 1/16th degree
+                    static_cast<int>(complementStart * 16),
+                    static_cast<int>(complementSweep * 16));
+    painter.restore();
+
+    // Draw the arc portion as solid line
+    painter.drawArc(arcRect,
+                    static_cast<int>(m_startAngleDegrees * 16),
                     static_cast<int>(m_sweepAngleDegrees * 16));
 }
 
 double ArcEntity::distanceTo(const QPointF& point) const
 {
-    // Distance to arc path
+    // Use full circle for selection — return 0 if inside for easy click-to-move
     const double distToCenter = QLineF(m_center, point).length();
-    const double distToCircleEdge = std::abs(distToCenter - m_radius);
-
-    // Check if point is within arc's angular range
-    const double pointAngle = std::atan2(point.y() - m_center.y(),
-                                          point.x() - m_center.x()) * 180.0 / kPi;
-    // Normalize angle to [0, 360)
-    double normalizedPointAngle = pointAngle;
-    while (normalizedPointAngle < 0) normalizedPointAngle += 360.0;
-
-    double normalizedStart = m_startAngleDegrees;
-    while (normalizedStart < 0) normalizedStart += 360.0;
-
-    double normalizedEnd = normalizedStart + m_sweepAngleDegrees;
-    while (normalizedEnd < 0) normalizedEnd += 360.0;
-
-    // Check if point angle is within arc sweep
-    bool withinArc = false;
-    if (m_sweepAngleDegrees >= 0) {
-        withinArc = (normalizedPointAngle >= normalizedStart &&
-                     normalizedPointAngle <= normalizedEnd);
-    } else {
-        withinArc = (normalizedPointAngle <= normalizedStart &&
-                     normalizedPointAngle >= normalizedEnd);
-    }
-
-    if (withinArc) {
-        return distToCircleEdge;
-    }
-
-    // Distance to endpoints
-    const double distToStart = QLineF(point, startPoint()).length();
-    const double distToEnd = QLineF(point, endPoint()).length();
-    return std::min(distToStart, distToEnd);
+    if (distToCenter <= m_radius) return 0.0;
+    return distToCenter - m_radius;
 }
 
 void ArcEntity::translate(const QPointF& delta)
@@ -110,27 +103,18 @@ std::vector<Entity::EditHandle> ArcEntity::editHandles() const
     handles.push_back({"start", startPt, HandleRole::Resize, m_startAngleDegrees, false, {}});
     handles.push_back({"end", endPt, HandleRole::Resize,
                        m_startAngleDegrees + m_sweepAngleDegrees, false, {}});
-    handles.push_back({"center", m_center, HandleRole::Resize, 0.0, false, {}});
 
     // Radius handle (on perpendicular bisector of arc)
     const double midAngle = m_startAngleDegrees + m_sweepAngleDegrees * 0.5;
     const QPointF midPoint = pointOnCircle(m_center, m_radius, midAngle);
     handles.push_back({"radius", midPoint, HandleRole::Resize, midAngle, false, {}});
-    handles.push_back({"radius_outer",
-                       pointOnCircle(m_center, m_radius + kHandleOffset, midAngle),
-                       HandleRole::Resize, midAngle, true, midPoint});
 
     return handles;
 }
 
 std::unique_ptr<Entity> ArcEntity::withDraggedHandle(const QString& handleId, const QPointF& worldPos) const
 {
-    if (handleId == "center") {
-        return std::make_unique<ArcEntity>(worldPos, m_radius,
-                                            m_startAngleDegrees, m_sweepAngleDegrees);
-    }
-
-    if (handleId == "radius" || handleId == "radius_outer") {
+    if (handleId == "radius") {
         double newRadius = std::max(1.0, QLineF(m_center, worldPos).length());
         return std::make_unique<ArcEntity>(m_center, newRadius,
                                             m_startAngleDegrees, m_sweepAngleDegrees);

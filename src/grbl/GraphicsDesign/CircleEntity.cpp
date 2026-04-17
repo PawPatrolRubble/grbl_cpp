@@ -6,7 +6,7 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kHandleOffset = 18.0;
+constexpr double kHandleOffset = 8.0;
 }
 
 CircleEntity::CircleEntity(const QPointF& center, double radius)
@@ -34,13 +34,20 @@ QPointF CircleEntity::center() const
 
 void CircleEntity::draw(QPainter& painter) const
 {
+    painter.save();
+    painter.setBrush(QColor(100, 149, 237, 30));  // Light fill for area visibility
     painter.drawEllipse(m_center, m_radius, m_radius);
+    painter.restore();
 }
 
 double CircleEntity::distanceTo(const QPointF& point) const
 {
-    // Distance to circle edge (not to center)
-    return std::abs(QLineF(m_center, point).length() - m_radius);
+    double dist = QLineF(m_center, point).length();
+    if (dist <= m_radius) {
+        // Point is inside the circle — return 0 for easy selection
+        return 0.0;
+    }
+    return dist - m_radius;
 }
 
 void CircleEntity::translate(const QPointF& delta)
@@ -59,17 +66,12 @@ std::vector<Entity::EditHandle> CircleEntity::editHandles() const
     // Radius handle on right side
     handles.push_back({"radius", QPointF(m_center.x() + m_radius, m_center.y()),
                        HandleRole::Resize, 0.0, false, {}});
-    // Outer radius handle with leader line for easier grabbing
-    handles.push_back({"radius_outer",
-                       QPointF(m_center.x() + m_radius + kHandleOffset, m_center.y()),
-                       HandleRole::Resize, 0.0, true,
-                       QPointF(m_center.x() + m_radius, m_center.y())});
     return handles;
 }
 
 std::unique_ptr<Entity> CircleEntity::withDraggedHandle(const QString& handleId, const QPointF& worldPos) const
 {
-    if (handleId == "radius" || handleId == "radius_outer") {
+    if (handleId == "radius") {
         double newRadius = std::max(1.0, QLineF(m_center, worldPos).length());
         return std::make_unique<CircleEntity>(m_center, newRadius);
     }

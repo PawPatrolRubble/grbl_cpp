@@ -7,7 +7,7 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kHandleOffset = 18.0;
+constexpr double kHandleOffset = 8.0;
 
 QPointF rotatePoint(const QPointF& point, double radians) {
     const double c = std::cos(radians);
@@ -70,7 +70,11 @@ void RectangleEntity::draw(QPainter& painter) const
     const auto c = corners();
     QPolygonF polygon;
     polygon << c[0] << c[1] << c[2] << c[3];
+
+    painter.save();
+    painter.setBrush(QColor(100, 149, 237, 30));  // Light fill for area visibility
     painter.drawPolygon(polygon);
+    painter.restore();
 }
 
 double RectangleEntity::distanceTo(const QPointF& point) const
@@ -82,9 +86,8 @@ double RectangleEntity::distanceTo(const QPointF& point) const
     const double dy = std::max(std::abs(local.y()) - halfH, 0.0);
 
     if (dx == 0.0 && dy == 0.0) {
-        const double edgeX = halfW - std::abs(local.x());
-        const double edgeY = halfH - std::abs(local.y());
-        return std::min(edgeX, edgeY);
+        // Point is inside the rectangle — return 0 for easy selection
+        return 0.0;
     }
 
     return std::sqrt(dx * dx + dy * dy);

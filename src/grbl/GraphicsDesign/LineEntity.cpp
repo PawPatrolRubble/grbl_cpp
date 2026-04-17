@@ -5,7 +5,7 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kHandleOffset = 18.0;
+constexpr double kHandleOffset = 8.0;
 
 double angleDegreesForVector(const QPointF& vector) {
     return std::atan2(vector.y(), vector.x()) * 180.0 / kPi;
@@ -86,7 +86,7 @@ std::vector<Entity::EditHandle> LineEntity::editHandles() const
 
     handles.push_back({"start", start, HandleRole::Resize, handleAngle, false, {}});
     handles.push_back({"end", end, HandleRole::Resize, handleAngle, false, {}});
-    handles.push_back({"rotate", mid - normal * kHandleOffset, HandleRole::Rotate, handleAngle, true, mid});
+    handles.push_back({"rotate", mid - normal * kHandleOffset * 1.6, HandleRole::Rotate, handleAngle, true, mid});
     return handles;
 }
 
