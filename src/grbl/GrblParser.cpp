@@ -14,6 +14,14 @@ void GrblParser::parseResponse(const QString &response)
 {
     if (response.startsWith('<') && response.endsWith('>'))
         parseStatusReport(response);
+    else if (response.startsWith("[G5") || response.startsWith("[G28:") ||
+             response.startsWith("[G30:") || response.startsWith("[G92:") ||
+             response.startsWith("[TLO:"))
+        parseGCodeParameters(response);
+    else if (response.startsWith("[GC:"))
+        parseGCodeState(response);
+    else if (response.startsWith("[MSG:"))
+        m_machineState->setMessage(response.mid(5, response.size() - 6));
     else if (response.startsWith("error"))
         emit m_machineState->stateChanged(MachineState::State::Alarm);
 }
@@ -43,13 +51,14 @@ void GrblParser::parseStatusReport(const QString &report)
 
         if (field.startsWith("WCO:")) {
             m_lastWco = parseWco(field.mid(4));
+            m_machineState->setWco(m_lastWco);
         } else if (field.startsWith("MPos:")) {
             parsedMPos = parsePosition(field.mid(5));
             hasMPos = true;
         } else if (field.startsWith("WPos:")) {
             parsedWPos = parsePosition(field.mid(5));
             hasWPos = true;
-        } else if (field.startsWith("Fs:")) {
+        } else if (field.startsWith("FS:") || field.startsWith("Fs:")) {
             parseFeedOverrides(field.mid(3));
         } else if (field.startsWith("F:")) {
             bool ok = false;
@@ -124,4 +133,58 @@ QVector3D GrblParser::parsePosition(const QString &posStr)
 QVector3D GrblParser::parseWco(const QString &wcoStr)
 {
     return parsePosition(wcoStr);
+}
+
+void GrblParser::parseGCodeParameters(const QString &line)
+{
+    // Format: [G54:0.000,0.000,0.000] or [TLO:0.000] or [PRB:...]
+    QString content = line.mid(1, line.size() - 2);
+    int colonPos = content.indexOf(':');
+    if (colonPos < 0) return;
+
+    QString key = content.left(colonPos);
+    QString value = content.mid(colonPos + 1);
+
+    if (key == QLatin1String("TLO")) {
+        bool ok;
+        double tlo = value.toDouble(&ok);
+        if (ok)
+            m_wcsOffsets[key] = QVector3D(0, 0, static_cast<float>(tlo));
+    } else if (key == QLatin1String("PRB")) {
+        return;  // Skip probe data
+    } else {
+        m_wcsOffsets[key] = parsePosition(value);
+    }
+
+    if (key == m_activeWcs || key == QLatin1String("G92") || key == QLatin1String("TLO"))
+        updateWcoFromOffsets();
+}
+
+void GrblParser::parseGCodeState(const QString &line)
+{
+    // Format: [GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]
+    QString content = line.mid(4, line.size() - 5);
+    QStringList tokens = content.split(' ');
+
+    for (const QString &token : tokens) {
+        if ((token.startsWith(QLatin1String("G5")) && token.size() == 3)
+            || token == QLatin1String("G28") || token == QLatin1String("G30")) {
+            m_activeWcs = token;
+            updateWcoFromOffsets();
+            return;
+        }
+    }
+}
+
+void GrblParser::updateWcoFromOffsets()
+{
+    QVector3D wco = m_wcsOffsets.value(m_activeWcs, QVector3D());
+    wco += m_wcsOffsets.value(QStringLiteral("G92"), QVector3D());
+    wco += m_wcsOffsets.value(QStringLiteral("TLO"), QVector3D());
+
+    m_lastWco = wco;
+    m_machineState->setWco(wco);
+    // Immediately recalculate work position so the UI updates
+    // without waiting for the next status report poll.
+    m_machineState->setWorkPosition(m_machineState->machinePosition() - wco);
 }

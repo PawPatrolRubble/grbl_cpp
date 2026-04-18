@@ -75,6 +75,9 @@ public:
     /// Used when aborting a streaming session.
     void clearQueue();
 
+    /// Set status poll interval (default 250ms, use longer during streaming).
+    void setStatusPollInterval(int ms);
+
 signals:
     void connectedChanged(bool connected);
     void responseReceived(const QString &response);

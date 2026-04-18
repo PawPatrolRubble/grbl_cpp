@@ -244,11 +244,15 @@ void TextTool::mousePress(const QPointF& pos)
 
     // Create the entity
     auto entity = std::make_unique<TextEntity>(pos, text, m_fontSize);
+    entity->setMaxWidth(document().worktableWidth());
     if (m_useVectorFont && !m_vectorFontPath.isEmpty()) {
         entity->setVectorFont(m_vectorFontPath);
     } else {
         entity->setFontFamily(m_fontFamily);
     }
+
+    // Apply auto word-wrap based on worktable width before storing
+    entity->setText(entity->autoWrappedText());
 
     commandStack().execute(std::make_unique<AddEntityCommand>(std::move(entity)));
 }

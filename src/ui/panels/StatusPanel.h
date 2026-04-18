@@ -18,12 +18,16 @@ public slots:
     void setState(MachineState::State state);
     void setFeedRate(double rate);
     void setSpindleSpeed(double speed);
+    void setMessage(const QString &msg);
+    void setMotionEnabled(bool enabled);
 
 signals:
     void zeroAxisRequested(const QString &axis);
     void zeroAllRequested();
     void goToZeroRequested();
     void resetWorkOffsetRequested();  // Set work = machine (G10 L2 P1)
+    void emergencyStopRequested();
+    void homeMachineRequested();
 
 private:
     QLabel *createAxisLabel(const QString &axis, const QString &objectName);
@@ -31,8 +35,15 @@ private:
     QPushButton *createZeroButton(const QString &axis);
 
     QLabel *m_stateLabel;
+    QLabel *m_messageLabel;
     QLabel *m_mposX, *m_mposY, *m_mposZ;
     QLabel *m_wposX, *m_wposY, *m_wposZ;
     QLabel *m_feedLabel;
     QLabel *m_spindleLabel;
+    QPushButton *m_zeroXBtn, *m_zeroYBtn, *m_zeroZBtn;
+    QPushButton *m_zeroAllBtn;
+    QPushButton *m_goToZeroBtn;
+    QPushButton *m_resetOffsetBtn;
+    QPushButton *m_eStopBtn;
+    QPushButton *m_homeBtn;
 };

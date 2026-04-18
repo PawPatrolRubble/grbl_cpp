@@ -234,6 +234,10 @@ void MainWindow::setupConnections()
             });
     connect(m_core, &ApplicationCore::streamingStarted,
             m_controlPanel, &ControlPanel::setStreamingStarted);
+    connect(m_core, &ApplicationCore::streamingStarted,
+            this, [this]() {
+                m_core->serialManager()->setStatusPollInterval(500);
+            });
     connect(m_core, &ApplicationCore::streamingPaused,
             m_controlPanel, &ControlPanel::setStreamingPaused);
     connect(m_core, &ApplicationCore::streamingResumed,
@@ -241,6 +245,7 @@ void MainWindow::setupConnections()
     connect(m_core, &ApplicationCore::streamingFinished,
             this, [this]() {
                 m_controlPanel->setStreamingFinished();
+                m_core->serialManager()->setStatusPollInterval(250);
                 ui->consolePanel->appendMessage("Streaming finished");
                 statusBar()->showMessage("Streaming complete");
             });
@@ -248,7 +253,7 @@ void MainWindow::setupConnections()
     // --- MachineState → StatusPanel + ToolpathPanel ---
     connect(state, &MachineState::machinePositionChanged,
             m_statusPanel, &StatusPanel::setMachinePosition);
-    connect(state, &MachineState::machinePositionChanged,
+    connect(state, &MachineState::workPositionChanged,
             ui->toolpathPanel, &ToolpathPanel::setCutterPosition);
     connect(state, &MachineState::workPositionChanged,
             m_statusPanel, &StatusPanel::setWorkPosition);
@@ -265,6 +270,17 @@ void MainWindow::setupConnections()
                 };
                 statusBar()->showMessage("State: " + names.value(s, "Unknown"));
             });
+    connect(state, &MachineState::stateChanged,
+            this, [this](MachineState::State s) {
+                bool canMove = (s == MachineState::State::Idle || s == MachineState::State::Jog);
+                m_statusPanel->setMotionEnabled(canMove);
+                m_jogPanel->setMotionEnabled(canMove);
+                // Clear alarm message when state leaves Alarm
+                if (s != MachineState::State::Alarm)
+                    m_statusPanel->setMessage("");
+            });
+    connect(state, &MachineState::messageReceived,
+            m_statusPanel, &StatusPanel::setMessage);
     connect(state, &MachineState::feedRateChanged,
             m_statusPanel, &StatusPanel::setFeedRate);
     connect(state, &MachineState::spindleSpeedChanged,
@@ -275,12 +291,14 @@ void MainWindow::setupConnections()
             this, [this](const QString &axis) {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand(QString("G10 L20 P0 %1%2").arg(axis).arg(0));
+                m_core->serialManager()->sendCommand("$#");
                 ui->consolePanel->appendMessage(QString("Set %1 work position to zero").arg(axis));
             });
     connect(m_statusPanel, &StatusPanel::zeroAllRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L20 P0 X0 Y0 Z0");
+                m_core->serialManager()->sendCommand("$#");
                 ui->consolePanel->appendMessage("Set all work positions to zero");
             });
     connect(m_statusPanel, &StatusPanel::goToZeroRequested,
@@ -293,7 +311,22 @@ void MainWindow::setupConnections()
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L2 P1 X0 Y0 Z0");
+                m_core->serialManager()->sendCommand("$#");
                 ui->consolePanel->appendMessage("Reset work offset — work position now equals machine position");
+            });
+    connect(m_statusPanel, &StatusPanel::emergencyStopRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->stopStreaming();
+                m_core->serialManager()->clearQueue();
+                m_core->sendRealtime(GrblRealtime::Reset);
+                ui->consolePanel->appendMessage("EMERGENCY STOP — soft reset sent");
+            });
+    connect(m_statusPanel, &StatusPanel::homeMachineRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand("$H");
+                ui->consolePanel->appendMessage("Homing cycle started");
             });
 
     // --- ControlPanel → Core ---
@@ -306,7 +339,12 @@ void MainWindow::setupConnections()
             });
     connect(m_controlPanel, &ControlPanel::startRequested,
             this, [this]() {
-                m_core->startStreaming(m_core->fileManager()->lines());
+                QStringList lines = ui->toolpathPanel->currentGcodeLines();
+                if (lines.isEmpty())
+                    lines = m_core->fileManager()->lines();
+                if (ui->toolpathPanel->returnToOriginEnabled())
+                    lines.append("G90 G0 X0 Y0 Z0");
+                m_core->startStreaming(lines);
             });
     connect(m_controlPanel, &ControlPanel::pauseRequested,
             m_core, &ApplicationCore::pauseStreaming);
@@ -314,6 +352,31 @@ void MainWindow::setupConnections()
             m_core, &ApplicationCore::resumeStreaming);
     connect(m_controlPanel, &ControlPanel::stopRequested,
             m_core, &ApplicationCore::stopStreaming);
+    connect(m_controlPanel, &ControlPanel::homeRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand("$H");
+                ui->consolePanel->appendMessage("Homing...");
+            });
+    connect(m_controlPanel, &ControlPanel::unlockRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand("$X");
+                m_core->serialManager()->sendCommand("$G");
+                m_core->serialManager()->sendCommand("$#");
+                ui->consolePanel->appendMessage("Alarm unlocked");
+            });
+    connect(m_controlPanel, &ControlPanel::resetRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendRealtimeCommand(0x18);
+                ui->consolePanel->appendMessage("Soft reset sent");
+            });
+    connect(m_controlPanel, &ControlPanel::statusRequested,
+            this, [this]() {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendRealtimeCommand('?');
+            });
 
     // --- JogPanel → SerialManager ---
     connect(m_jogPanel, &JogPanel::jogContinuousRequested,
@@ -344,6 +407,23 @@ void MainWindow::setupConnections()
             this, [this]() {
                 ui->toolpathPanel->setMoves(m_parseWatcher->result());
                 statusBar()->showMessage("File loaded: " + m_core->fileManager()->fileName());
+            });
+
+    // --- ToolpathPanel clear ---
+    connect(ui->toolpathPanel, &ToolpathPanel::clearRequested,
+            this, [this]() {
+                ui->toolpathPanel->clearAll();
+                m_core->fileManager()->clear();
+                m_controlPanel->setFileLoaded("", 0);
+                ui->consolePanel->appendMessage("G-code cleared");
+                statusBar()->showMessage("G-code cleared");
+            });
+
+    // --- ToolpathPanel transform → keep FileManager in sync ---
+    connect(ui->toolpathPanel, &ToolpathPanel::gcodeTransformed,
+            this, [this](const QStringList &lines) {
+                m_core->fileManager()->loadLines(m_core->fileManager()->fileName(), lines);
+                m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), lines.size());
             });
 
     // --- GraphicsDesignPanel (tab) → G-code generation ---

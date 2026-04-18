@@ -41,7 +41,7 @@ private:
 
     /// Max commands allowed in SerialManager's TX queue before we stop
     /// feeding more. Prevents enqueueing thousands of lines in one burst.
-    static constexpr int MAX_PENDING_COMMANDS = 32;
+    static constexpr int MAX_PENDING_COMMANDS = 48;
 
     QStringList m_streamQueue;
     SerialManager *m_serialManager = nullptr;

@@ -67,6 +67,8 @@ JogPanel::JogPanel(QWidget *parent)
     grid->addWidget(btnZMinus, 2, 3);
     jogLayout->addLayout(grid);
 
+    m_jogButtons = {btnXPlus, btnXMinus, btnYPlus, btnYMinus, btnZPlus, btnZMinus};
+
     // Wire directional buttons
     auto setupJogBtn = [this](QPushButton *btn, const QString &axis, int dir) {
         connect(btn, &QPushButton::pressed, this, [this, axis, dir]() {
@@ -135,4 +137,10 @@ bool JogPanel::handleKeyRelease(QKeyEvent *event)
     default:
         return false;
     }
+}
+
+void JogPanel::setMotionEnabled(bool enabled)
+{
+    for (auto *btn : m_jogButtons)
+        btn->setEnabled(enabled);
 }

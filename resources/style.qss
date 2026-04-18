@@ -629,6 +629,44 @@ QPushButton#zeroZBtn {
     color: #2563eb;  /* Blue */
 }
 
+/* Emergency stop button */
+QPushButton#eStopBtn {
+    background-color: #dc2626;
+    border: 2px solid #991b1b;
+    color: #ffffff;
+    font-weight: bold;
+    font-size: 14px;
+    border-radius: 6px;
+}
+
+QPushButton#eStopBtn:hover {
+    background-color: #b91c1c;
+    border-color: #7f1d1d;
+}
+
+QPushButton#eStopBtn:pressed {
+    background-color: #991b1b;
+    border-color: #7f1d1d;
+}
+
+/* Home button */
+QPushButton#homeBtn {
+    background-color: #f59e0b;
+    border-color: #d97706;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QPushButton#homeBtn:hover {
+    background-color: #d97706;
+    border-color: #b45309;
+}
+
+QPushButton#homeBtn:pressed {
+    background-color: #b45309;
+    border-color: #92400e;
+}
+
 /* ---- G-code List Widget ---- */
 QLabel#gcodeCountLabel {
     background-color: #f3f4f6;

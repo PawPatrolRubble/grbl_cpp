@@ -13,12 +13,27 @@ StatusPanel::StatusPanel(QWidget *parent)
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(8, 8, 8, 8);
 
+    // Emergency stop — prominent red button at the top
+    m_eStopBtn = new QPushButton("EMERGENCY STOP");
+    m_eStopBtn->setObjectName("eStopBtn");
+    m_eStopBtn->setMinimumHeight(36);
+    m_eStopBtn->setToolTip("Immediately halt all motion (soft reset)");
+    mainLayout->addWidget(m_eStopBtn);
+
     // State label — styled via QSS with #stateLabel
     m_stateLabel = new QLabel("Disconnected");
     m_stateLabel->setObjectName("stateLabel");
     m_stateLabel->setAlignment(Qt::AlignCenter);
     m_stateLabel->setProperty("state", "disconnected");
     mainLayout->addWidget(m_stateLabel);
+
+    // Message/alarm label — shows [MSG:...] content from GRBL
+    m_messageLabel = new QLabel();
+    m_messageLabel->setObjectName("messageLabel");
+    m_messageLabel->setWordWrap(true);
+    m_messageLabel->setAlignment(Qt::AlignCenter);
+    m_messageLabel->setVisible(false);
+    mainLayout->addWidget(m_messageLabel);
 
     // Position grid
     auto *posFrame = new QFrame();
@@ -38,6 +53,9 @@ StatusPanel::StatusPanel(QWidget *parent)
     auto *zeroXBtn = createZeroButton("X");
     auto *zeroYBtn = createZeroButton("Y");
     auto *zeroZBtn = createZeroButton("Z");
+    m_zeroXBtn = zeroXBtn;
+    m_zeroYBtn = zeroYBtn;
+    m_zeroZBtn = zeroZBtn;
 
     auto *mposTitle = new QLabel("Machine Position");
     mposTitle->setObjectName("sectionTitle");
@@ -69,18 +87,23 @@ StatusPanel::StatusPanel(QWidget *parent)
     mainLayout->addWidget(posFrame);
 
     // Action buttons
-    auto *zeroAllBtn = new QPushButton("Zero All (G10 L20 P0 X0 Y0 Z0)");
-    zeroAllBtn->setObjectName("zeroAllBtn");
-    mainLayout->addWidget(zeroAllBtn);
+    m_zeroAllBtn = new QPushButton("Zero All (G10 L20 P0 X0 Y0 Z0)");
+    m_zeroAllBtn->setObjectName("zeroAllBtn");
+    mainLayout->addWidget(m_zeroAllBtn);
 
-    auto *goToZeroBtn = new QPushButton("Go to Zero (G90 G0 X0 Y0 Z0)");
-    goToZeroBtn->setObjectName("goToZeroBtn");
-    mainLayout->addWidget(goToZeroBtn);
+    m_goToZeroBtn = new QPushButton("Go to Zero (G90 G0 X0 Y0 Z0)");
+    m_goToZeroBtn->setObjectName("goToZeroBtn");
+    mainLayout->addWidget(m_goToZeroBtn);
 
-    auto *resetOffsetBtn = new QPushButton("Reset Work Offset (G10 L2 P1 X0 Y0 Z0)");
-    resetOffsetBtn->setObjectName("resetOffsetBtn");
-    resetOffsetBtn->setToolTip("Set work position = machine position (clear G54 offset)");
-    mainLayout->addWidget(resetOffsetBtn);
+    m_resetOffsetBtn = new QPushButton("Reset Work Offset (G10 L2 P1 X0 Y0 Z0)");
+    m_resetOffsetBtn->setObjectName("resetOffsetBtn");
+    m_resetOffsetBtn->setToolTip("Set work position = machine position (clear G54 offset)");
+    mainLayout->addWidget(m_resetOffsetBtn);
+
+    m_homeBtn = new QPushButton("Home Machine ($H)");
+    m_homeBtn->setObjectName("homeBtn");
+    m_homeBtn->setToolTip("Run homing cycle to set machine zero");
+    mainLayout->addWidget(m_homeBtn);
 
     // Feed / Spindle info
     auto *infoLayout = new QHBoxLayout();
@@ -96,9 +119,11 @@ StatusPanel::StatusPanel(QWidget *parent)
     connect(zeroXBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("X"); });
     connect(zeroYBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("Y"); });
     connect(zeroZBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("Z"); });
-    connect(zeroAllBtn, &QPushButton::clicked, this, &StatusPanel::zeroAllRequested);
-    connect(goToZeroBtn, &QPushButton::clicked, this, &StatusPanel::goToZeroRequested);
-    connect(resetOffsetBtn, &QPushButton::clicked, this, &StatusPanel::resetWorkOffsetRequested);
+    connect(m_zeroAllBtn, &QPushButton::clicked, this, &StatusPanel::zeroAllRequested);
+    connect(m_goToZeroBtn, &QPushButton::clicked, this, &StatusPanel::goToZeroRequested);
+    connect(m_resetOffsetBtn, &QPushButton::clicked, this, &StatusPanel::resetWorkOffsetRequested);
+    connect(m_eStopBtn, &QPushButton::clicked, this, &StatusPanel::emergencyStopRequested);
+    connect(m_homeBtn, &QPushButton::clicked, this, &StatusPanel::homeMachineRequested);
 }
 
 QLabel *StatusPanel::createSideLabel(const QString &text, const QString &objectName)
@@ -183,4 +208,24 @@ void StatusPanel::setFeedRate(double rate)
 void StatusPanel::setSpindleSpeed(double speed)
 {
     m_spindleLabel->setText(QString("Spindle: %1 RPM").arg(speed, 0, 'f', 1));
+}
+
+void StatusPanel::setMessage(const QString &msg)
+{
+    if (msg.isEmpty()) {
+        m_messageLabel->setVisible(false);
+    } else {
+        m_messageLabel->setText(msg);
+        m_messageLabel->setVisible(true);
+    }
+}
+
+void StatusPanel::setMotionEnabled(bool enabled)
+{
+    m_zeroXBtn->setEnabled(enabled);
+    m_zeroYBtn->setEnabled(enabled);
+    m_zeroZBtn->setEnabled(enabled);
+    m_zeroAllBtn->setEnabled(enabled);
+    m_goToZeroBtn->setEnabled(enabled);
+    m_resetOffsetBtn->setEnabled(enabled);
 }

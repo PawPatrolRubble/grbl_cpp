@@ -154,6 +154,7 @@ QStringList Document::generateGcode(double feedRateXY, double plungeRateZ,
     }
 
     gcode << QString("G0 Z%1        ; final raise").arg(safeZ, 0, 'f', 2);
+    gcode << "G0 X0 Y0        ; return to origin";
     gcode << "; End of design G-code";
     return gcode;
 }

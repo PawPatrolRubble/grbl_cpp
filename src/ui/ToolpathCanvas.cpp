@@ -415,8 +415,7 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
 
         // Past moves — dimmed.  Rebuild the batch cache only when the
         // executing line changes (or when paths/view changed).
-        bool viewChanged = (m_scale != m_pathScale || m_offset != m_pathOffset);
-        if (m_pastBuiltLine != m_executingLine || viewChanged) {
+        if (m_pastBuiltLine != m_executingLine || scaleChanged) {
             m_pastSegments.clear();
             for (auto mapIt = m_lineToIndex.begin(); mapIt != m_lineToIndex.end(); ++mapIt) {
                 if (mapIt.key() >= m_executingLine || mapIt.key() == m_highlightedLine)

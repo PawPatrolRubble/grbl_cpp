@@ -32,7 +32,9 @@
       "Bash(cmake --build . --config Debug)",
       "Bash(bash scripts/start-server.sh --project-dir \"D:\\\\projects\\\\github\\\\grbl_cpp\")",
       "Bash(ls src/grbl/GraphicsDesign/*.cpp src/grbl/GraphicsDesign/*.h)",
-      "Bash(start build/bin/Debug/GrblSender.exe)"
+      "Bash(start build/bin/Debug/GrblSender.exe)",
+      "Bash(cmake:*)",
+      "Bash(git add:*)"
     ]
   }
 }

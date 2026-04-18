@@ -155,7 +155,24 @@ void GcodeStreamer::sendNextLine()
 
         // Skip blank lines and comments — GRBL never sees these, so
         // they don't produce acks and don't count as commands.
-        if (line.isEmpty() || line.startsWith(';')) {
+        if (line.isEmpty() || line.startsWith(';') || line.startsWith('(')) {
+            m_linesSent++;
+            continue;
+        }
+
+        // Strip inline comments to reduce bytes sent over serial.
+        int semicolonPos = line.indexOf(';');
+        if (semicolonPos >= 0)
+            line = line.left(semicolonPos).trimmed();
+        // Strip parenthesized comments: (...)
+        int parenPos = line.indexOf('(');
+        if (parenPos >= 0) {
+            int closePos = line.indexOf(')', parenPos);
+            if (closePos >= 0)
+                line = (line.left(parenPos) + line.mid(closePos + 1)).trimmed();
+        }
+
+        if (line.isEmpty()) {
             m_linesSent++;
             continue;
         }

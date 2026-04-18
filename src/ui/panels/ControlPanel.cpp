@@ -97,8 +97,13 @@ void ControlPanel::setConnected(bool connected)
 
 void ControlPanel::setFileLoaded(const QString &fileName, int lineCount)
 {
-    m_progressLabel->setText(QString("Loaded: %1 (%2 lines)").arg(fileName).arg(lineCount));
-    m_startBtn->setEnabled(true);
+    if (fileName.isEmpty() || lineCount == 0) {
+        m_progressLabel->setText("No file loaded");
+        m_startBtn->setEnabled(false);
+    } else {
+        m_progressLabel->setText(QString("Loaded: %1 (%2 lines)").arg(fileName).arg(lineCount));
+        m_startBtn->setEnabled(true);
+    }
 }
 
 void ControlPanel::setStreamingProgress(int current, int total)

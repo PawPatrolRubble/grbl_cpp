@@ -93,6 +93,7 @@ std::unique_ptr<Entity> TextEntity::clone() const
     copy->m_vectorFontPath = m_vectorFontPath;
     copy->m_vectorFontData = m_vectorFontData;
     copy->m_letterSpacing = m_letterSpacing;
+    copy->m_maxWidth = m_maxWidth;
     return copy;
 }
 
@@ -246,6 +247,7 @@ QJsonObject TextEntity::toJson() const
     json["text"] = m_text;
     json["fontSize"] = m_fontSize;
     json["letterSpacing"] = m_letterSpacing;
+    json["maxWidth"] = m_maxWidth;
     json["fontMode"] = (m_fontMode == FontMode::VectorFont) ? "vector" : "system";
     json["fontFamily"] = m_fontFamily;
     if (!m_vectorFontPath.isEmpty()) {
@@ -263,6 +265,7 @@ std::unique_ptr<TextEntity> TextEntity::fromJson(const QJsonObject& json)
     auto entity = std::make_unique<TextEntity>(pos, text, fontSize);
     entity->setRotation(json["rotation"].toDouble(0));
     entity->m_letterSpacing = json["letterSpacing"].toDouble(1.2);
+    entity->m_maxWidth = json["maxWidth"].toDouble(0.0);
     entity->m_fontFamily = json["fontFamily"].toString("Sans Serif");
 
     QString fontMode = json["fontMode"].toString("system");
@@ -285,10 +288,94 @@ void TextEntity::setVectorFont(const QString& fontFilePath)
     }
 }
 
+QString TextEntity::autoWrappedText() const
+{
+    if (m_maxWidth <= 0.0 || m_text.isEmpty())
+        return m_text;
+
+    if (m_fontMode == FontMode::VectorFont && !m_vectorFontData.isEmpty()) {
+        // Estimate glyph widths from vector font data
+        double maxGlyphHeight = 0.0;
+        for (auto it = m_vectorFontData.constBegin(); it != m_vectorFontData.constEnd(); ++it) {
+            for (const auto& stroke : it.value()) {
+                for (const QPointF& p : stroke)
+                    maxGlyphHeight = std::max(maxGlyphHeight, p.y());
+            }
+        }
+        double scale = (maxGlyphHeight > 0.0) ? m_fontSize / maxGlyphHeight : 1.0;
+
+        QString result;
+        double cursorX = 0.0;
+        double availableWidth = m_maxWidth - m_position.x();
+
+        for (int i = 0; i < m_text.length(); ++i) {
+            QChar c = m_text.at(i);
+            if (c == '\n') {
+                result += c;
+                cursorX = 0.0;
+                continue;
+            }
+            double charWidth;
+            if (c == ' ') {
+                charWidth = m_fontSize * 0.5 * m_letterSpacing;
+            } else {
+                QChar lookupChar = m_vectorFontData.contains(c) ? c : c.toUpper();
+                if (m_vectorFontData.contains(lookupChar)) {
+                    double glyphMinX = 1e9, glyphMaxX = -1e9;
+                    for (const auto& stroke : m_vectorFontData.value(lookupChar)) {
+                        for (const QPointF& p : stroke) {
+                            glyphMinX = std::min(glyphMinX, p.x());
+                            glyphMaxX = std::max(glyphMaxX, p.x());
+                        }
+                    }
+                    double glyphW = (glyphMaxX > glyphMinX) ? (glyphMaxX - glyphMinX) : m_fontSize * 0.3;
+                    charWidth = glyphW * scale * m_letterSpacing;
+                } else {
+                    charWidth = m_fontSize * 0.5 * m_letterSpacing;
+                }
+            }
+            if (cursorX + charWidth > availableWidth && cursorX > 0.0) {
+                result += '\n';
+                cursorX = 0.0;
+            }
+            result += c;
+            cursorX += charWidth;
+        }
+        return result;
+    }
+
+    // System font wrapping
+    QFont font(m_fontFamily);
+    font.setPointSizeF(m_fontSize);
+    QFontMetricsF fm(font);
+    double availableWidth = m_maxWidth - m_position.x();
+
+    QString result;
+    double cursorX = 0.0;
+    for (int i = 0; i < m_text.length(); ++i) {
+        QChar c = m_text.at(i);
+        if (c == '\n') {
+            result += c;
+            cursorX = 0.0;
+            continue;
+        }
+        double charWidth = fm.horizontalAdvance(c);
+        if (cursorX + charWidth > availableWidth && cursorX > 0.0) {
+            result += '\n';
+            cursorX = 0.0;
+        }
+        result += c;
+        cursorX += charWidth;
+    }
+    return result;
+}
+
 QList<QList<QPointF>> TextEntity::computeVectorStrokes() const
 {
     QList<QList<QPointF>> result;
     if (m_vectorFontData.isEmpty() || m_text.isEmpty()) return result;
+
+    QString wrappedText = m_text;
 
     // Compute per-glyph metrics for scaling
     double maxGlyphHeight = 0.0;
@@ -305,8 +392,8 @@ QList<QList<QPointF>> TextEntity::computeVectorStrokes() const
     double cursorY = m_position.y();
     double lineHeight = m_fontSize * 1.5;
 
-    for (int i = 0; i < m_text.length(); ++i) {
-        QChar c = m_text.at(i);
+    for (int i = 0; i < wrappedText.length(); ++i) {
+        QChar c = wrappedText.at(i);
 
         if (c == '\n') {
             cursorX = m_position.x();

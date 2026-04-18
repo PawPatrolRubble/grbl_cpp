@@ -145,6 +145,8 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     , m_listView(new QListView(this))
     , m_countLabel(new QLabel("0 lines", this))
     , m_exportBtn(new QPushButton("Export"))
+    , m_clearBtn(new QPushButton("Clear"))
+    , m_returnToOriginCheck(new QCheckBox("Return to origin after streaming"))
 {
     // Setup count label
     m_countLabel->setObjectName("gcodeCountLabel");
@@ -155,6 +157,14 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
 
     // Setup export button
     m_exportBtn->setObjectName("exportBtn");
+
+    // Setup clear button
+    m_clearBtn->setObjectName("clearGcodeBtn");
+    m_clearBtn->setToolTip("Clear all loaded G-code lines and toolpath");
+
+    // Return to origin checkbox
+    m_returnToOriginCheck->setObjectName("returnToOriginCheck");
+    m_returnToOriginCheck->setToolTip("Append G90 G0 X0 Y0 Z0 when streaming to move back to work origin");
 
     // Setup list view
     m_listView->setModel(m_model);
@@ -176,10 +186,11 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
         "}"
     );
 
-    // Header layout (count + export button)
+    // Header layout (count + buttons)
     auto *headerLayout = new QHBoxLayout();
     headerLayout->addWidget(m_countLabel);
     headerLayout->addStretch();
+    headerLayout->addWidget(m_clearBtn);
     headerLayout->addWidget(m_exportBtn);
 
     // Layout
@@ -188,6 +199,7 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     layout->setSpacing(2);
     layout->addLayout(headerLayout);
     layout->addWidget(m_listView, 1);
+    layout->addWidget(m_returnToOriginCheck);
 
     // Max width constraint
     setMaximumWidth(350);
@@ -195,6 +207,7 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
 
     connect(m_listView, &QListView::clicked, this, &GcodeListWidget::onItemClicked);
     connect(m_exportBtn, &QPushButton::clicked, this, &GcodeListWidget::onExportClicked);
+    connect(m_clearBtn, &QPushButton::clicked, this, &GcodeListWidget::clearRequested);
 }
 
 void GcodeListWidget::setLines(const QStringList &lines)
@@ -272,4 +285,9 @@ void GcodeListWidget::onExportClicked()
             QMessageBox::warning(this, "Export Failed", "Could not write file.");
         }
     }
+}
+
+bool GcodeListWidget::returnToOriginEnabled() const
+{
+    return m_returnToOriginCheck->isChecked();
 }

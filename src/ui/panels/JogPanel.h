@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QComboBox>
+#include <QPushButton>
 #include <QSlider>
 #include <QLabel>
 #include <QDoubleSpinBox>
@@ -20,6 +21,9 @@ public:
     bool handleKeyPress(QKeyEvent *event);
     bool handleKeyRelease(QKeyEvent *event);
 
+public slots:
+    void setMotionEnabled(bool enabled);
+
 signals:
     void jogContinuousRequested(const QString &axis, int direction, double feed);
     void jogStepRequested(const QString &axis, double distance, double feed);
@@ -35,4 +39,5 @@ private:
     QSlider *m_jogStepSlider;
     QLabel *m_jogStepLabel;
     QDoubleSpinBox *m_jogFeedSpin;
+    QList<QPushButton*> m_jogButtons;
 };

@@ -70,4 +70,9 @@ private:
     std::vector<std::unique_ptr<Entity>> m_entities;
     QSet<QUuid> m_selectedIds;
     CommandStack* m_commandStack;
+    double m_worktableWidth = 300.0;
+
+public:
+    double worktableWidth() const { return m_worktableWidth; }
+    void setWorktableWidth(double w) { m_worktableWidth = w; }
 };

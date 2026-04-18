@@ -40,6 +40,7 @@ public:
     QString fontFamily() const { return m_fontFamily; }
     QString vectorFontPath() const { return m_vectorFontPath; }
     double letterSpacing() const { return m_letterSpacing; }
+    double maxWidth() const { return m_maxWidth; }
 
     void setPosition(const QPointF& pos) { m_position = pos; }
     void setText(const QString& text) { m_text = text; }
@@ -47,6 +48,8 @@ public:
     void setFontFamily(const QString& family) { m_fontFamily = family; }
     void setVectorFont(const QString& fontFilePath);
     void setLetterSpacing(double spacing) { m_letterSpacing = spacing; }
+    void setMaxWidth(double width) { m_maxWidth = width; }
+    QString autoWrappedText() const;
 
 private:
     using GlyphData = QMap<QChar, QList<QList<QPointF>>>;
@@ -58,6 +61,7 @@ private:
     QString m_text;
     double m_fontSize;
     double m_letterSpacing = 1.2;
+    double m_maxWidth = 0.0;  // 0 = no wrapping
     FontMode m_fontMode = FontMode::SystemFont;
     QString m_fontFamily = "Sans Serif";
     QString m_vectorFontPath;

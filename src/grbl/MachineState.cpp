@@ -9,6 +9,7 @@ MachineState::State MachineState::state() const { return m_state; }
 MachineState::SubState MachineState::subState() const { return m_subState; }
 QVector3D MachineState::machinePosition() const { return m_machinePos; }
 QVector3D MachineState::workPosition() const { return m_workPos; }
+QVector3D MachineState::wco() const { return m_wco; }
 double MachineState::feedRate() const { return m_feedRate; }
 double MachineState::spindleSpeed() const { return m_spindleSpeed; }
 bool MachineState::isConnected() const { return m_connected; }
@@ -50,6 +51,14 @@ void MachineState::setWorkPosition(const QVector3D &pos)
     }
 }
 
+void MachineState::setWco(const QVector3D &wco)
+{
+    if (m_wco != wco) {
+        m_wco = wco;
+        emit wcoChanged(wco);
+    }
+}
+
 void MachineState::setFeedRate(double rate)
 {
     if (!qFuzzyCompare(m_feedRate, rate)) {
@@ -74,12 +83,18 @@ void MachineState::setConnected(bool connected)
     }
 }
 
+void MachineState::setMessage(const QString &msg)
+{
+    emit messageReceived(msg);
+}
+
 void MachineState::reset()
 {
     setState(State::Unknown);
     setSubState(SubState::None);
     setMachinePosition(QVector3D());
     setWorkPosition(QVector3D());
+    setWco(QVector3D());
     setFeedRate(0.0);
     setSpindleSpeed(0.0);
 }

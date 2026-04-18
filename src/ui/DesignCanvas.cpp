@@ -176,6 +176,7 @@ void DesignCanvas::redo()
 void DesignCanvas::setWorktableSize(const QSizeF &size)
 {
     m_worktableSize = size;
+    m_document.setWorktableWidth(size.width());
     autoFit();
 }
 

@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QLabel>
 #include <QPushButton>
+#include <QCheckBox>
 
 enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
 
@@ -46,9 +47,11 @@ public:
     void highlightLine(int lineNumber);
     void selectLine(int lineNumber);
     void setExecutingLine(int lineNumber);
+    bool returnToOriginEnabled() const;
 
 signals:
     void lineClicked(int lineNumber);
+    void clearRequested();
 
 private slots:
     void onItemClicked(const QModelIndex &index);
@@ -59,5 +62,7 @@ private:
     QListView *m_listView;
     QLabel *m_countLabel;
     QPushButton *m_exportBtn;
+    QPushButton *m_clearBtn;
+    QCheckBox *m_returnToOriginCheck;
     int m_lastHighlight = -1;
 };

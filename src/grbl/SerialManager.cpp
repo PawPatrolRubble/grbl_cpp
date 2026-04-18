@@ -198,6 +198,11 @@ void SerialManager::clearQueue()
     m_rxBufUsed = 0;
 }
 
+void SerialManager::setStatusPollInterval(int ms)
+{
+    m_pollTimer->setInterval(ms);
+}
+
 // ---------------------------------------------------------------------------
 // drainQueue — Write queued commands to the serial port while there is room
 //              in GRBL's RX buffer.
