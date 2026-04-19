@@ -149,6 +149,10 @@ set(UI_FILES
     src/ui/MainWindow.ui
     src/ui/TextToGcodeDialog.ui
     src/ui/GraphicsDesignDialog.ui
+    src/ui/panels/StatusPanel.ui
+    src/ui/panels/JogPanel.ui
+    src/ui/panels/ConnectionPanel.ui
+    src/ui/panels/ControlPanel.ui
 )
 
 set(UI_HEADERS

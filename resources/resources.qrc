@@ -2,6 +2,14 @@
     <qresource prefix="/resources">
         <file>style.qss</file>
     </qresource>
+    <qresource prefix="/icons">
+        <file>icons/save.svg</file>
+        <file>icons/load.svg</file>
+        <file>icons/export.svg</file>
+        <file>icons/generate.svg</file>
+        <file>icons/import_image.svg</file>
+        <file>icons/import_dxf.svg</file>
+    </qresource>
     <qresource prefix="/fonts">
         <file>fonts/futural.jhf</file>
         <file>fonts/futuram.jhf</file>
