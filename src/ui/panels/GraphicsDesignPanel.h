@@ -118,6 +118,8 @@ private:
     QDoubleSpinBox *m_textSsResolution;
     QDoubleSpinBox *m_textSsSmoothing;
     QDoubleSpinBox *m_textSsCleanup;
+    QDoubleSpinBox *m_textSsMergeGap;
+    QDoubleSpinBox *m_textSsMinSegLen;
 
     void setupUi();
     void setupConnections();

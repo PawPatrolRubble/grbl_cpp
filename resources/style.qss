@@ -777,3 +777,44 @@ QFrame#canvasFrame {
     border: 1px solid #e5e7eb;
     border-radius: 8px;
 }
+
+/* ---- Action Buttons (Save, Load, Export) ---- */
+QPushButton#actionBtn {
+    background-color: #ffffff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-weight: 500;
+    min-width: 100px;
+}
+
+QPushButton#actionBtn:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+QPushButton#actionBtn:pressed {
+    background-color: #d1d5db;
+}
+
+/* ---- Import Buttons ---- */
+QPushButton#importBtn {
+    background-color: #10b981;
+    border-color: #10b981;
+    color: #ffffff;
+    padding: 7px 12px;
+    min-width: 100px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+
+QPushButton#importBtn:hover {
+    background-color: #059669;
+    border-color: #059669;
+}
+
+QPushButton#importBtn:pressed {
+    background-color: #047857;
+    border-color: #047857;
+}

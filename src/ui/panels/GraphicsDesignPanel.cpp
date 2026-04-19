@@ -63,15 +63,17 @@ void GraphicsDesignPanel::setupUi()
 
     // ---- Right: Operations panel ----
     auto *rightPanel = new QWidget();
-    rightPanel->setMinimumWidth(220);
-    rightPanel->setMaximumWidth(380);
+    rightPanel->setMinimumWidth(260);
+    rightPanel->setMaximumWidth(400);
     auto *rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(8, 8, 8, 8);
-    rightLayout->setSpacing(6);
+    rightLayout->setContentsMargins(10, 10, 10, 10);
+    rightLayout->setSpacing(8);
 
     // Tool bar row
     auto *toolBar = new QHBoxLayout();
+    toolBar->setSpacing(6);
     m_toolCombo = new QComboBox();
+    m_toolCombo->setMinimumWidth(120);
     m_toolCombo->addItem("Select");
     m_toolCombo->addItem("Line");
     m_toolCombo->addItem("Rectangle");
@@ -85,12 +87,14 @@ void GraphicsDesignPanel::setupUi()
     m_snapBtn->setCheckable(true);
     m_snapBtn->setChecked(false);
     m_snapBtn->setToolTip("Toggle grid/entity snap (S)");
+    m_snapBtn->setMinimumWidth(50);
     toolBar->addWidget(m_snapBtn);
     toolBar->addStretch();
     rightLayout->addLayout(toolBar);
 
     // Action buttons row
     auto *actionRow = new QHBoxLayout();
+    actionRow->setSpacing(6);
     auto *undoBtn = new QPushButton("Undo");
     undoBtn->setObjectName("undoBtn");
     undoBtn->setShortcut(QKeySequence::Undo);
@@ -121,41 +125,53 @@ void GraphicsDesignPanel::setupUi()
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
-    optionsGrid->setSpacing(8);
+    optionsGrid->setSpacing(6);
+    optionsGrid->setColumnStretch(0, 0);
+    optionsGrid->setColumnStretch(1, 1);
 
     int row = 0;
-    optionsGrid->addWidget(new QLabel("Tool Mode:"), row, 0);
+    auto *optionsToolLabel = new QLabel("Tool Mode:");
+    optionsToolLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    optionsGrid->addWidget(optionsToolLabel, row, 0);
     m_toolModeCombo = new QComboBox();
     m_toolModeCombo->addItem("Pen Plotter");
     m_toolModeCombo->addItem("Laser");
     optionsGrid->addWidget(m_toolModeCombo, row, 1);
 
     row++;
-    optionsGrid->addWidget(new QLabel("Feed Speed:"), row, 0);
+    auto *feedLabel = new QLabel("Feed Speed:");
+    feedLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    optionsGrid->addWidget(feedLabel, row, 0);
     m_feedSpeedSpinBox = new QDoubleSpinBox();
     m_feedSpeedSpinBox->setRange(0, 10000);
     m_feedSpeedSpinBox->setValue(2000);
     optionsGrid->addWidget(m_feedSpeedSpinBox, row, 1);
 
     row++;
-    optionsGrid->addWidget(new QLabel("Plunge Speed:"), row, 0);
+    auto *plungeLabel = new QLabel("Plunge Speed:");
+    plungeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    optionsGrid->addWidget(plungeLabel, row, 0);
     m_plungeSpeedSpinBox = new QDoubleSpinBox();
     m_plungeSpeedSpinBox->setRange(0, 10000);
     m_plungeSpeedSpinBox->setValue(1500);
     optionsGrid->addWidget(m_plungeSpeedSpinBox, row, 1);
 
     row++;
-    optionsGrid->addWidget(new QLabel("Safe Z:"), row, 0);
+    auto *safeZLabel = new QLabel("Safe Z:");
+    safeZLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    optionsGrid->addWidget(safeZLabel, row, 0);
     m_fastHeightSpinBox = new QDoubleSpinBox();
     m_fastHeightSpinBox->setRange(-100, 100);
-    m_fastHeightSpinBox->setValue(-5);
+    m_fastHeightSpinBox->setValue(0);
     optionsGrid->addWidget(m_fastHeightSpinBox, row, 1);
 
     row++;
-    optionsGrid->addWidget(new QLabel("Work Z:"), row, 0);
+    auto *workZLabel = new QLabel("Work Z:");
+    workZLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    optionsGrid->addWidget(workZLabel, row, 0);
     m_workHeightSpinBox = new QDoubleSpinBox();
     m_workHeightSpinBox->setRange(-100, 100);
-    m_workHeightSpinBox->setValue(5);
+    m_workHeightSpinBox->setValue(-3);
     optionsGrid->addWidget(m_workHeightSpinBox, row, 1);
 
     rightLayout->addLayout(optionsGrid);
@@ -175,29 +191,44 @@ void GraphicsDesignPanel::setupUi()
     m_statusLabel = new QLabel();
     rightLayout->addWidget(m_statusLabel);
 
-    // Bottom buttons (two rows)
+    // Bottom buttons (two rows) - uniform width
     auto *buttonBar1 = new QHBoxLayout();
+    buttonBar1->setSpacing(6);
+
     m_saveBtn = new QPushButton("Save");
+    m_saveBtn->setObjectName("actionBtn");
+    m_saveBtn->setMinimumWidth(100);
     buttonBar1->addWidget(m_saveBtn);
 
     m_loadBtn = new QPushButton("Load");
+    m_loadBtn->setObjectName("actionBtn");
+    m_loadBtn->setMinimumWidth(100);
     buttonBar1->addWidget(m_loadBtn);
 
     m_exportBtn = new QPushButton("Export");
+    m_exportBtn->setObjectName("actionBtn");
+    m_exportBtn->setMinimumWidth(100);
     buttonBar1->addWidget(m_exportBtn);
 
     m_generateBtn = new QPushButton("Generate & Load");
     m_generateBtn->setObjectName("startBtn");
+    m_generateBtn->setMinimumWidth(100);
     buttonBar1->addWidget(m_generateBtn);
 
     rightLayout->addLayout(buttonBar1);
 
     auto *buttonBar2 = new QHBoxLayout();
+    buttonBar2->setSpacing(6);
+
     auto *importImgBtn = new QPushButton("Import Image");
+    importImgBtn->setObjectName("importBtn");
+    importImgBtn->setMinimumWidth(100);
     connect(importImgBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportImageClicked);
     buttonBar2->addWidget(importImgBtn);
 
     auto *importDxfBtn = new QPushButton("Import DXF");
+    importDxfBtn->setObjectName("importBtn");
+    importDxfBtn->setMinimumWidth(100);
     connect(importDxfBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportDxfClicked);
     buttonBar2->addWidget(importDxfBtn);
 
