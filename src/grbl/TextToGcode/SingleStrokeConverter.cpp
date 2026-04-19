@@ -249,6 +249,86 @@ void simplifyChains(std::vector<std::vector<cv::Point2f>> &chains, double epsilo
     }
 }
 
+/// Greedy nearest-neighbor stitching: merge chains whose endpoints
+/// are within `maxGap` pixels. Dramatically reduces pen-lifts.
+void mergeChains(std::vector<std::vector<cv::Point2f>> &chains, double maxGap)
+{
+    if (maxGap <= 0.0 || chains.size() < 2) return;
+
+    double gapSq = maxGap * maxGap;
+    std::vector<bool> used(chains.size(), false);
+    std::vector<std::vector<cv::Point2f>> merged;
+
+    auto distSq = [](const cv::Point2f &a, const cv::Point2f &b) {
+        float dx = a.x - b.x, dy = a.y - b.y;
+        return static_cast<double>(dx * dx + dy * dy);
+    };
+
+    for (size_t start = 0; start < chains.size(); ++start) {
+        if (used[start]) continue;
+        used[start] = true;
+
+        // Build a combined path by repeatedly appending the nearest chain
+        std::vector<cv::Point2f> current = chains[start];
+
+        bool found = true;
+        while (found) {
+            found = false;
+            double bestDist = gapSq;
+            size_t bestIdx = 0;
+            int bestEnd = 0;  // 0 = front→front, 1 = front→back, 2 = back→front, 3 = back→back
+
+            const cv::Point2f &curFront = current.front();
+            const cv::Point2f &curBack  = current.back();
+
+            for (size_t i = 0; i < chains.size(); ++i) {
+                if (used[i]) continue;
+                const cv::Point2f &cF = chains[i].front();
+                const cv::Point2f &cB = chains[i].back();
+
+                // Check all 4 endpoint combinations
+                double d;
+                d = distSq(curBack, cF);
+                if (d < bestDist) { bestDist = d; bestIdx = i; bestEnd = 0; found = true; }
+                d = distSq(curBack, cB);
+                if (d < bestDist) { bestDist = d; bestIdx = i; bestEnd = 1; found = true; }
+                d = distSq(curFront, cF);
+                if (d < bestDist) { bestDist = d; bestIdx = i; bestEnd = 2; found = true; }
+                d = distSq(curFront, cB);
+                if (d < bestDist) { bestDist = d; bestIdx = i; bestEnd = 3; found = true; }
+            }
+
+            if (found) {
+                used[bestIdx] = true;
+                auto &other = chains[bestIdx];
+
+                switch (bestEnd) {
+                case 0:  // append other (as-is) to end of current
+                    current.insert(current.end(), other.begin(), other.end());
+                    break;
+                case 1:  // append reversed other to end
+                    current.insert(current.end(), other.rbegin(), other.rend());
+                    break;
+                case 2:  // prepend reversed other to front
+                    std::reverse(other.begin(), other.end());
+                    other.insert(other.end(), current.begin(), current.end());
+                    current = std::move(other);
+                    break;
+                case 3:  // prepend other (as-is) to front
+                    other.insert(other.end(), current.begin(), current.end());
+                    current = std::move(other);
+                    break;
+                }
+            }
+        }
+
+        if (current.size() >= 2)
+            merged.push_back(std::move(current));
+    }
+
+    chains = std::move(merged);
+}
+
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -363,9 +443,26 @@ QList<QPolygonF> SingleStrokeConverter::convert(
             // Prune short spur branches
             pruneSkeleton(work, opts.pruneLength);
 
-            // Trace & simplify
+            // Trace, merge nearby endpoints, simplify
             auto chains = traceSkeleton(work);
+            mergeChains(chains, opts.mergeGap);
             simplifyChains(chains, opts.epsilon);
+
+            // Remove short segments
+            if (opts.minSegLen > 0.0) {
+                chains.erase(
+                    std::remove_if(chains.begin(), chains.end(),
+                        [&](const std::vector<cv::Point2f> &ch) {
+                            double len = 0.0;
+                            for (size_t i = 1; i < ch.size(); ++i) {
+                                float dx = ch[i].x - ch[i-1].x;
+                                float dy = ch[i].y - ch[i-1].y;
+                                len += std::sqrt(dx*dx + dy*dy);
+                            }
+                            return len < opts.minSegLen;
+                        }),
+                    chains.end());
+            }
 
             // Map pixel coords back to path coordinate space, offset by cursor
             double invScale = 1.0 / scale;

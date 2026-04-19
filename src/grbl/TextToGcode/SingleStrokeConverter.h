@@ -21,6 +21,8 @@ public:
         double epsilon  = 1.5;   // RDP simplification tolerance (px)
         int pruneLength = 8;     // prune skeleton branches shorter than this (px)
         int erodePixels = 0;     // morphological erosion before thinning (0 = auto)
+        double mergeGap = 4.0;   // merge chain endpoints closer than this (px, 0 = off)
+        double minSegLen = 3.0;  // discard segments shorter than this total length (px, 0 = off)
     };
 
     /// Convert multi-line text to centerline polylines in the same
