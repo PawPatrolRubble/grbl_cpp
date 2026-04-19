@@ -191,44 +191,46 @@ void GraphicsDesignPanel::setupUi()
     m_statusLabel = new QLabel();
     rightLayout->addWidget(m_statusLabel);
 
-    // Bottom buttons (two rows) - uniform width
+    // Bottom buttons (two rows)
     auto *buttonBar1 = new QHBoxLayout();
-    buttonBar1->setSpacing(6);
+    buttonBar1->setSpacing(4);
 
-    m_saveBtn = new QPushButton("Save");
+    
+    m_saveBtn = new QPushButton(QIcon(":/icons/icons/save.svg"), "Save");
     m_saveBtn->setObjectName("actionBtn");
-    m_saveBtn->setMinimumWidth(100);
+    m_saveBtn->setMaximumWidth(80);
     buttonBar1->addWidget(m_saveBtn);
 
-    m_loadBtn = new QPushButton("Load");
+    m_loadBtn = new QPushButton(QIcon(":/icons/icons/load.svg"), "Load");
     m_loadBtn->setObjectName("actionBtn");
-    m_loadBtn->setMinimumWidth(100);
+    m_loadBtn->setMaximumWidth(80);
     buttonBar1->addWidget(m_loadBtn);
 
-    m_exportBtn = new QPushButton("Export");
+    m_exportBtn = new QPushButton(QIcon(":/icons/icons/export.svg"), "Export");
     m_exportBtn->setObjectName("actionBtn");
-    m_exportBtn->setMinimumWidth(100);
+    m_exportBtn->setMaximumWidth(80);
     buttonBar1->addWidget(m_exportBtn);
 
-    m_generateBtn = new QPushButton("Generate & Load");
-    m_generateBtn->setObjectName("startBtn");
-    m_generateBtn->setMinimumWidth(100);
-    buttonBar1->addWidget(m_generateBtn);
-
+    
     rightLayout->addLayout(buttonBar1);
-
+    
     auto *buttonBar2 = new QHBoxLayout();
-    buttonBar2->setSpacing(6);
+    buttonBar2->setSpacing(4);
 
-    auto *importImgBtn = new QPushButton("Import Image");
+auto *importImgBtn = new QPushButton(QIcon(":/icons/icons/import_image.svg"), "Image");
     importImgBtn->setObjectName("importBtn");
-    importImgBtn->setMinimumWidth(100);
+    importImgBtn->setMaximumWidth(80);
     connect(importImgBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportImageClicked);
     buttonBar2->addWidget(importImgBtn);
 
-    auto *importDxfBtn = new QPushButton("Import DXF");
+    m_generateBtn = new QPushButton(QIcon(":/icons/icons/generate.svg"), "Generate");
+    m_generateBtn->setObjectName("startBtn");
+    m_generateBtn->setMaximumWidth(110);
+    buttonBar2->addWidget(m_generateBtn);
+
+    auto *importDxfBtn = new QPushButton(QIcon(":/icons/icons/import_dxf.svg"), "DXF");
     importDxfBtn->setObjectName("importBtn");
-    importDxfBtn->setMinimumWidth(100);
+    importDxfBtn->setMaximumWidth(80);
     connect(importDxfBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportDxfClicked);
     buttonBar2->addWidget(importDxfBtn);
 
