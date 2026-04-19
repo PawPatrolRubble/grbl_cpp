@@ -72,14 +72,16 @@ void SelectTool::mouseMove(const QPointF& pos)
             if (selected) {
                 m_dragEntityPreview = selected->clone();
                 m_dragEntityPreview->translate(pos - m_pressPos);
+                m_lastMovePos = pos;
             }
         }
     } else if (m_mode == Mode::MovingEntity) {
-        // Update move preview
+        // Update move preview — reuse existing preview, just update position
         Entity* selected = document().selectedEntity();
-        if (selected) {
-            m_dragEntityPreview = selected->clone();
-            m_dragEntityPreview->translate(pos - m_pressPos);
+        if (selected && m_dragEntityPreview) {
+            // Reset to original position, then apply new delta
+            m_dragEntityPreview->translate(pos - m_lastMovePos);
+            m_lastMovePos = pos;
         }
     }
 }

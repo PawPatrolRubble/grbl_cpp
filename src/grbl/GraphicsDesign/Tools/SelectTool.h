@@ -31,6 +31,7 @@ private:
 
     Mode m_mode = Mode::None;
     QPointF m_pressPos;
+    QPointF m_lastMovePos;
     QPointF m_currentPos;
     QString m_activeHandleId;
     std::unique_ptr<Entity> m_dragEntityPreview;

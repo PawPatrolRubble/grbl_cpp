@@ -64,6 +64,7 @@ DesignCanvas::DesignCanvas(QWidget *parent)
 
     // Connect document signals
     connect(&m_document, &Document::changed, this, [this]() {
+        m_entityCacheDirty = true;
         scheduleUpdate();
         emitUndoRedoState();
         emit selectedEntityChanged();
@@ -71,8 +72,17 @@ DesignCanvas::DesignCanvas(QWidget *parent)
     });
 
     connect(&m_document, &Document::selectionChanged, this, [this]() {
+        m_entityCacheDirty = true;
         scheduleUpdate();
         emit selectedEntityChanged();
+    });
+
+    // Deferred crisp re-render after zoom settles
+    m_zoomSettleTimer.setSingleShot(true);
+    m_zoomSettleTimer.setInterval(150);
+    connect(&m_zoomSettleTimer, &QTimer::timeout, this, [this]() {
+        m_entityCacheDirty = true;
+        update();
     });
 
     emitToolStatus();
@@ -236,6 +246,7 @@ void DesignCanvas::applyZoom(double factor, const QPointF& screenAnchor)
     double actualFactor = newZoom / m_zoom;
     m_panOffset = screenAnchor - actualFactor * (screenAnchor - m_panOffset);
     m_zoom = newZoom;
+    m_zoomSettleTimer.start();  // defer crisp re-render
     update();
 }
 
@@ -250,6 +261,7 @@ void DesignCanvas::scheduleUpdate()
 void DesignCanvas::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    m_entityCacheDirty = true;
     update();
 }
 
@@ -320,13 +332,49 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     // Rulers are drawn in screen coordinates
     drawGridAndRulers(painter);
 
+    // --- Entity layer via pixmap cache ---
+    bool cacheUsable = !m_entityCache.isNull()
+                    && m_entityCacheSize == size();
+
+    if (m_entityCacheDirty || !cacheUsable) {
+
+        // Full re-render to cache
+        m_entityCache = QPixmap(size());
+        m_entityCache.fill(Qt::transparent);
+        {
+            QPainter cp(&m_entityCache);
+            cp.setRenderHint(QPainter::Antialiasing, true);
+            cp.translate(m_panOffset);
+            cp.scale(m_zoom, -m_zoom);
+            drawWorktable(cp);
+            drawAxisOrigin(cp);
+            drawEntities(cp);
+        }
+        m_entityCacheZoom = m_zoom;
+        m_entityCachePanOffset = m_panOffset;
+        m_entityCacheSize = size();
+        m_entityCacheDirty = false;
+    }
+
+    if (m_entityCacheZoom == m_zoom && m_entityCachePanOffset == m_panOffset) {
+        // Same view — blit directly
+        painter.drawPixmap(0, 0, m_entityCache);
+    } else {
+        // Zoom/pan changed — scale/translate the cached pixmap (fast but approximate)
+        double relativeZoom = m_zoom / m_entityCacheZoom;
+        QPointF panDelta = m_panOffset - m_entityCachePanOffset * relativeZoom;
+        painter.save();
+        painter.translate(panDelta);
+        painter.scale(relativeZoom, relativeZoom);
+        painter.drawPixmap(0, 0, m_entityCache);
+        painter.restore();
+    }
+
+    // Dynamic elements always drawn fresh (handles, preview, snap)
     painter.save();
     painter.translate(m_panOffset);
-    painter.scale(m_zoom, -m_zoom);  // Y-up for machine coordinates
+    painter.scale(m_zoom, -m_zoom);
 
-    drawWorktable(painter);
-    drawAxisOrigin(painter);
-    drawEntities(painter);
     drawHandles(painter);
 
     painter.setPen(createPreviewPen());
@@ -356,18 +404,22 @@ void DesignCanvas::drawGridAndRulers(QPainter& painter)
     double startY = std::floor(std::min(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
     double endY   = std::ceil(std::max(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
 
-    // Grid lines
-    painter.setPen(QPen(QColor("#d1d5db"), 1));
+    // Grid lines — batched for performance
+    QVector<QLineF> gridLines;
+    int nx = static_cast<int>((endX - startX) / stepMachine) + 1;
+    int ny = static_cast<int>((endY - startY) / stepMachine) + 1;
+    gridLines.reserve(nx + ny);
+
     for (double x = startX; x <= endX; x += stepMachine) {
-        QPointF p1 = machineToScreen(QPointF(x, startY));
-        QPointF p2 = machineToScreen(QPointF(x, endY));
-        painter.drawLine(p1, p2);
+        gridLines.append(QLineF(machineToScreen(QPointF(x, startY)),
+                                machineToScreen(QPointF(x, endY))));
     }
     for (double y = startY; y <= endY; y += stepMachine) {
-        QPointF p1 = machineToScreen(QPointF(startX, y));
-        QPointF p2 = machineToScreen(QPointF(endX, y));
-        painter.drawLine(p1, p2);
+        gridLines.append(QLineF(machineToScreen(QPointF(startX, y)),
+                                machineToScreen(QPointF(endX, y))));
     }
+    painter.setPen(QPen(QColor("#d1d5db"), 1));
+    painter.drawLines(gridLines);
 
     // Ruler labels along X-axis (bottom) and Y-axis (left)
     QFont rulerFont("Sans Serif", 8);
@@ -457,8 +509,17 @@ void DesignCanvas::drawEntities(QPainter& painter)
 {
     Entity* selected = m_document.selectedEntity();
 
+    // Compute visible rect in machine coordinates for culling
+    QPointF visTL = screenToMachine(QPointF(0, 0));
+    QPointF visBR = screenToMachine(QPointF(width(), height()));
+    QRectF visibleRect(QPointF(std::min(visTL.x(), visBR.x()), std::min(visTL.y(), visBR.y())),
+                       QPointF(std::max(visTL.x(), visBR.x()), std::max(visTL.y(), visBR.y())));
+
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
+        // Frustum culling: skip entities outside visible area
+        if (!visibleRect.intersects(entity->boundingRect()))
+            continue;
         bool isSelected = (selected && entity->id() == selected->id());
         painter.setPen(isSelected ? createSelectedPen() : createEntityPen());
         entity->draw(painter);
@@ -705,15 +766,19 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
         const QPoint delta = event->position().toPoint() - m_lastPanScreenPos;
         m_panOffset += QPointF(delta.x(), delta.y());
         m_lastPanScreenPos = event->position().toPoint();
+        m_zoomSettleTimer.start();  // defer crisp re-render
         update();
         return;
     }
 
-    if (m_activeToolType == ToolType::Select) {
+    // Skip snap and hover during entity drag for performance
+    bool isDragging = (m_activeToolType == ToolType::Select && m_selectTool.isActive());
+
+    if (m_activeToolType == ToolType::Select && !isDragging) {
         updateHoverCursor(rawWorldPos);
     }
 
-    if (m_snapEnabled) {
+    if (m_snapEnabled && !isDragging) {
         m_snapResult = computeSnap(rawWorldPos, true);
     } else {
         m_snapResult = {};

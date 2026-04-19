@@ -150,6 +150,16 @@ private:
     bool m_repaintPending = false;
     bool m_initialFitDone = false;
 
+    // Entity render cache — render entities to pixmap, blit on pan/zoom
+    QPixmap m_entityCache;
+    double m_entityCacheZoom = 0;
+    QPointF m_entityCachePanOffset;
+    QSize m_entityCacheSize;
+    bool m_entityCacheDirty = true;
+
+    // Deferred crisp render after zoom
+    QTimer m_zoomSettleTimer;
+
     // Constants
     static constexpr double kHandleHalfSizePx = 6.0;
     static constexpr double kHandleHitHalfSizePx = 10.0;
