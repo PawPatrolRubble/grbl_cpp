@@ -27,6 +27,7 @@ private:
     void parseFeedOverrides(const QString &fsStr);
     void parseGCodeParameters(const QString &line);
     void parseGCodeState(const QString &line);
+    void parseGrblSetting(const QString &line);
     void updateWcoFromOffsets();
 
     MachineState *m_machineState;

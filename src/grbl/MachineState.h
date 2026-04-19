@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QVector3D>
+#include <QMap>
 
 class MachineState : public QObject
 {
@@ -57,6 +58,9 @@ public:
     void setConnected(bool connected);
     void setMessage(const QString &msg);
 
+    void setGrblSetting(int id, double value);
+    QMap<int, double> grblSettings() const;
+
     void reset();
 
 signals:
@@ -70,6 +74,7 @@ signals:
     void connectedChanged(bool connected);
     void alarmChanged(bool alarm);
     void messageReceived(const QString &msg);
+    void grblSettingsChanged(const QMap<int, double> &settings);
 
 private:
     State m_state = State::Unknown;
@@ -80,4 +85,5 @@ private:
     double m_feedRate = 0.0;
     double m_spindleSpeed = 0.0;
     bool m_connected = false;
+    QMap<int, double> m_grblSettings;
 };

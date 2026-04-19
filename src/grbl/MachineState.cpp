@@ -88,6 +88,17 @@ void MachineState::setMessage(const QString &msg)
     emit messageReceived(msg);
 }
 
+void MachineState::setGrblSetting(int id, double value)
+{
+    m_grblSettings[id] = value;
+    emit grblSettingsChanged(m_grblSettings);
+}
+
+QMap<int, double> MachineState::grblSettings() const
+{
+    return m_grblSettings;
+}
+
 void MachineState::reset()
 {
     setState(State::Unknown);

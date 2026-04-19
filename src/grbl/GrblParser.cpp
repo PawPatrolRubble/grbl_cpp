@@ -24,6 +24,8 @@ void GrblParser::parseResponse(const QString &response)
         m_machineState->setMessage(response.mid(5, response.size() - 6));
     else if (response.startsWith("error"))
         emit m_machineState->stateChanged(MachineState::State::Alarm);
+    else if (response.startsWith("$") && response.contains("="))
+        parseGrblSetting(response);
 }
 
 void GrblParser::requestStatusReport()
@@ -187,4 +189,21 @@ void GrblParser::updateWcoFromOffsets()
     // Immediately recalculate work position so the UI updates
     // without waiting for the next status report poll.
     m_machineState->setWorkPosition(m_machineState->machinePosition() - wco);
+}
+
+void GrblParser::parseGrblSetting(const QString &line)
+{
+    // Format: $N=value (e.g. "$110=1000.000")
+    int eqPos = line.indexOf('=');
+    if (eqPos < 2) return;
+
+    bool idOk = false;
+    int id = line.mid(1, eqPos - 1).toInt(&idOk);
+    if (!idOk) return;
+
+    bool valOk = false;
+    double value = line.mid(eqPos + 1).toDouble(&valOk);
+    if (!valOk) return;
+
+    m_machineState->setGrblSetting(id, value);
 }
