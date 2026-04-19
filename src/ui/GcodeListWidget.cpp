@@ -57,21 +57,29 @@ int GcodeListModel::rowCount(const QModelIndex &parent) const
     return m_lines.size();
 }
 
+GcodeType GcodeListModel::typeAt(int row) const
+{
+    auto it = m_typeCache.find(row);
+    if (it != m_typeCache.end()) return it.value();
+    GcodeType t = detectGcodeType(m_lines.at(row));
+    m_typeCache.insert(row, t);
+    return t;
+}
+
 QVariant GcodeListModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_lines.size())
         return {};
 
     const int row = index.row();
-    const GcodeLine &gl = m_lines.at(row);
 
     if (role == Qt::DisplayRole)
-        return QString("%1: %2").arg(row + 1, 5).arg(gl.text);
+        return QString("%1: %2").arg(row + 1, 5).arg(m_lines.at(row));
 
     if (role == Qt::ForegroundRole) {
         if (row == m_executingLine)
             return QColor("#ffcc00");
-        return colorForType(gl.type);
+        return colorForType(typeAt(row));
     }
 
     if (role == Qt::BackgroundRole) {
@@ -92,25 +100,15 @@ QVariant GcodeListModel::data(const QModelIndex &index, int role) const
 void GcodeListModel::setLines(const QStringList &lines)
 {
     beginResetModel();
-    m_lines.clear();
-    m_lines.reserve(lines.size());
+    m_lines = lines;
+    m_typeCache.clear();
     m_executingLine = -1;
-    for (const QString &line : lines) {
-        GcodeLine gl;
-        gl.text = line;
-        gl.type = detectGcodeType(line);
-        m_lines.append(gl);
-    }
     endResetModel();
 }
 
 QStringList GcodeListModel::lines() const
 {
-    QStringList result;
-    result.reserve(m_lines.size());
-    for (const auto &gl : m_lines)
-        result << gl.text;
-    return result;
+    return m_lines;
 }
 
 int GcodeListModel::lineCount() const
@@ -169,6 +167,7 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     // Setup list view
     m_listView->setModel(m_model);
     m_listView->setFont(QFont("Consolas", 10));
+    m_listView->setUniformItemSizes(true);   // critical for 100k+ lines perf
     m_listView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_listView->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_listView->setSelectionMode(QAbstractItemView::SingleSelection);

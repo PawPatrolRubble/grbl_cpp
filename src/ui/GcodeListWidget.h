@@ -9,11 +9,6 @@
 
 enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
 
-struct GcodeLine {
-    QString text;
-    GcodeType type = GcodeType::Other;
-};
-
 class GcodeListModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -31,7 +26,10 @@ public:
     void setExecutingLine(int line);
 
 private:
-    QList<GcodeLine> m_lines;
+    GcodeType typeAt(int row) const;
+
+    QStringList m_lines;
+    mutable QHash<int, GcodeType> m_typeCache;  // lazy per-row type cache
     int m_executingLine = -1;
 };
 
