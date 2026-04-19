@@ -17,7 +17,9 @@ class ToolpathPanel;
 class SettingsPanel;
 class GraphicsDesignPanel;
 class DockPanel;
-class CustomTitleBar;
+class TabWidget;
+class MainPage;
+class GraphicsDesignPage;
 
 class MainWindow : public QMainWindow
 {
@@ -33,42 +35,24 @@ protected:
     void changeEvent(QEvent *event) override;
 
 private:
-    void setupUi();
-    void setupTitleBar();
-    void setupDocks();
+    void setupTabs();
     void setupMenuBar();
     void setupStatusBar();
     void setupConnections();
-    void saveLayout();
-    void restoreLayout();
     void loadAndParseFile(const QString &filePath);
-    void updateTitleBarButtons();
-
-    /// Create a dock panel for the given widget.
-    DockPanel *createDock(const QString &title, QWidget *widget,
-                          Qt::DockWidgetArea area,
-                          bool closable = true);
+    void openGraphicsDesignTab();
+    void closeTab(int index);
 
     Ui::MainWindow *ui;
-    CustomTitleBar *m_titleBar;
 
     ApplicationCore *m_core;
     SettingsManager *m_settings;
     QFutureWatcher<QList<GcodeMove>> *m_parseWatcher;
 
-    // Dock panels
-    DockPanel *m_dockConnection;
-    DockPanel *m_dockStatus;
-    DockPanel *m_dockControl;
-    DockPanel *m_dockJog;
-    DockPanel *m_dockSettings;
-    DockPanel *m_dockGraphicsDesign;
+    // Tab navigation
+    TabWidget *m_tabs;
+    MainPage *m_mainPage;
 
-    // Inner widgets (owned by docks)
-    ConnectionPanel *m_connectionPanel;
-    StatusPanel     *m_statusPanel;
-    ControlPanel    *m_controlPanel;
-    JogPanel        *m_jogPanel;
-    SettingsPanel   *m_settingsPanel;
-    GraphicsDesignPanel *m_graphicsDesignPanel;
+    // Active design tabs (for tracking multiple open designs)
+    QList<GraphicsDesignPage*> m_designPages;
 };
