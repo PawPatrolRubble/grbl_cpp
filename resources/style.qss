@@ -240,7 +240,6 @@ QPushButton {
     border-radius: 6px;
     padding: 6px 16px;
     font-weight: 500;
-    min-width: 60px;
 }
 
 QPushButton:hover {
@@ -437,6 +436,23 @@ QLabel#valueLabel {
     color: #059669;
 }
 
+QLabel#stateLabel {
+    font-weight: bold;
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+QLabel#stateLabel[state="idle"] {
+    color: #ffffff;
+    background-color: #22c55e;
+}
+
+QLabel#stateLabel[state="alarm"] {
+    color: #ffffff;
+    background-color: #dc2626;
+}
+
 /* ---- Status Bar ---- */
 QStatusBar {
     background-color: #ffffff;
@@ -575,7 +591,14 @@ QFrame#posFrame {
     background-color: #ffffff;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
-    padding: 4px;
+    padding: 8px;
+}
+
+QFrame#posFrame QLineEdit#setXEdit,
+QFrame#posFrame QLineEdit#setYEdit,
+QFrame#posFrame QLineEdit#setZEdit {
+    min-width: 30px;
+    min-height: 20px;
 }
 
 /* Axis-specific colors for position values */
@@ -617,6 +640,16 @@ QLabel#sideLabelZ {
 }
 
 /* Axis-specific colors for zero buttons */
+QPushButton#zeroXBtn,
+QPushButton#zeroYBtn,
+QPushButton#zeroZBtn {
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0px;
+}
+
 QPushButton#zeroXBtn {
     color: #dc2626;  /* Red */
 }
