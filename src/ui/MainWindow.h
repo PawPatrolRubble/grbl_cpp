@@ -62,6 +62,9 @@ private:
     DockPanel *m_dockControl;
     DockPanel *m_dockJog;
     DockPanel *m_dockSettings;
+    DockPanel *m_dockToolpath;
+    DockPanel *m_dockConsole;
+    DockPanel *m_dockDesign;
 
     // Inner widgets (owned by docks)
     ConnectionPanel *m_connectionPanel;
@@ -69,8 +72,8 @@ private:
     ControlPanel    *m_controlPanel;
     JogPanel        *m_jogPanel;
     SettingsPanel   *m_settingsPanel;
+    ToolpathPanel   *m_toolpathPanel;
+    ConsolePanel    *m_consolePanel;
+    GraphicsDesignPanel *m_graphicsDesignPanel;
 
-    // Tab indices
-    static constexpr int TAB_TOOLPATH = 0;
-    static constexpr int TAB_DESIGN   = 1;
 };

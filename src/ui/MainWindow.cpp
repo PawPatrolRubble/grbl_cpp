@@ -1,4 +1,4 @@
-#include "MainWindow.h"
+﻿#include "MainWindow.h"
 #include "DockPanel.h"
 #include "ApplicationCore.h"
 #include "SettingsManager.h"
@@ -71,9 +71,9 @@ void MainWindow::setupMenuBar()
         TextToGcodeDialog dialog(this);
         connect(&dialog, &TextToGcodeDialog::gcodeGenerated, this, [this](const QStringList &lines) {
             m_core->fileManager()->loadLines("TextToGcode", lines);
-            ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
+            m_toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
             m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
-            ui->consolePanel->appendMessage("Generated Text to G-code loaded.");
+            m_consolePanel->appendMessage("Generated Text to G-code loaded.");
 
             QStringList parseLines = m_core->fileManager()->lines();
             QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
@@ -85,7 +85,8 @@ void MainWindow::setupMenuBar()
         dialog.exec();
     }, QKeySequence(Qt::CTRL | Qt::Key_T));
     fileMenu->addAction("Graphics Design", this, [this]() {
-        ui->centralTabs->setCurrentIndex(TAB_DESIGN);
+        m_dockDesign->raise();
+        m_dockDesign->show();
     }, QKeySequence(Qt::CTRL | Qt::Key_G));
     fileMenu->addSeparator();
     fileMenu->addAction("Exit", this, &QWidget::close, QKeySequence::Quit);
@@ -98,9 +99,14 @@ void MainWindow::setupMenuBar()
     viewMenu->addAction("Jog Control", m_dockJog, &QDockWidget::toggleViewAction);
     viewMenu->addAction("Settings", m_dockSettings, &QDockWidget::toggleViewAction);
     viewMenu->addSeparator();
+    viewMenu->addAction("Toolpath", m_dockToolpath, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Console", m_dockConsole, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Design", m_dockDesign, &QDockWidget::toggleViewAction);
+    viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
         m_settings->resetToDefaults();
-        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings}) {
+        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog, m_dockSettings,
+                           m_dockToolpath, m_dockConsole, m_dockDesign}) {
             removeDockWidget(dock);
         }
         addDockWidget(Qt::LeftDockWidgetArea, m_dockConnection);
@@ -108,8 +114,20 @@ void MainWindow::setupMenuBar()
         addDockWidget(Qt::LeftDockWidgetArea, m_dockControl);
         addDockWidget(Qt::LeftDockWidgetArea, m_dockJog);
         addDockWidget(Qt::RightDockWidgetArea, m_dockSettings);
+        addDockWidget(Qt::RightDockWidgetArea, m_dockToolpath);
+        addDockWidget(Qt::RightDockWidgetArea, m_dockDesign);
+        addDockWidget(Qt::BottomDockWidgetArea, m_dockConsole);
+        tabifyDockWidget(m_dockToolpath, m_dockDesign);
+        tabifyDockWidget(m_dockConnection, m_dockStatus);
+        tabifyDockWidget(m_dockStatus, m_dockControl);
+        tabifyDockWidget(m_dockControl, m_dockJog);
         m_dockSettings->hide();
-        ui->centralTabs->setCurrentIndex(TAB_TOOLPATH);
+        m_dockConnection->raise();
+        m_dockToolpath->raise();
+        for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog,
+                           m_dockToolpath, m_dockConsole, m_dockDesign}) {
+            dock->show();
+        }
     });
 
     // --- Help menu ---
@@ -130,6 +148,8 @@ void MainWindow::setupStatusBar()
 
 void MainWindow::setupDocks()
 {
+    setDockNestingEnabled(true);
+
     // Connection panel (left)
     m_connectionPanel = new ConnectionPanel();
     m_connectionPanel->setAvailablePorts(SerialManager::availablePorts());
@@ -159,6 +179,26 @@ void MainWindow::setupDocks()
     tabifyDockWidget(m_dockStatus, m_dockControl);
     tabifyDockWidget(m_dockControl, m_dockJog);
     m_dockConnection->raise();
+
+    // --- Central panels as dockable widgets ---
+
+    // Toolpath panel
+    m_toolpathPanel = new ToolpathPanel();
+    m_dockToolpath = createDock("Toolpath", m_toolpathPanel, Qt::RightDockWidgetArea, false);
+
+    // Console panel
+    m_consolePanel = new ConsolePanel();
+    m_consolePanel->setMinimumHeight(120);
+    m_consolePanel->setMaximumHeight(250);
+    m_dockConsole = createDock("Console", m_consolePanel, Qt::BottomDockWidgetArea, false);
+
+    // Graphics Design panel
+    m_graphicsDesignPanel = new GraphicsDesignPanel();
+    m_dockDesign = createDock("Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea, false);
+
+    // Tabify central panels so they appear as tabs
+    tabifyDockWidget(m_dockToolpath, m_dockDesign);
+    m_dockToolpath->raise();
 }
 
 DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
@@ -199,7 +239,7 @@ void MainWindow::setupConnections()
     auto *serial = m_core->serialManager();
     auto *state = m_core->machineState();
 
-    // --- ConnectionPanel → SerialManager ---
+    // --- ConnectionPanel 鈫?SerialManager ---
     connect(m_connectionPanel, &ConnectionPanel::connectRequested,
             this, [this](const QString &port, int baud) {
                 m_core->serialManager()->connectToGrbl(port, baud);
@@ -207,30 +247,30 @@ void MainWindow::setupConnections()
     connect(m_connectionPanel, &ConnectionPanel::disconnectRequested,
             serial, &SerialManager::disconnectFromGrbl);
 
-    // --- SerialManager → panels ---
+    // --- SerialManager 鈫?panels ---
     connect(serial, &SerialManager::connectedChanged,
             m_connectionPanel, &ConnectionPanel::setConnected);
     connect(serial, &SerialManager::connectedChanged,
             this, [this](bool connected) {
-                ui->consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
+                m_consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
             });
 
-    // --- Core responses → console (filter out status reports)
+    // --- Core responses 鈫?console (filter out status reports)
     connect(m_core, &ApplicationCore::responseReceived,
             this, [this](const QString &response) {
                 // Skip GRBL status reports: <Idle|WPos:...>
                 if (response.startsWith('<') && response.endsWith('>'))
                     return;
                 // During streaming, batch responses to avoid UI lag
-                ui->consolePanel->queueMessage(response);
+                m_consolePanel->queueMessage(response);
             });
 
-    // --- Core streaming → UI ---
+    // --- Core streaming 鈫?UI ---
     connect(m_core, &ApplicationCore::streamingProgress,
             m_controlPanel, &ControlPanel::setStreamingProgress);
     connect(m_core, &ApplicationCore::streamingProgress,
             this, [this](int current, int /*total*/) {
-                ui->toolpathPanel->setExecutingLine(current);
+                m_toolpathPanel->setExecutingLine(current);
             });
     connect(m_core, &ApplicationCore::streamingStarted,
             m_controlPanel, &ControlPanel::setStreamingStarted);
@@ -246,15 +286,15 @@ void MainWindow::setupConnections()
             this, [this]() {
                 m_controlPanel->setStreamingFinished();
                 m_core->serialManager()->setStatusPollInterval(250);
-                ui->consolePanel->appendMessage("Streaming finished");
+                m_consolePanel->appendMessage("Streaming finished");
                 statusBar()->showMessage("Streaming complete");
             });
 
-    // --- MachineState → StatusPanel + ToolpathPanel ---
+    // --- MachineState 鈫?StatusPanel + ToolpathPanel ---
     connect(state, &MachineState::machinePositionChanged,
             m_statusPanel, &StatusPanel::setMachinePosition);
     connect(state, &MachineState::workPositionChanged,
-            ui->toolpathPanel, &ToolpathPanel::setCutterPosition);
+            m_toolpathPanel, &ToolpathPanel::setCutterPosition);
     connect(state, &MachineState::workPositionChanged,
             m_statusPanel, &StatusPanel::setWorkPosition);
     connect(state, &MachineState::stateChanged,
@@ -286,33 +326,42 @@ void MainWindow::setupConnections()
     connect(state, &MachineState::spindleSpeedChanged,
             m_statusPanel, &StatusPanel::setSpindleSpeed);
 
-    // --- StatusPanel → SerialManager ---
+    // --- StatusPanel 鈫?SerialManager ---
     connect(m_statusPanel, &StatusPanel::zeroAxisRequested,
             this, [this](const QString &axis) {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand(QString("G10 L20 P0 %1%2").arg(axis).arg(0));
                 m_core->serialManager()->sendCommand("$#");
-                ui->consolePanel->appendMessage(QString("Set %1 work position to zero").arg(axis));
+                m_consolePanel->appendMessage(QString("Set %1 work position to zero").arg(axis));
+            });
+    connect(m_statusPanel, &StatusPanel::setAxisPositionRequested,
+            this, [this](const QString &axis, double value) {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand(
+                    QString("G10 L20 P0 %1%2").arg(axis).arg(value, 0, 'f', 3));
+                m_core->serialManager()->sendCommand("$#");
+                m_consolePanel->appendMessage(
+                    QString("Set %1 work position to %2").arg(axis).arg(value, 0, 'f', 3));
             });
     connect(m_statusPanel, &StatusPanel::zeroAllRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L20 P0 X0 Y0 Z0");
                 m_core->serialManager()->sendCommand("$#");
-                ui->consolePanel->appendMessage("Set all work positions to zero");
+                m_consolePanel->appendMessage("Set all work positions to zero");
             });
     connect(m_statusPanel, &StatusPanel::goToZeroRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G90 G0 X0 Y0 Z0");
-                ui->consolePanel->appendMessage("Moving to zero position");
+                m_consolePanel->appendMessage("Moving to zero position");
             });
     connect(m_statusPanel, &StatusPanel::resetWorkOffsetRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L2 P1 X0 Y0 Z0");
                 m_core->serialManager()->sendCommand("$#");
-                ui->consolePanel->appendMessage("Reset work offset — work position now equals machine position");
+                m_consolePanel->appendMessage("Reset work offset 鈥?work position now equals machine position");
             });
     connect(m_statusPanel, &StatusPanel::emergencyStopRequested,
             this, [this]() {
@@ -320,16 +369,16 @@ void MainWindow::setupConnections()
                 m_core->stopStreaming();
                 m_core->serialManager()->clearQueue();
                 m_core->sendRealtime(GrblRealtime::Reset);
-                ui->consolePanel->appendMessage("EMERGENCY STOP — soft reset sent");
+                m_consolePanel->appendMessage("EMERGENCY STOP 鈥?soft reset sent");
             });
     connect(m_statusPanel, &StatusPanel::homeMachineRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("$H");
-                ui->consolePanel->appendMessage("Homing cycle started");
+                m_consolePanel->appendMessage("Homing cycle started");
             });
 
-    // --- ControlPanel → Core ---
+    // --- ControlPanel 鈫?Core ---
     connect(m_controlPanel, &ControlPanel::loadFileRequested,
             this, [this]() {
                 QString path = QFileDialog::getOpenFileName(this, "Open G-Code File",
@@ -339,10 +388,10 @@ void MainWindow::setupConnections()
             });
     connect(m_controlPanel, &ControlPanel::startRequested,
             this, [this]() {
-                QStringList lines = ui->toolpathPanel->currentGcodeLines();
+                QStringList lines = m_toolpathPanel->currentGcodeLines();
                 if (lines.isEmpty())
                     lines = m_core->fileManager()->lines();
-                if (ui->toolpathPanel->returnToOriginEnabled())
+                if (m_toolpathPanel->returnToOriginEnabled())
                     lines.append("G90 G0 X0 Y0 Z0");
                 m_core->startStreaming(lines);
             });
@@ -356,7 +405,7 @@ void MainWindow::setupConnections()
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("$H");
-                ui->consolePanel->appendMessage("Homing...");
+                m_consolePanel->appendMessage("Homing...");
             });
     connect(m_controlPanel, &ControlPanel::unlockRequested,
             this, [this]() {
@@ -364,13 +413,13 @@ void MainWindow::setupConnections()
                 m_core->serialManager()->sendCommand("$X");
                 m_core->serialManager()->sendCommand("$G");
                 m_core->serialManager()->sendCommand("$#");
-                ui->consolePanel->appendMessage("Alarm unlocked");
+                m_consolePanel->appendMessage("Alarm unlocked");
             });
     connect(m_controlPanel, &ControlPanel::resetRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendRealtimeCommand(0x18);
-                ui->consolePanel->appendMessage("Soft reset sent");
+                m_consolePanel->appendMessage("Soft reset sent");
             });
     connect(m_controlPanel, &ControlPanel::statusRequested,
             this, [this]() {
@@ -378,7 +427,7 @@ void MainWindow::setupConnections()
                 m_core->serialManager()->sendRealtimeCommand('?');
             });
 
-    // --- JogPanel → SerialManager ---
+    // --- JogPanel 鈫?SerialManager ---
     connect(m_jogPanel, &JogPanel::jogContinuousRequested,
             this, [this](const QString &axis, int direction, double feed) {
                 if (!m_core->serialManager()->isConnected()) return;
@@ -394,9 +443,21 @@ void MainWindow::setupConnections()
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->jogCancel();
             });
+    connect(m_jogPanel, &JogPanel::goToAbsoluteRequested,
+            this, [this](double x, double y, double z, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString cmd = QString("G90 G0 X%1 Y%2 Z%3 F%4")
+                    .arg(x, 0, 'f', 3)
+                    .arg(y, 0, 'f', 3)
+                    .arg(z, 0, 'f', 3)
+                    .arg(feed, 0, 'f', 0);
+                m_core->serialManager()->sendCommand(cmd);
+                m_consolePanel->appendMessage(QString("Go to absolute: X%1 Y%2 Z%3 F%4")
+                    .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(z, 0, 'f', 3).arg(feed, 0, 'f', 0));
+            });
 
-    // --- ConsolePanel → SerialManager ---
-    connect(ui->consolePanel, &ConsolePanel::commandEntered,
+    // --- ConsolePanel 鈫?SerialManager ---
+    connect(m_consolePanel, &ConsolePanel::commandEntered,
             this, [this](const QString &cmd) {
                 if (m_core->serialManager()->isConnected())
                     m_core->sendCommand(cmd);
@@ -405,38 +466,39 @@ void MainWindow::setupConnections()
     // --- Async parse ---
     connect(m_parseWatcher, &QFutureWatcher<QList<GcodeMove>>::finished,
             this, [this]() {
-                ui->toolpathPanel->setMoves(m_parseWatcher->result());
+                m_toolpathPanel->setMoves(m_parseWatcher->result());
                 statusBar()->showMessage("File loaded: " + m_core->fileManager()->fileName());
             });
 
     // --- ToolpathPanel clear ---
-    connect(ui->toolpathPanel, &ToolpathPanel::clearRequested,
+    connect(m_toolpathPanel, &ToolpathPanel::clearRequested,
             this, [this]() {
-                ui->toolpathPanel->clearAll();
+                m_toolpathPanel->clearAll();
                 m_core->fileManager()->clear();
                 m_controlPanel->setFileLoaded("", 0);
-                ui->consolePanel->appendMessage("G-code cleared");
+                m_consolePanel->appendMessage("G-code cleared");
                 statusBar()->showMessage("G-code cleared");
             });
 
-    // --- ToolpathPanel transform → keep FileManager in sync ---
-    connect(ui->toolpathPanel, &ToolpathPanel::gcodeTransformed,
+    // --- ToolpathPanel transform 鈫?keep FileManager in sync ---
+    connect(m_toolpathPanel, &ToolpathPanel::gcodeTransformed,
             this, [this](const QStringList &lines) {
                 m_core->fileManager()->loadLines(m_core->fileManager()->fileName(), lines);
                 m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), lines.size());
             });
 
-    // --- GraphicsDesignPanel (tab) → G-code generation ---
-    connect(ui->graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
+    // --- GraphicsDesignPanel (tab) 鈫?G-code generation ---
+    connect(m_graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
             this, [this](const QStringList &lines) {
                 m_core->fileManager()->loadLines("GraphicsDesign", lines);
-                ui->toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
+                m_toolpathPanel->setGcodeLines(m_core->fileManager()->lines());
                 m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), m_core->fileManager()->lines().size());
-                ui->consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
+                m_consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
                 statusBar()->showMessage("Graphics Design G-code loaded");
 
-                // Switch to toolpath tab to show result
-                ui->centralTabs->setCurrentIndex(TAB_TOOLPATH);
+                // Switch to toolpath dock to show result
+                m_dockToolpath->raise();
+                m_dockToolpath->show();
 
                 QStringList parseLines = m_core->fileManager()->lines();
                 QFuture<QList<GcodeMove>> future = QtConcurrent::run([parseLines]() {
@@ -455,9 +517,9 @@ void MainWindow::loadAndParseFile(const QString &filePath)
 {
     auto *fm = m_core->fileManager();
     if (fm->loadFile(filePath)) {
-        ui->toolpathPanel->setGcodeLines(fm->lines());
+        m_toolpathPanel->setGcodeLines(fm->lines());
         m_controlPanel->setFileLoaded(fm->fileName(), fm->lines().size());
-        ui->consolePanel->appendMessage("File loaded: " + fm->fileName());
+        m_consolePanel->appendMessage("File loaded: " + fm->fileName());
         statusBar()->showMessage("Parsing G-code...");
 
         QStringList lines = fm->lines();
