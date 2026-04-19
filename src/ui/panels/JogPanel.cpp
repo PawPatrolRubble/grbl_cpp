@@ -4,6 +4,9 @@
 #include <QGridLayout>
 #include <QPushButton>
 #include <QKeyEvent>
+#include <QLineEdit>
+#include <QGroupBox>
+#include <QRegularExpressionValidator>
 
 JogPanel::JogPanel(QWidget *parent)
     : QWidget(parent)
@@ -86,6 +89,48 @@ JogPanel::JogPanel(QWidget *parent)
     setupJogBtn(btnYMinus, "Y", -1);
     setupJogBtn(btnZPlus, "Z", 1);
     setupJogBtn(btnZMinus, "Z", -1);
+
+    // --- Absolute movement section ---
+    auto *absGroup = new QGroupBox("Go To Position");
+    auto *absLayout = new QGridLayout(absGroup);
+    absLayout->setContentsMargins(4, 4, 4, 4);
+
+    auto makeEdit = [](const QString &placeholder) {
+        auto *edit = new QLineEdit();
+        edit->setPlaceholderText(placeholder);
+        edit->setMaximumWidth(100);
+        // Only allow numeric input (decimals, negatives)
+        QRegularExpression rx(R"(^-?\d*\.?\d*$)");
+        edit->setValidator(new QRegularExpressionValidator(rx, edit));
+        return edit;
+    };
+
+    absLayout->addWidget(new QLabel("X:"), 0, 0);
+    m_absXEdit = makeEdit("0.000");
+    absLayout->addWidget(m_absXEdit, 0, 1);
+
+    absLayout->addWidget(new QLabel("Y:"), 0, 2);
+    m_absYEdit = makeEdit("0.000");
+    absLayout->addWidget(m_absYEdit, 0, 3);
+
+    absLayout->addWidget(new QLabel("Z:"), 0, 4);
+    m_absZEdit = makeEdit("0.000");
+    absLayout->addWidget(m_absZEdit, 0, 5);
+
+    m_goToAbsBtn = new QPushButton("Go To");
+    m_goToAbsBtn->setToolTip("Move to absolute work position (G90 G0)");
+    absLayout->addWidget(m_goToAbsBtn, 1, 0, 1, 6);
+    m_jogButtons.append(m_goToAbsBtn);  // respect setMotionEnabled()
+
+    jogLayout->addWidget(absGroup);
+
+    connect(m_goToAbsBtn, &QPushButton::clicked, this, [this]() {
+        double x = m_absXEdit->text().toDouble();
+        double y = m_absYEdit->text().toDouble();
+        double z = m_absZEdit->text().toDouble();
+        double feed = m_jogFeedSpin->value();
+        emit goToAbsoluteRequested(x, y, z, feed);
+    });
 }
 
 void JogPanel::doJog(const QString &axis, int direction)

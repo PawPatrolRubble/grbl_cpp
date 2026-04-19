@@ -6,6 +6,7 @@
 #include <QSlider>
 #include <QLabel>
 #include <QDoubleSpinBox>
+#include <QLineEdit>
 
 class QKeyEvent;
 
@@ -28,6 +29,7 @@ signals:
     void jogContinuousRequested(const QString &axis, int direction, double feed);
     void jogStepRequested(const QString &axis, double distance, double feed);
     void jogCancelRequested();
+    void goToAbsoluteRequested(double x, double y, double z, double feed);
 
 private:
     enum class JogMode { Continuous, Step };
@@ -40,4 +42,9 @@ private:
     QLabel *m_jogStepLabel;
     QDoubleSpinBox *m_jogFeedSpin;
     QList<QPushButton*> m_jogButtons;
+
+    QLineEdit *m_absXEdit;
+    QLineEdit *m_absYEdit;
+    QLineEdit *m_absZEdit;
+    QPushButton *m_goToAbsBtn;
 };
