@@ -7,6 +7,8 @@
 #include <QMap>
 #include <QList>
 #include <QPolygonF>
+#include <QPainterPath>
+#include <QPixmap>
 
 /// Text entity supporting both system fonts and vector (single-line) fonts.
 /// System fonts are rendered via QPainterPath outlines.
@@ -46,6 +48,8 @@ public:
     int ssResolution() const { return m_ssResolution; }
     double ssSmoothing() const { return m_ssSmoothing; }
     int ssCleanup() const { return m_ssCleanup; }
+    double ssMergeGap() const { return m_ssMergeGap; }
+    double ssMinSegLen() const { return m_ssMinSegLen; }
 
     void setPosition(const QPointF& pos) { m_position = pos; }
     void setText(const QString& text) { m_text = text; }
@@ -58,6 +62,8 @@ public:
     void setSsResolution(int v) { m_ssResolution = v; }
     void setSsSmoothing(double v) { m_ssSmoothing = v; }
     void setSsCleanup(int v) { m_ssCleanup = v; }
+    void setSsMergeGap(double v) { m_ssMergeGap = v; }
+    void setSsMinSegLen(double v) { m_ssMinSegLen = v; }
     QString autoWrappedText() const;
 
 private:
@@ -76,6 +82,8 @@ private:
     int m_ssResolution = 256;     // SingleStroke glyph render size (px)
     double m_ssSmoothing = 1.5;   // RDP epsilon
     int m_ssCleanup = 8;          // branch prune length (px)
+    double m_ssMergeGap = 4.0;     // merge chain endpoints closer than this (px)
+    double m_ssMinSegLen = 3.0;    // discard short segments (px)
     FontMode m_fontMode = FontMode::SystemFont;
     QString m_fontFamily = "Sans Serif";
     QString m_vectorFontPath;
@@ -83,4 +91,14 @@ private:
 
     mutable QList<QPolygonF> m_ssCache;
     mutable bool m_ssCacheValid = false;
+    mutable QVector<QLineF> m_ssLineCache;   // batched line segments for draw
+    mutable bool m_ssLineCacheValid = false;
+    mutable QPointF m_ssLineCachePos;         // position when line cache was built
+    mutable QPainterPath m_outlinePathCache;  // cached system font outline path
+    mutable bool m_outlinePathCacheValid = false;
+    mutable QPixmap m_outlinePixmapCache;    // pre-rendered text pixmap
+    mutable bool m_outlinePixmapCacheValid = false;
+    mutable QRectF m_outlinePixmapRect;      // world-space rect of the pixmap
+    mutable QRectF m_boundingRectCache;
+    mutable bool m_boundingRectCacheValid = false;
 };

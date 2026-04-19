@@ -24,7 +24,11 @@ Entity::Kind TextEntity::kind() const
 
 QRectF TextEntity::boundingRect() const
 {
-    return computeBoundingRect();
+    if (!m_boundingRectCacheValid) {
+        m_boundingRectCache = computeBoundingRect();
+        m_boundingRectCacheValid = true;
+    }
+    return m_boundingRectCache;
 }
 
 QPointF TextEntity::center() const
@@ -49,37 +53,84 @@ void TextEntity::draw(QPainter& painter) const
         // Draw single-stroke (centerline) rendering of system font
         const auto &strokes = singleStrokes();
 
-        painter.save();
-        painter.translate(m_position);
-        painter.scale(1, -1);  // Un-flip Y for text
-        for (const QPolygonF &stroke : strokes) {
-            if (stroke.size() < 2) continue;
-            for (int i = 1; i < stroke.size(); ++i) {
-                painter.drawLine(stroke[i - 1], stroke[i]);
+        // Build or translate batched line cache
+        if (!m_ssLineCacheValid) {
+            m_ssLineCache.clear();
+            int totalSegs = 0;
+            for (const QPolygonF &s : strokes)
+                if (s.size() >= 2) totalSegs += s.size() - 1;
+            m_ssLineCache.reserve(totalSegs);
+
+            for (const QPolygonF &stroke : strokes) {
+                if (stroke.size() < 2) continue;
+                for (int i = 1; i < stroke.size(); ++i) {
+                    m_ssLineCache.append(QLineF(
+                        m_position.x() + stroke[i-1].x(), m_position.y() - stroke[i-1].y(),
+                        m_position.x() + stroke[i].x(),   m_position.y() - stroke[i].y()));
+                }
             }
+            m_ssLineCachePos = m_position;
+            m_ssLineCacheValid = true;
+        } else if (m_ssLineCachePos != m_position) {
+            // Position changed (drag) — translate cached lines instead of rebuilding
+            QPointF delta = m_position - m_ssLineCachePos;
+            for (QLineF &line : m_ssLineCache) {
+                line.translate(delta);
+            }
+            m_ssLineCachePos = m_position;
         }
-        painter.restore();
+        painter.drawLines(m_ssLineCache);
     } else {
-        // Draw system font outlines. The painter has Y-flipped (Y-up),
-        // so we need to un-flip for text rendering.
-        QFont font(m_fontFamily);
-        font.setPointSizeF(m_fontSize);
+        // Draw system font outlines — use pixmap cache for fast blitting
+        if (!m_outlinePathCacheValid) {
+            QFont font(m_fontFamily);
+            font.setPointSizeF(m_fontSize);
 
-        QPainterPath path;
-        QStringList lines = m_text.split('\n');
-        double yOffset = 0.0;
-        double lineHeight = m_fontSize * 1.5;
-        for (const QString& line : lines) {
-            if (!line.isEmpty()) {
-                path.addText(0, yOffset, font, line);
+            m_outlinePathCache = QPainterPath();
+            QStringList lines = m_text.split('\n');
+            double yOffset = 0.0;
+            double lineHeight = m_fontSize * 1.5;
+            for (const QString& line : lines) {
+                if (!line.isEmpty()) {
+                    m_outlinePathCache.addText(0, yOffset, font, line);
+                }
+                yOffset += lineHeight;
             }
-            yOffset += lineHeight;
+            m_outlinePathCacheValid = true;
+            m_outlinePixmapCacheValid = false;  // force pixmap rebuild
+        }
+
+        if (!m_outlinePixmapCacheValid) {
+            // Render path to pixmap at a fixed resolution
+            QRectF pathBounds = m_outlinePathCache.boundingRect().adjusted(-2, -2, 2, 2);
+            constexpr double pixScale = 4.0;  // render at 4x for quality
+            int pw = std::max(1, static_cast<int>(std::ceil(pathBounds.width() * pixScale)));
+            int ph = std::max(1, static_cast<int>(std::ceil(pathBounds.height() * pixScale)));
+            // Cap size to avoid excessive memory
+            if (pw > 4096) { pw = 4096; }
+            if (ph > 4096) { ph = 4096; }
+            m_outlinePixmapCache = QPixmap(pw, ph);
+            m_outlinePixmapCache.fill(Qt::transparent);
+            {
+                QPainter pmPainter(&m_outlinePixmapCache);
+                pmPainter.setRenderHint(QPainter::Antialiasing, true);
+                pmPainter.scale(pixScale, pixScale);
+                pmPainter.translate(-pathBounds.topLeft());
+                pmPainter.setPen(painter.pen());
+                pmPainter.setBrush(Qt::NoBrush);
+                pmPainter.drawPath(m_outlinePathCache);
+            }
+            m_outlinePixmapRect = pathBounds;
+            m_outlinePixmapCacheValid = true;
         }
 
         painter.save();
         painter.translate(m_position);
         painter.scale(1, -1);  // Un-flip Y for text
-        painter.drawPath(path);
+        // Draw the pre-rendered pixmap
+        QRectF target = m_outlinePixmapRect;
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        painter.drawPixmap(target, m_outlinePixmapCache, QRectF(m_outlinePixmapCache.rect()));
         painter.restore();
     }
 }
@@ -97,6 +148,7 @@ double TextEntity::distanceTo(const QPointF& point) const
 void TextEntity::translate(const QPointF& delta)
 {
     m_position += delta;
+    m_boundingRectCacheValid = false;
 }
 
 std::unique_ptr<Entity> TextEntity::clone() const
@@ -113,6 +165,22 @@ std::unique_ptr<Entity> TextEntity::clone() const
     copy->m_ssResolution = m_ssResolution;
     copy->m_ssSmoothing = m_ssSmoothing;
     copy->m_ssCleanup = m_ssCleanup;
+    copy->m_ssMergeGap = m_ssMergeGap;
+    copy->m_ssMinSegLen = m_ssMinSegLen;
+
+    // Copy render caches to avoid expensive recomputation (e.g. during drag)
+    copy->m_ssCache = m_ssCache;
+    copy->m_ssCacheValid = m_ssCacheValid;
+    copy->m_ssLineCache = m_ssLineCache;
+    copy->m_ssLineCacheValid = m_ssLineCacheValid;
+    copy->m_ssLineCachePos = m_ssLineCachePos;
+    copy->m_outlinePathCache = m_outlinePathCache;
+    copy->m_outlinePathCacheValid = m_outlinePathCacheValid;
+    copy->m_outlinePixmapCache = m_outlinePixmapCache;
+    copy->m_outlinePixmapCacheValid = m_outlinePixmapCacheValid;
+    copy->m_outlinePixmapRect = m_outlinePixmapRect;
+    copy->m_boundingRectCache = m_boundingRectCache;
+    copy->m_boundingRectCacheValid = m_boundingRectCacheValid;
     return copy;
 }
 
@@ -286,6 +354,8 @@ QJsonObject TextEntity::toJson() const
         json["ssResolution"] = m_ssResolution;
         json["ssSmoothing"] = m_ssSmoothing;
         json["ssCleanup"] = m_ssCleanup;
+        json["ssMergeGap"] = m_ssMergeGap;
+        json["ssMinSegLen"] = m_ssMinSegLen;
     }
     return json;
 }
@@ -304,6 +374,8 @@ std::unique_ptr<TextEntity> TextEntity::fromJson(const QJsonObject& json)
     entity->m_ssResolution = json["ssResolution"].toInt(256);
     entity->m_ssSmoothing = json["ssSmoothing"].toDouble(1.5);
     entity->m_ssCleanup = json["ssCleanup"].toInt(8);
+    entity->m_ssMergeGap = json["ssMergeGap"].toDouble(4.0);
+    entity->m_ssMinSegLen = json["ssMinSegLen"].toDouble(3.0);
 
     QString fontMode = json["fontMode"].toString("system");
     if (fontMode == "vector") {
@@ -414,7 +486,7 @@ const QList<QPolygonF>& TextEntity::singleStrokes() const
         font.setPointSizeF(m_fontSize);
         m_ssCache = SingleStrokeConverter::convert(
             m_text, font, 1.5,
-            {m_ssResolution, m_ssSmoothing, m_ssCleanup, 0});
+            {m_ssResolution, m_ssSmoothing, m_ssCleanup, 0, m_ssMergeGap, m_ssMinSegLen});
         m_ssCacheValid = true;
     }
     return m_ssCache;
