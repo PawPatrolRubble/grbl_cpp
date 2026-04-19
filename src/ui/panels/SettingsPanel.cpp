@@ -6,16 +6,107 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QHeaderView>
+#include <QColorDialog>
+#include <QScrollArea>
+
+static void setButtonColor(QPushButton *btn, const QColor &c)
+{
+    btn->setStyleSheet(
+        QString("background-color: rgba(%1,%2,%3,%4); border: 1px solid #666; border-radius: 3px; min-width: 40px; min-height: 20px;")
+            .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha()));
+    btn->setProperty("_color", QVariant::fromValue(c));
+}
+
+static QColor buttonColor(QPushButton *btn)
+{
+    return btn->property("_color").value<QColor>();
+}
 
 SettingsPanel::SettingsPanel(QWidget *parent)
     : QWidget(parent)
 {
     setObjectName("settingsPanel");
     setAttribute(Qt::WA_StyledBackground, true);
-    auto *mainLayout = new QVBoxLayout(this);
+
+    // Scrollable content
+    auto *outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    auto *scroll = new QScrollArea();
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto *content = new QWidget();
+    auto *mainLayout = new QVBoxLayout(content);
     mainLayout->setContentsMargins(8, 8, 8, 8);
 
+    // =====================================================================
+    // Canvas Settings section
+    // =====================================================================
+    auto *canvasLabel = new QLabel("Canvas Settings");
+    canvasLabel->setObjectName("sectionTitle");
+    mainLayout->addWidget(canvasLabel);
+
+    auto *canvasForm = new QFormLayout();
+
+    m_paperColorBtn = new QPushButton();
+    setButtonColor(m_paperColorBtn, SettingsManager::CanvasSettings{}.paperColor);
+    connect(m_paperColorBtn, &QPushButton::clicked, this, [this]() {
+        QColor c = QColorDialog::getColor(buttonColor(m_paperColorBtn), this, "Paper Color",
+                                          QColorDialog::ShowAlphaChannel);
+        if (c.isValid()) { setButtonColor(m_paperColorBtn, c); emitCanvasChanged(); }
+    });
+    canvasForm->addRow("Paper Color:", m_paperColorBtn);
+
+    m_showRuledLines = new QCheckBox("Show ruled lines");
+    m_showRuledLines->setChecked(true);
+    connect(m_showRuledLines, &QCheckBox::toggled, this, &SettingsPanel::emitCanvasChanged);
+    canvasForm->addRow(m_showRuledLines);
+
+    m_lineSpacing = new QDoubleSpinBox();
+    m_lineSpacing->setRange(1.0, 100.0);
+    m_lineSpacing->setDecimals(1);
+    m_lineSpacing->setSuffix(" mm");
+    m_lineSpacing->setValue(8.0);
+    connect(m_lineSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsPanel::emitCanvasChanged);
+    canvasForm->addRow("Line Spacing:", m_lineSpacing);
+
+    m_lineColorBtn = new QPushButton();
+    setButtonColor(m_lineColorBtn, SettingsManager::CanvasSettings{}.lineColor);
+    connect(m_lineColorBtn, &QPushButton::clicked, this, [this]() {
+        QColor c = QColorDialog::getColor(buttonColor(m_lineColorBtn), this, "Line Color",
+                                          QColorDialog::ShowAlphaChannel);
+        if (c.isValid()) { setButtonColor(m_lineColorBtn, c); emitCanvasChanged(); }
+    });
+    canvasForm->addRow("Line Color:", m_lineColorBtn);
+
+    m_showMarginLine = new QCheckBox("Show margin line");
+    m_showMarginLine->setChecked(true);
+    connect(m_showMarginLine, &QCheckBox::toggled, this, &SettingsPanel::emitCanvasChanged);
+    canvasForm->addRow(m_showMarginLine);
+
+    m_marginOffset = new QDoubleSpinBox();
+    m_marginOffset->setRange(0.0, 200.0);
+    m_marginOffset->setDecimals(1);
+    m_marginOffset->setSuffix(" mm");
+    m_marginOffset->setValue(10.0);
+    connect(m_marginOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsPanel::emitCanvasChanged);
+    canvasForm->addRow("Margin Offset:", m_marginOffset);
+
+    m_marginColorBtn = new QPushButton();
+    setButtonColor(m_marginColorBtn, SettingsManager::CanvasSettings{}.marginColor);
+    connect(m_marginColorBtn, &QPushButton::clicked, this, [this]() {
+        QColor c = QColorDialog::getColor(buttonColor(m_marginColorBtn), this, "Margin Color",
+                                          QColorDialog::ShowAlphaChannel);
+        if (c.isValid()) { setButtonColor(m_marginColorBtn, c); emitCanvasChanged(); }
+    });
+    canvasForm->addRow("Margin Color:", m_marginColorBtn);
+
+    mainLayout->addLayout(canvasForm);
+
+    // =====================================================================
     // Jog Defaults section
+    // =====================================================================
     auto *jogLabel = new QLabel("Jog Defaults");
     jogLabel->setObjectName("sectionTitle");
     mainLayout->addWidget(jogLabel);
@@ -78,6 +169,31 @@ SettingsPanel::SettingsPanel(QWidget *parent)
             this, [this]() {
                 emit jogDefaultsChanged(m_jogStepSpin->value(), m_jogFeedSpin->value());
             });
+
+    // =====================================================================
+    // Save button
+    // =====================================================================
+    mainLayout->addSpacing(12);
+    auto *saveBtn = new QPushButton("Save Settings");
+    saveBtn->setObjectName("saveSettingsBtn");
+    connect(saveBtn, &QPushButton::clicked, this, [this]() {
+        auto &sm = SettingsManager::instance();
+        sm.setCanvasSettings(currentCanvasSettings());
+        sm.setJogStepSize(m_jogStepSpin->value());
+        sm.setJogFeedRate(m_jogFeedSpin->value());
+        sm.save();
+    });
+    mainLayout->addWidget(saveBtn);
+
+    mainLayout->addStretch();
+    scroll->setWidget(content);
+    outerLayout->addWidget(scroll);
+
+    // Load initial values from settings singleton
+    auto &sm = SettingsManager::instance();
+    applyCanvasSettings(sm.canvasSettings());
+    m_jogStepSpin->setValue(sm.jogStepSize());
+    m_jogFeedSpin->setValue(sm.jogFeedRate());
 }
 
 double SettingsPanel::jogStepSize() const
@@ -158,4 +274,43 @@ QString SettingsPanel::grblSettingDescription(int id)
         {132, "Z max travel (mm)"},
     };
     return desc.value(id, "");
+}
+
+void SettingsPanel::applyCanvasSettings(const SettingsManager::CanvasSettings &s)
+{
+    m_showRuledLines->blockSignals(true);
+    m_lineSpacing->blockSignals(true);
+    m_showMarginLine->blockSignals(true);
+    m_marginOffset->blockSignals(true);
+
+    m_showRuledLines->setChecked(s.showRuledLines);
+    m_lineSpacing->setValue(s.lineSpacing);
+    setButtonColor(m_lineColorBtn, s.lineColor);
+    m_showMarginLine->setChecked(s.showMarginLine);
+    m_marginOffset->setValue(s.marginOffset);
+    setButtonColor(m_marginColorBtn, s.marginColor);
+    setButtonColor(m_paperColorBtn, s.paperColor);
+
+    m_showRuledLines->blockSignals(false);
+    m_lineSpacing->blockSignals(false);
+    m_showMarginLine->blockSignals(false);
+    m_marginOffset->blockSignals(false);
+}
+
+SettingsManager::CanvasSettings SettingsPanel::currentCanvasSettings() const
+{
+    SettingsManager::CanvasSettings s;
+    s.showRuledLines = m_showRuledLines->isChecked();
+    s.lineSpacing    = m_lineSpacing->value();
+    s.lineColor      = buttonColor(m_lineColorBtn);
+    s.showMarginLine = m_showMarginLine->isChecked();
+    s.marginOffset   = m_marginOffset->value();
+    s.marginColor    = buttonColor(m_marginColorBtn);
+    s.paperColor     = buttonColor(m_paperColorBtn);
+    return s;
+}
+
+void SettingsPanel::emitCanvasChanged()
+{
+    emit canvasSettingsChanged(currentCanvasSettings());
 }

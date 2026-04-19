@@ -25,6 +25,8 @@
 #include <QDialogButtonBox>
 #include <QStackedWidget>
 #include <QLineEdit>
+#include <QListWidget>
+#include <QPlainTextEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -94,6 +96,14 @@ void GraphicsDesignPanel::setupUi()
     m_snapBtn->setToolTip("Toggle grid/entity snap (S)");
     m_snapBtn->setMinimumWidth(50);
     toolBar->addWidget(m_snapBtn);
+
+    auto *fitBtn = new QToolButton();
+    fitBtn->setText("Fit");
+    fitBtn->setToolTip("Auto-fit worktable to view");
+    fitBtn->setMinimumWidth(40);
+    connect(fitBtn, &QToolButton::clicked, m_canvas, &DesignCanvas::autoFit);
+    toolBar->addWidget(fitBtn);
+
     toolBar->addStretch();
     rightLayout->addLayout(toolBar);
 
@@ -127,6 +137,13 @@ void GraphicsDesignPanel::setupUi()
     buildCirclePage();
     buildArcPage();
     buildTextPage();
+
+    // Entity list for selective G-code generation
+    rightLayout->addWidget(new QLabel("Entities:"));
+    m_entityList = new QListWidget();
+    m_entityList->setMaximumHeight(120);
+    m_entityList->setSelectionMode(QAbstractItemView::SingleSelection);
+    rightLayout->addWidget(m_entityList);
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
@@ -383,13 +400,22 @@ void GraphicsDesignPanel::buildTextPage()
     m_textPosY->setDecimals(2);
     layout->addRow("Pos Y:", m_textPosY);
 
-    m_textEdit = new QLineEdit();
+    m_textEdit = new QPlainTextEdit();
+    m_textEdit->setMaximumHeight(80);
+    m_textEdit->setTabChangesFocus(true);
     layout->addRow("Text:", m_textEdit);
 
     m_textFontSize = new QDoubleSpinBox();
     m_textFontSize->setRange(1, 100000);
     m_textFontSize->setDecimals(2);
     layout->addRow("Font Size:", m_textFontSize);
+
+    m_textLineHeight = new QDoubleSpinBox();
+    m_textLineHeight->setRange(0.5, 5.0);
+    m_textLineHeight->setDecimals(2);
+    m_textLineHeight->setSingleStep(0.1);
+    m_textLineHeight->setValue(1.5);
+    layout->addRow("Line Height:", m_textLineHeight);
 
     m_textFontModeCombo = new QComboBox();
     m_textFontModeCombo->addItem("Vector Font");
@@ -512,7 +538,7 @@ void GraphicsDesignPanel::buildTextPage()
 
     auto detectCJK = [this]() {
         if (m_updatingUi) return;
-        QString txt = m_textEdit->text();
+        QString txt = m_textEdit->toPlainText();
         if (textContainsCJK(txt)) {
             bool isVector = (m_textFontModeCombo->currentIndex() == 0);
             if (isVector) {
@@ -525,7 +551,7 @@ void GraphicsDesignPanel::buildTextPage()
             }
         }
     };
-    connect(m_textEdit, &QLineEdit::textChanged, this, detectCJK);
+    connect(m_textEdit, &QPlainTextEdit::textChanged, this, detectCJK);
 
     m_propertyStack->addWidget(page);
 }
@@ -550,7 +576,22 @@ void GraphicsDesignPanel::setupConnections()
 
     // Document changes
     connect(m_canvas, &DesignCanvas::documentStateChanged, this, &GraphicsDesignPanel::updatePreview);
+    connect(m_canvas, &DesignCanvas::documentStateChanged, this, &GraphicsDesignPanel::refreshEntityList);
     connect(m_canvas, &DesignCanvas::selectedEntityChanged, this, &GraphicsDesignPanel::onSelectionChanged);
+
+    // Entity list checkbox
+    connect(m_entityList, &QListWidget::itemChanged, this, &GraphicsDesignPanel::onEntityItemChanged);
+
+    // Click entity list item to select on canvas
+    connect(m_entityList, &QListWidget::currentRowChanged, this, [this](int row) {
+        if (m_updatingUi) return;
+        Document *doc = m_canvas->document();
+        if (row >= 0 && row < doc->entityCount()) {
+            Entity *e = doc->entityAt(row);
+            doc->setSelected(e->id(), true);
+            m_canvas->update();
+        }
+    });
 
     // Buttons
     connect(m_deleteBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onDeleteSelectedClicked);
@@ -614,9 +655,11 @@ void GraphicsDesignPanel::setupConnections()
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textPosY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphicsDesignPanel::applyTextProperties);
-    connect(m_textEdit, &QLineEdit::textChanged,
+    connect(m_textEdit, &QPlainTextEdit::textChanged,
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textFontSize, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textLineHeight, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textFontModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &GraphicsDesignPanel::applyTextProperties);
@@ -743,12 +786,14 @@ void GraphicsDesignPanel::onSelectionChanged()
             QSignalBlocker b4(m_textFontModeCombo);
             QSignalBlocker b5(m_textVectorFontCombo);
             QSignalBlocker b6(m_textSystemFontCombo);
+            QSignalBlocker b7(m_textLineHeight);
             m_textPosX->setValue(text->position().x());
             m_textPosY->setValue(text->position().y());
             m_textEdit->blockSignals(true);
-            m_textEdit->setText(text->text());
+            m_textEdit->setPlainText(text->text());
             m_textEdit->blockSignals(false);
             m_textFontSize->setValue(text->fontSize());
+            m_textLineHeight->setValue(text->lineHeight());
 
             bool isVector = (text->fontMode() == TextEntity::FontMode::VectorFont);
             m_textFontModeCombo->setCurrentIndex(isVector ? 0 : 1);
@@ -802,7 +847,50 @@ void GraphicsDesignPanel::onSelectionChanged()
         break;
     }
 
+    // Sync entity list selection
+    if (entity) {
+        Document *doc = m_canvas->document();
+        for (int i = 0; i < doc->entityCount(); ++i) {
+            if (doc->entityAt(i)->id() == entity->id()) {
+                m_entityList->blockSignals(true);
+                m_entityList->setCurrentRow(i);
+                m_entityList->blockSignals(false);
+                break;
+            }
+        }
+    }
+
     m_updatingUi = false;
+}
+
+void GraphicsDesignPanel::refreshEntityList()
+{
+    m_entityList->blockSignals(true);
+    m_entityList->clear();
+
+    Document *doc = m_canvas->document();
+    for (int i = 0; i < doc->entityCount(); ++i) {
+        Entity *e = doc->entityAt(i);
+        auto *item = new QListWidgetItem(e->displayName());
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(e->isEnabled() ? Qt::Checked : Qt::Unchecked);
+        item->setData(Qt::UserRole, QVariant::fromValue(e->id()));
+        m_entityList->addItem(item);
+    }
+
+    m_entityList->blockSignals(false);
+}
+
+void GraphicsDesignPanel::onEntityItemChanged(QListWidgetItem *item)
+{
+    int row = m_entityList->row(item);
+    Document *doc = m_canvas->document();
+    if (row >= 0 && row < doc->entityCount()) {
+        Entity *e = doc->entityAt(row);
+        e->setEnabled(item->checkState() == Qt::Checked);
+        m_canvas->update();
+        updatePreview();
+    }
 }
 
 void GraphicsDesignPanel::updatePreview()
@@ -1221,9 +1309,10 @@ void GraphicsDesignPanel::applyTextProperties()
     const auto *text = static_cast<const TextEntity*>(entity);
     auto newText = std::make_unique<TextEntity>(
         QPointF(m_textPosX->value(), m_textPosY->value()),
-        m_textEdit->text(),
+        m_textEdit->toPlainText(),
         m_textFontSize->value());
     newText->setLetterSpacing(text->letterSpacing());
+    newText->setLineHeight(m_textLineHeight->value());
     newText->setMaxWidth(text->maxWidth());
 
     bool isVector = (m_textFontModeCombo->currentIndex() == 0);

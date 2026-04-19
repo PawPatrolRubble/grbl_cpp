@@ -78,8 +78,16 @@ public:
     double rotation() const { return m_rotation; }
     void setRotation(double degrees) { m_rotation = degrees; }
 
+    // Enable/disable for selective G-code generation
+    bool isEnabled() const { return m_enabled; }
+    void setEnabled(bool enabled) { m_enabled = enabled; }
+
+    // Display name for entity list
+    virtual QString displayName() const;
+
 protected:
     QUuid m_id;
     Kind m_kind;
     double m_rotation = 0.0;
+    bool m_enabled = true;
 };

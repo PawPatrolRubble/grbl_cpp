@@ -87,9 +87,9 @@ void TextEntity::draw(QPainter& painter) const
             font.setPointSizeF(m_fontSize);
 
             m_outlinePathCache = QPainterPath();
-            QStringList lines = m_text.split('\n');
+            QStringList lines = autoWrappedText().split('\n');
             double yOffset = 0.0;
-            double lineHeight = m_fontSize * 1.5;
+            double lineHeight = m_fontSize * m_lineHeight;
             for (const QString& line : lines) {
                 if (!line.isEmpty()) {
                     m_outlinePathCache.addText(0, yOffset, font, line);
@@ -151,6 +151,13 @@ void TextEntity::translate(const QPointF& delta)
     m_boundingRectCacheValid = false;
 }
 
+QString TextEntity::displayName() const
+{
+    QString preview = m_text.left(20).simplified();
+    if (m_text.length() > 20) preview += "...";
+    return QString("Text: %1").arg(preview);
+}
+
 std::unique_ptr<Entity> TextEntity::clone() const
 {
     auto copy = std::make_unique<TextEntity>(m_position, m_text, m_fontSize);
@@ -160,6 +167,7 @@ std::unique_ptr<Entity> TextEntity::clone() const
     copy->m_vectorFontPath = m_vectorFontPath;
     copy->m_vectorFontData = m_vectorFontData;
     copy->m_letterSpacing = m_letterSpacing;
+    copy->m_lineHeight = m_lineHeight;
     copy->m_maxWidth = m_maxWidth;
     copy->m_singleStroke = m_singleStroke;
     copy->m_ssResolution = m_ssResolution;
@@ -208,6 +216,12 @@ std::unique_ptr<Entity> TextEntity::withDraggedHandle(const QString& handleId, c
             double newWidth = std::abs(worldPos.x() - m_position.x());
             double scale = newWidth / origWidth;
             updated->m_fontSize = std::max(1.0, m_fontSize * scale);
+            // Invalidate all render caches since font size changed
+            updated->m_ssCacheValid = false;
+            updated->m_ssLineCacheValid = false;
+            updated->m_outlinePathCacheValid = false;
+            updated->m_outlinePixmapCacheValid = false;
+            updated->m_boundingRectCacheValid = false;
         }
     }
     return updated;
@@ -275,9 +289,9 @@ QList<GcodeMove> TextEntity::toGcodeMoves(double zSafe, double zCut, double feed
         } else {
             // Outline polygons via QPainterPath
             QPainterPath path;
-            QStringList lines = m_text.split('\n');
+            QStringList lines = autoWrappedText().split('\n');
             double yOffset = 0.0;
-            double lineHeight = m_fontSize * 1.5;
+            double lineHeight = m_fontSize * m_lineHeight;
             for (const QString& line : lines) {
                 if (!line.isEmpty()) {
                     path.addText(0, yOffset, font, line);
@@ -342,6 +356,7 @@ QJsonObject TextEntity::toJson() const
     json["text"] = m_text;
     json["fontSize"] = m_fontSize;
     json["letterSpacing"] = m_letterSpacing;
+    json["lineHeight"] = m_lineHeight;
     json["maxWidth"] = m_maxWidth;
     json["fontMode"] = (m_fontMode == FontMode::VectorFont) ? "vector" : "system";
     json["fontFamily"] = m_fontFamily;
@@ -368,6 +383,7 @@ std::unique_ptr<TextEntity> TextEntity::fromJson(const QJsonObject& json)
     auto entity = std::make_unique<TextEntity>(pos, text, fontSize);
     entity->setRotation(json["rotation"].toDouble(0));
     entity->m_letterSpacing = json["letterSpacing"].toDouble(1.2);
+    entity->m_lineHeight = json["lineHeight"].toDouble(1.5);
     entity->m_maxWidth = json["maxWidth"].toDouble(0.0);
     entity->m_fontFamily = json["fontFamily"].toString("Sans Serif");
     entity->m_singleStroke = json["singleStroke"].toBool(false);
@@ -497,7 +513,7 @@ QList<QList<QPointF>> TextEntity::computeVectorStrokes() const
     QList<QList<QPointF>> result;
     if (m_vectorFontData.isEmpty() || m_text.isEmpty()) return result;
 
-    QString wrappedText = m_text;
+    QString wrappedText = autoWrappedText();
 
     // Compute per-glyph metrics for scaling
     double maxGlyphHeight = 0.0;
@@ -512,7 +528,7 @@ QList<QList<QPointF>> TextEntity::computeVectorStrokes() const
 
     double cursorX = m_position.x();
     double cursorY = m_position.y();
-    double lineHeight = m_fontSize * 1.5;
+    double lineHeight = m_fontSize * m_lineHeight;
 
     for (int i = 0; i < wrappedText.length(); ++i) {
         QChar c = wrappedText.at(i);
@@ -584,12 +600,12 @@ QRectF TextEntity::computeBoundingRect() const
     QFont font(m_fontFamily);
     font.setPointSizeF(m_fontSize);
     QFontMetricsF fm(font);
-    QStringList lines = m_text.split('\n');
+    QStringList lines = autoWrappedText().split('\n');
     double maxWidth = 0.0;
     for (const QString& line : lines) {
         maxWidth = std::max(maxWidth, fm.horizontalAdvance(line));
     }
-    double totalHeight = lines.size() * m_fontSize * 1.5;
+    double totalHeight = lines.size() * m_fontSize * m_lineHeight;
     QRectF textRect(m_position.x(), m_position.y() - totalHeight,
                     maxWidth, totalHeight);
     return textRect;

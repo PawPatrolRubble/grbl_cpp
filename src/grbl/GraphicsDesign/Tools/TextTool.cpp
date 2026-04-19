@@ -229,9 +229,6 @@ auto detectCJK = [&]() {
         entity->setFontFamily(m_fontFamily);
     }
 
-    // Apply auto word-wrap based on worktable width before storing
-    entity->setText(entity->autoWrappedText());
-
     commandStack().execute(std::make_unique<AddEntityCommand>(std::move(entity)));
 }
 

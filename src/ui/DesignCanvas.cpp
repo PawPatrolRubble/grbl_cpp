@@ -87,6 +87,11 @@ DesignCanvas::DesignCanvas(QWidget *parent)
 
     emitToolStatus();
     emitUndoRedoState();
+
+    // Load canvas settings from singleton and auto-update on change
+    m_canvasSettings = SettingsManager::instance().canvasSettings();
+    connect(&SettingsManager::instance(), &SettingsManager::canvasSettingsChanged,
+            this, &DesignCanvas::setCanvasSettings);
 }
 
 QString DesignCanvas::activeToolName() const
@@ -188,6 +193,13 @@ void DesignCanvas::setWorktableSize(const QSizeF &size)
     m_worktableSize = size;
     m_document.setWorktableWidth(size.width());
     autoFit();
+}
+
+void DesignCanvas::setCanvasSettings(const SettingsManager::CanvasSettings &s)
+{
+    m_canvasSettings = s;
+    m_entityCacheDirty = true;
+    scheduleUpdate();
 }
 
 void DesignCanvas::setSnapEnabled(bool enabled)
@@ -444,6 +456,43 @@ void DesignCanvas::drawWorktable(QPainter& painter)
     QPointF tr(m_worktableSize.width(), m_worktableSize.height());
     QPointF tl(0, m_worktableSize.height());
 
+    // Fill worktable with paper background
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(m_canvasSettings.paperColor);
+    painter.drawRect(QRectF(bl, tr));
+
+    double tableW = m_worktableSize.width();
+    double tableH = m_worktableSize.height();
+
+    // Ruled horizontal lines (like lined paper)
+    if (m_canvasSettings.showRuledLines && m_canvasSettings.lineSpacing > 0) {
+        double spacing = m_canvasSettings.lineSpacing;
+        int lineCount = static_cast<int>(tableH / spacing);
+
+        QVector<QLineF> ruledLines;
+        ruledLines.reserve(lineCount);
+        for (int i = 1; i <= lineCount; ++i) {
+            double y = i * spacing;
+            if (y >= tableH) break;
+            ruledLines.append(QLineF(QPointF(0, y), QPointF(tableW, y)));
+        }
+        QPen ruledPen(m_canvasSettings.lineColor);
+        ruledPen.setWidthF(0.3);
+        painter.setPen(ruledPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLines(ruledLines);
+    }
+
+    // Left margin line
+    if (m_canvasSettings.showMarginLine) {
+        QPen marginPen(m_canvasSettings.marginColor);
+        marginPen.setWidthF(0.3);
+        painter.setPen(marginPen);
+        painter.drawLine(QPointF(m_canvasSettings.marginOffset, 0),
+                         QPointF(m_canvasSettings.marginOffset, tableH));
+    }
+
+    // Worktable border
     painter.setPen(QPen(QColor("#9ca3af"), 0.5, Qt::DotLine));
     painter.drawLine(bl, br);
     painter.drawLine(br, tr);
@@ -521,8 +570,14 @@ void DesignCanvas::drawEntities(QPainter& painter)
         if (!visibleRect.intersects(entity->boundingRect()))
             continue;
         bool isSelected = (selected && entity->id() == selected->id());
+        if (!entity->isEnabled()) {
+            painter.setOpacity(0.3);
+        }
         painter.setPen(isSelected ? createSelectedPen() : createEntityPen());
         entity->draw(painter);
+        if (!entity->isEnabled()) {
+            painter.setOpacity(1.0);
+        }
     }
 }
 

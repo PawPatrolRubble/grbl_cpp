@@ -14,6 +14,9 @@ class QLabel;
 class QDoubleSpinBox;
 class QStackedWidget;
 class QLineEdit;
+class QListWidget;
+class QListWidgetItem;
+class QPlainTextEdit;
 class LineNumberPlainTextEdit;
 class Entity;
 
@@ -26,6 +29,7 @@ public:
     ~GraphicsDesignPanel() = default;
 
     void setWorktableSize(const QSizeF &size);
+    DesignCanvas* canvas() const { return m_canvas; }
 
     struct Options {
         double feedRateXY = 2000.0;
@@ -77,6 +81,7 @@ private:
     QDoubleSpinBox *m_fastHeightSpinBox;
     QDoubleSpinBox *m_workHeightSpinBox;
     LineNumberPlainTextEdit *m_gcodePreview;
+    QListWidget *m_entityList;
 
     QStackedWidget *m_propertyStack;
     bool m_updatingUi = false;
@@ -106,8 +111,9 @@ private:
 
     QDoubleSpinBox *m_textPosX;
     QDoubleSpinBox *m_textPosY;
-    QLineEdit *m_textEdit;
+    QPlainTextEdit *m_textEdit;
     QDoubleSpinBox *m_textFontSize;
+    QDoubleSpinBox *m_textLineHeight;
     QComboBox *m_textFontModeCombo;
     QComboBox *m_textVectorFontCombo;
     QFontComboBox *m_textSystemFontCombo;
@@ -131,5 +137,7 @@ private:
     void buildCirclePage();
     void buildArcPage();
     void buildTextPage();
+    void refreshEntityList();
+    void onEntityItemChanged(QListWidgetItem *item);
     void applyProperties(int index, std::unique_ptr<Entity> newEntity);
 };
