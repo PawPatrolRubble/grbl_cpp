@@ -1,9 +1,8 @@
 #pragma once
 
 #include <QWidget>
-#include <QPushButton>
-#include <QSlider>
-#include <QLabel>
+
+namespace Ui { class ControlPanel; }
 
 class ControlPanel : public QWidget
 {
@@ -11,6 +10,7 @@ class ControlPanel : public QWidget
 
 public:
     explicit ControlPanel(QWidget *parent = nullptr);
+    ~ControlPanel();
 
 public slots:
     void setConnected(bool connected);
@@ -33,14 +33,5 @@ signals:
     void statusRequested();
 
 private:
-    QPushButton *m_loadBtn;
-    QPushButton *m_startBtn;
-    QPushButton *m_pauseBtn;
-    QPushButton *m_resumeBtn;
-    QPushButton *m_stopBtn;
-    QLabel *m_progressLabel;
-    QSlider *m_feedOverrideSlider;
-    QLabel *m_feedOverrideLabel;
-    QSlider *m_spindleOverrideSlider;
-    QLabel *m_spindleOverrideLabel;
+    Ui::ControlPanel *ui;
 };
