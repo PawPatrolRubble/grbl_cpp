@@ -16,16 +16,20 @@ class ToolpathPanel : public QWidget
 public:
     explicit ToolpathPanel(QWidget *parent = nullptr);
 
+    void setWorktableSize(const QSizeF &size);
     void setGcodeLines(const QStringList &lines);
     void setMoves(const QList<GcodeMove> &moves);
     void setExecutingLine(int lineNumber);
     void setCutterPosition(const QVector3D &pos);
+    void clearAll();
+    bool returnToOriginEnabled() const;
 
     QStringList currentGcodeLines() const;
 
 signals:
     void lineSelected(int lineNumber);
     void gcodeTransformed(const QStringList &newLines);
+    void clearRequested();
 
 private:
     GcodeListWidget *m_listWidget;

@@ -17,9 +17,7 @@ class ToolpathPanel;
 class SettingsPanel;
 class GraphicsDesignPanel;
 class DockPanel;
-class TabWidget;
-class MainPage;
-class GraphicsDesignPage;
+class CustomTitleBar;
 
 class MainWindow : public QMainWindow
 {
@@ -33,26 +31,52 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void changeEvent(QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
-    void setupTabs();
+    void setupUi();
+    void setupTitleBar();
+    void setupDocks();
+    void setupDockTabBars();
     void setupMenuBar();
     void setupStatusBar();
     void setupConnections();
+    void saveLayout();
+    void restoreLayout();
     void loadAndParseFile(const QString &filePath);
-    void openGraphicsDesignTab();
-    void closeTab(int index);
+    void updateTitleBarButtons();
+
+    /// Create a dock panel for the given widget.
+    DockPanel *createDock(const QString &title, QWidget *widget,
+                          Qt::DockWidgetArea area,
+                          bool closable = true);
 
     Ui::MainWindow *ui;
+    CustomTitleBar *m_titleBar;
 
     ApplicationCore *m_core;
     SettingsManager *m_settings;
     QFutureWatcher<QList<GcodeMove>> *m_parseWatcher;
 
-    // Tab navigation
-    TabWidget *m_tabs;
-    MainPage *m_mainPage;
+    // Dock panels
+    DockPanel *m_dockConnection;
+    DockPanel *m_dockStatus;
+    DockPanel *m_dockControl;
+    DockPanel *m_dockJog;
+    DockPanel *m_dockSettings;
+    DockPanel *m_dockToolpath;
+    DockPanel *m_dockConsole;
+    DockPanel *m_dockDesign;
 
-    // Active design tabs (for tracking multiple open designs)
-    QList<GraphicsDesignPage*> m_designPages;
+    // Inner widgets (owned by docks)
+    ConnectionPanel *m_connectionPanel;
+    StatusPanel     *m_statusPanel;
+    ControlPanel    *m_controlPanel;
+    JogPanel        *m_jogPanel;
+    SettingsPanel   *m_settingsPanel;
+    ToolpathPanel   *m_toolpathPanel;
+    ConsolePanel    *m_consolePanel;
+    GraphicsDesignPanel *m_graphicsDesignPanel;
+
 };

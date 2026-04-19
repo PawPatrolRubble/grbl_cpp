@@ -15,6 +15,7 @@ ApplicationCore::ApplicationCore(QObject *parent)
     , m_gcodeParser(new GcodeParser(this))
     , m_fileManager(new FileManager(this))
 {
+    m_streamer->setSerialManager(m_serialManager);
     wireServices();
 }
 
@@ -39,6 +40,12 @@ void ApplicationCore::wireServices()
             this, [this](bool connected) {
                 if (!connected)
                     m_streamer->onDisconnected();
+                else {
+                    // Request current G-code state and coordinate offsets
+                    // so WCO is initialized immediately after connecting.
+                    m_serialManager->sendCommand("$G");
+                    m_serialManager->sendCommand("$#");
+                }
             });
 
     // GcodeStreamer → SerialManager (command output)

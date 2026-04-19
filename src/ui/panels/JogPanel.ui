@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>JogPanel</class>
+ <widget class="QWidget" name="jogPanel">
+  <property name="objectName">
+   <string>jogPanel</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="leftMargin"><number>8</number></property>
+   <property name="topMargin"><number>8</number></property>
+   <property name="rightMargin"><number>8</number></property>
+   <property name="bottomMargin"><number>8</number></property>
+
+   <!-- Mode / Step row -->
+   <item>
+    <layout class="QHBoxLayout" name="modeRow">
+     <item>
+      <widget class="QLabel" name="modeLabel">
+       <property name="text"><string>Mode:</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="jogModeCombo">
+       <property name="currentIndex"><number>0</number></property>
+       <item><property name="text"><string>Continuous</string></property></item>
+       <item><property name="text"><string>Step</string></property></item>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="stepLabel">
+       <property name="text"><string>Step:</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSlider" name="jogStepSlider">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="minimum"><number>1</number></property>
+       <property name="maximum"><number>100</number></property>
+       <property name="value"><number>10</number></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="jogStepLabel">
+       <property name="text"><string>1.0 mm</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Feed row -->
+   <item>
+    <layout class="QHBoxLayout" name="feedRow">
+     <item>
+      <widget class="QLabel" name="feedLabel">
+       <property name="text"><string>Feed:</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="jogFeedSpin">
+       <property name="minimum"><double>1</double></property>
+       <property name="maximum"><double>30000</double></property>
+       <property name="value"><double>1000</double></property>
+       <property name="suffix"><string> mm/min</string></property>
+       <property name="decimals"><number>0</number></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Directional pad -->
+   <item>
+    <layout class="QGridLayout" name="dPadGrid">
+     <item row="0" column="1">
+      <widget class="QPushButton" name="btnYPlus">
+       <property name="text"><string>Y+</string></property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QPushButton" name="btnXMinus">
+       <property name="text"><string>X-</string></property>
+      </widget>
+     </item>
+     <item row="1" column="2">
+      <widget class="QPushButton" name="btnXPlus">
+       <property name="text"><string>X+</string></property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QPushButton" name="btnYMinus">
+       <property name="text"><string>Y-</string></property>
+      </widget>
+     </item>
+     <item row="0" column="3">
+      <widget class="QPushButton" name="btnZPlus">
+       <property name="text"><string>Z+</string></property>
+      </widget>
+     </item>
+     <item row="2" column="3">
+      <widget class="QPushButton" name="btnZMinus">
+       <property name="text"><string>Z-</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Go To Position group -->
+   <item>
+    <widget class="QGroupBox" name="absGroup">
+     <property name="title"><string>Go To Position</string></property>
+     <layout class="QGridLayout" name="absGrid">
+      <property name="leftMargin"><number>4</number></property>
+      <property name="topMargin"><number>4</number></property>
+      <property name="rightMargin"><number>4</number></property>
+      <property name="bottomMargin"><number>4</number></property>
+
+      <item row="0" column="0">
+       <widget class="QLabel" name="absXLabel">
+        <property name="text"><string>X:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="absXEdit">
+        <property name="placeholderText"><string>0.000</string></property>
+        <property name="maximumSize"><size><width>100</width><height>16777215</height></size></property>
+       </widget>
+      </item>
+
+      <item row="0" column="2">
+       <widget class="QLabel" name="absYLabel">
+        <property name="text"><string>Y:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLineEdit" name="absYEdit">
+        <property name="placeholderText"><string>0.000</string></property>
+        <property name="maximumSize"><size><width>100</width><height>16777215</height></size></property>
+       </widget>
+      </item>
+
+      <item row="0" column="4">
+       <widget class="QLabel" name="absZLabel">
+        <property name="text"><string>Z:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QLineEdit" name="absZEdit">
+        <property name="placeholderText"><string>0.000</string></property>
+        <property name="maximumSize"><size><width>100</width><height>16777215</height></size></property>
+       </widget>
+      </item>
+
+      <item row="1" column="0" colspan="6">
+       <layout class="QHBoxLayout" name="goToBtnRow">
+        <item>
+         <widget class="QPushButton" name="goToAbsBtn">
+          <property name="text"><string>Go To</string></property>
+          <property name="toolTip"><string>Move all axes to absolute work position (G90 G0)</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="goToXBtn">
+          <property name="text"><string>Go X</string></property>
+          <property name="toolTip"><string>Move X axis to absolute position</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="goToYBtn">
+          <property name="text"><string>Go Y</string></property>
+          <property name="toolTip"><string>Move Y axis to absolute position</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="goToZBtn">
+          <property name="text"><string>Go Z</string></property>
+          <property name="toolTip"><string>Move Z axis to absolute position</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

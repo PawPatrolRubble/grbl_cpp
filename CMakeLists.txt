@@ -12,8 +12,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent SerialPort)
+# Qt6 and OpenCV: provide path hints for Qt Creator
+if(WIN32)
+    # Always append these paths to help Qt Creator find dependencies
+    list(APPEND CMAKE_PREFIX_PATH "C:/Qt/6.11.0/msvc2022_64")
+    list(APPEND CMAKE_PREFIX_PATH "C:/opencv/build/x64/vc16/lib")
+endif()
+
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent SerialPort Core5Compat)
 find_package(Qt6CorePrivate REQUIRED)
+
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 
 qt_standard_project_setup()
 
@@ -40,26 +49,34 @@ set(GRBL_SOURCES
     src/grbl/TextToGcode/SvgFontParser.cpp
     src/grbl/TextToGcode/HpglFontParser.cpp
     src/grbl/TextToGcode/JsonFontParser.cpp
+    src/grbl/TextToGcode/ShxFontParser.cpp
     src/grbl/TextToGcode/VectorFontLoader.cpp
     src/grbl/TextToGcode/TextToGcodeGenerator.cpp
+    src/grbl/TextToGcode/SingleStrokeConverter.cpp
     src/grbl/GraphicsDesign/Entity.cpp
-    src/grbl/GraphicsDesign/CommandStack.cpp
+    src/grbl/GraphicsDesign/Shape.cpp
     src/grbl/GraphicsDesign/Document.cpp
+    src/grbl/GraphicsDesign/CommandStack.cpp
+    src/grbl/GraphicsDesign/ShapeModel.cpp
     src/grbl/GraphicsDesign/LineEntity.cpp
+    src/grbl/GraphicsDesign/PolylineEntity.cpp
     src/grbl/GraphicsDesign/RectangleEntity.cpp
     src/grbl/GraphicsDesign/CircleEntity.cpp
     src/grbl/GraphicsDesign/ArcEntity.cpp
-    src/grbl/GraphicsDesign/Shape.cpp
+    src/grbl/GraphicsDesign/TextEntity.cpp
     src/grbl/GraphicsDesign/LineShape.cpp
     src/grbl/GraphicsDesign/RectShape.cpp
     src/grbl/GraphicsDesign/CircleShape.cpp
     src/grbl/GraphicsDesign/ArcShape.cpp
-    src/grbl/GraphicsDesign/ShapeModel.cpp
     src/grbl/GraphicsDesign/Tools/SelectTool.cpp
     src/grbl/GraphicsDesign/Tools/LineTool.cpp
     src/grbl/GraphicsDesign/Tools/RectangleTool.cpp
     src/grbl/GraphicsDesign/Tools/CircleTool.cpp
     src/grbl/GraphicsDesign/Tools/ArcTool.cpp
+    src/grbl/GraphicsDesign/Tools/TextTool.cpp
+    src/grbl/GraphicsDesign/VectorFontCatalog.cpp
+    src/grbl/ImageVectorizer.cpp
+    src/grbl/DxfParser.cpp
 )
 
 set(GRBL_HEADERS
@@ -76,27 +93,35 @@ set(GRBL_HEADERS
     src/grbl/TextToGcode/SvgFontParser.h
     src/grbl/TextToGcode/HpglFontParser.h
     src/grbl/TextToGcode/JsonFontParser.h
+    src/grbl/TextToGcode/ShxFontParser.h
     src/grbl/TextToGcode/VectorFontLoader.h
     src/grbl/TextToGcode/TextToGcodeGenerator.h
+    src/grbl/TextToGcode/SingleStrokeConverter.h
     src/grbl/GraphicsDesign/Entity.h
-    src/grbl/GraphicsDesign/CommandStack.h
+    src/grbl/GraphicsDesign/Shape.h
     src/grbl/GraphicsDesign/Document.h
+    src/grbl/GraphicsDesign/CommandStack.h
+    src/grbl/GraphicsDesign/ShapeModel.h
     src/grbl/GraphicsDesign/LineEntity.h
+    src/grbl/GraphicsDesign/PolylineEntity.h
     src/grbl/GraphicsDesign/RectangleEntity.h
     src/grbl/GraphicsDesign/CircleEntity.h
     src/grbl/GraphicsDesign/ArcEntity.h
-    src/grbl/GraphicsDesign/Shape.h
+    src/grbl/GraphicsDesign/TextEntity.h
     src/grbl/GraphicsDesign/LineShape.h
     src/grbl/GraphicsDesign/RectShape.h
     src/grbl/GraphicsDesign/CircleShape.h
     src/grbl/GraphicsDesign/ArcShape.h
-    src/grbl/GraphicsDesign/ShapeModel.h
     src/grbl/GraphicsDesign/Tools/Tool.h
     src/grbl/GraphicsDesign/Tools/SelectTool.h
     src/grbl/GraphicsDesign/Tools/LineTool.h
     src/grbl/GraphicsDesign/Tools/RectangleTool.h
     src/grbl/GraphicsDesign/Tools/CircleTool.h
     src/grbl/GraphicsDesign/Tools/ArcTool.h
+    src/grbl/GraphicsDesign/Tools/TextTool.h
+    src/grbl/GraphicsDesign/VectorFontCatalog.h
+    src/grbl/ImageVectorizer.h
+    src/grbl/DxfParser.h
 )
 
 # --- UI ---
@@ -107,14 +132,7 @@ set(UI_SOURCES
     src/ui/ToolpathCanvas.cpp
     src/ui/GcodeListWidget.cpp
     src/ui/ToolpathPanel.cpp
-    src/ui/TransformToolbar.cpp
     src/ui/TextToGcodeDialog.cpp
-    src/ui/LineNumberPlainTextEdit.cpp
-    src/ui/DesignCanvas.cpp
-    src/ui/GraphicsDesignDialog.cpp
-    src/ui/TabWidget.cpp
-    src/ui/pages/MainPage.cpp
-    src/ui/pages/GraphicsDesignPage.cpp
     src/ui/panels/ConnectionPanel.cpp
     src/ui/panels/StatusPanel.cpp
     src/ui/panels/ControlPanel.cpp
@@ -122,12 +140,19 @@ set(UI_SOURCES
     src/ui/panels/ConsolePanel.cpp
     src/ui/panels/SettingsPanel.cpp
     src/ui/panels/GraphicsDesignPanel.cpp
+    src/ui/DesignCanvas.cpp
+    src/ui/GraphicsDesignDialog.cpp
+    src/ui/LineNumberPlainTextEdit.cpp
 )
 
 set(UI_FILES
     src/ui/MainWindow.ui
     src/ui/TextToGcodeDialog.ui
     src/ui/GraphicsDesignDialog.ui
+    src/ui/panels/StatusPanel.ui
+    src/ui/panels/JogPanel.ui
+    src/ui/panels/ConnectionPanel.ui
+    src/ui/panels/ControlPanel.ui
 )
 
 set(UI_HEADERS
@@ -137,14 +162,7 @@ set(UI_HEADERS
     src/ui/ToolpathCanvas.h
     src/ui/GcodeListWidget.h
     src/ui/ToolpathPanel.h
-    src/ui/TransformToolbar.h
     src/ui/TextToGcodeDialog.h
-    src/ui/LineNumberPlainTextEdit.h
-    src/ui/DesignCanvas.h
-    src/ui/GraphicsDesignDialog.h
-    src/ui/TabWidget.h
-    src/ui/pages/MainPage.h
-    src/ui/pages/GraphicsDesignPage.h
     src/ui/panels/ConnectionPanel.h
     src/ui/panels/StatusPanel.h
     src/ui/panels/ControlPanel.h
@@ -152,6 +170,9 @@ set(UI_HEADERS
     src/ui/panels/ConsolePanel.h
     src/ui/panels/SettingsPanel.h
     src/ui/panels/GraphicsDesignPanel.h
+    src/ui/DesignCanvas.h
+    src/ui/GraphicsDesignDialog.h
+    src/ui/LineNumberPlainTextEdit.h
 )
 
 set(RESOURCES
@@ -176,7 +197,7 @@ set(HEADERS
 
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS} ${RESOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE src)
+target_include_directories(${PROJECT_NAME} PRIVATE src ${OpenCV_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
@@ -185,8 +206,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     Qt6::CorePrivate
+    Qt6::Core5Compat
     Qt6::Concurrent
     Qt6::SerialPort
+    ${OpenCV_LIBS}
 )
 
 if(WIN32)
@@ -212,10 +235,21 @@ if(WIN32 AND EXISTS "${Qt6_DIR}/../../../bin/windeployqt.exe")
     )
 endif()
 
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/bigfonts"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/bigfonts"
+    COMMENT "Copying bigfonts directory..."
+)
+
 # --- Unit tests (minimal, only GcodeParser) ---
-add_executable(TestGcodeParser tests/test_gcode_parser.cpp src/grbl/GcodeParser.cpp)
+add_executable(TestGcodeParser tests/test_gcode_parser.cpp src/grbl/GcodeParser.cpp src/grbl/TextToGcode/ShxFontParser.cpp)
 target_include_directories(TestGcodeParser PRIVATE src)
-target_link_libraries(TestGcodeParser PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent)
+target_link_libraries(TestGcodeParser PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent Qt6::Core5Compat)
+add_executable(TestShxDebug tests/test_shx_debug.cpp src/grbl/TextToGcode/ShxFontParser.cpp)
+target_include_directories(TestShxDebug PRIVATE src)
+target_link_libraries(TestShxDebug PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent Qt6::Core5Compat)
 if(WIN32)
     target_compile_definitions(TestGcodeParser PRIVATE UNICODE _UNICODE)
+    target_compile_definitions(TestShxDebug PRIVATE UNICODE _UNICODE)
 endif()

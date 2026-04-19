@@ -45,6 +45,7 @@ public:
 
     // Identity
     QUuid id() const { return m_id; }
+    void setId(const QUuid& id) { m_id = id; }
     virtual Kind kind() const { return m_kind; }
 
     // Geometry

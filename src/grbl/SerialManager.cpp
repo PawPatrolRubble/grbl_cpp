@@ -1,9 +1,11 @@
 #include "SerialManager.h"
 #include "MachineState.h"
 #include "GrblConstants.h"
+#include "GcodeStreamer.h"
 
 #include <QDebug>
 #include <QEventLoop>
+#include <QPair>
 
 SerialManager::SerialManager(MachineState *machineState, QObject *parent)
     : QObject(parent)
@@ -74,6 +76,9 @@ bool SerialManager::connectToGrbl(const QString &portName, int baudRate)
 
     m_port->clear();
     m_buffer.clear();
+    m_txQueue.clear();
+    m_sentLineLengths.clear();
+    m_rxBufUsed = 0;
     m_grblReady = false;
     locker.unlock();
 
@@ -103,19 +108,41 @@ bool SerialManager::isConnected() const noexcept
     return m_port && m_port->isOpen();
 }
 
-void SerialManager::sendCommand(const QString &command)
+// ---------------------------------------------------------------------------
+// sendCommand — Enqueue a G-code line.
+//
+// Instead of writing directly to the serial port, we push the encoded
+// payload into m_txQueue and then call drainQueue() which will write as
+// many queued commands as fit inside GRBL's 128-byte RX buffer.
+//
+// This is the character-counting streaming protocol recommended by the
+// GRBL project:
+//   https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface#streaming-a-g-code-program-to-grbl
+// ---------------------------------------------------------------------------
+int SerialManager::sendCommand(const QString &command)
 {
     QMutexLocker locker(&m_mutex);
-    if (!m_port || !m_port->isOpen()) return;
+    if (!m_port || !m_port->isOpen()) return 0;
 
     QString cmd = command.trimmed();
-    if (cmd.isEmpty()) return;
+    if (cmd.isEmpty()) return 0;
 
-    QByteArray data = cmd.toUtf8() + "\r\n";
-    m_port->write(data);
-    m_port->flush();
+    QByteArray data = cmd.toUtf8() + "\n";
+
+    // Reject lines that can never fit, even in an empty buffer.
+    if (data.size() > GRBL_RX_BUFFER_SIZE) {
+        locker.unlock();
+        emit errorOccurred(tr("Command too long for GRBL buffer (%1 bytes): %2")
+                               .arg(data.size()).arg(cmd));
+        return 0;
+    }
+
+    m_txQueue.enqueue(data);
     locker.unlock();
-    emit commandSent(cmd);
+
+    // Try to push queued data to the port immediately.
+    drainQueue();
+    return data.size();
 }
 
 void SerialManager::sendRealtimeCommand(char command)
@@ -124,6 +151,24 @@ void SerialManager::sendRealtimeCommand(char command)
     if (!m_port || !m_port->isOpen()) return;
     m_port->write(&command, 1);
     m_port->flush();
+}
+
+int SerialManager::rxBufUsed() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_rxBufUsed;
+}
+
+bool SerialManager::rxBufHasRoom(int bytes) const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_rxBufUsed + bytes <= GRBL_RX_BUFFER_SIZE;
+}
+
+int SerialManager::pendingQueueSize() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_txQueue.size();
 }
 
 void SerialManager::jogStep(const QString &axis, double step, double feedRate)
@@ -143,6 +188,61 @@ void SerialManager::jogCancel()
 {
     if (!isConnected()) return;
     sendRealtimeCommand(GrblRealtime::JogCancel);
+}
+
+void SerialManager::clearQueue()
+{
+    QMutexLocker locker(&m_mutex);
+    m_txQueue.clear();
+    m_sentLineLengths.clear();
+    m_rxBufUsed = 0;
+}
+
+void SerialManager::setStatusPollInterval(int ms)
+{
+    m_pollTimer->setInterval(ms);
+}
+
+// ---------------------------------------------------------------------------
+// drainQueue — Write queued commands to the serial port while there is room
+//              in GRBL's RX buffer.
+//
+// The character-counting protocol allows us to have multiple commands
+// in-flight simultaneously, as long as the total byte count of unsent (not yet
+// ack'd) data does not exceed GRBL_RX_BUFFER_SIZE.
+// ---------------------------------------------------------------------------
+void SerialManager::drainQueue()
+{
+    QList<QString> emitted;   // collect outside lock, emit after
+
+    {
+        QMutexLocker locker(&m_mutex);
+        if (!m_port || !m_port->isOpen()) return;
+
+        while (!m_txQueue.isEmpty()) {
+            const QByteArray &head = m_txQueue.head();
+            int bytes = head.size();
+
+            if (m_rxBufUsed + bytes > GRBL_RX_BUFFER_SIZE) {
+                break;    // No room — wait for an ack to free space.
+            }
+
+            QByteArray data = m_txQueue.dequeue();
+            m_rxBufUsed += bytes;
+            m_sentLineLengths.enqueue(bytes);
+
+            m_port->write(data);
+            m_port->flush();
+
+            // Recover the command string (strip trailing \n) for the signal.
+            QString cmdStr = QString::fromUtf8(data.left(data.size() - 1));
+            emitted.append(cmdStr);
+        }
+    }
+
+    for (const QString &cmd : emitted) {
+        emit commandSent(cmd);
+    }
 }
 
 void SerialManager::handleReadyRead()
@@ -176,51 +276,69 @@ void SerialManager::pollStatus()
 
 void SerialManager::processBuffer()
 {
-    QMutexLocker locker(&m_mutex);
+    QList<QPair<QString, bool>> linesToEmit;
 
-    while (true) {
-        int nlPos = m_buffer.indexOf('\n');
-        int crPos = m_buffer.indexOf('\r');
+    {
+        QMutexLocker locker(&m_mutex);
 
-        int splitPos = -1;
-        if (nlPos >= 0 && crPos >= 0)
-            splitPos = qMin(nlPos, crPos);
-        else if (nlPos >= 0)
-            splitPos = nlPos;
-        else if (crPos >= 0)
-            splitPos = crPos;
-        else
-            break;
+        while (true) {
+            int nlPos = m_buffer.indexOf('\n');
+            int crPos = m_buffer.indexOf('\r');
 
-        int endPos = splitPos;
-        if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\r' && m_buffer[splitPos + 1] == '\n')
-            endPos = splitPos + 1;
-        else if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\n' && m_buffer[splitPos + 1] == '\r')
-            endPos = splitPos + 1;
+            int splitPos = -1;
+            if (nlPos >= 0 && crPos >= 0)
+                splitPos = qMin(nlPos, crPos);
+            else if (nlPos >= 0)
+                splitPos = nlPos;
+            else if (crPos >= 0)
+                splitPos = crPos;
+            else
+                break;
 
-        QString line = QString::fromUtf8(m_buffer.left(splitPos)).trimmed();
-        m_buffer.remove(0, endPos + 1);
-        locker.unlock();
+            int endPos = splitPos;
+            if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\r' && m_buffer[splitPos + 1] == '\n')
+                endPos = splitPos + 1;
+            else if (splitPos + 1 < m_buffer.size() && m_buffer[splitPos] == '\n' && m_buffer[splitPos + 1] == '\r')
+                endPos = splitPos + 1;
 
-        if (!line.isEmpty()) {
-            if (line.startsWith(GrblResponse::StatusStart) && line.endsWith(GrblResponse::StatusEnd)) {
-                emit responseReceived(line);
-            } else if (line.startsWith(GrblResponse::OkPrefix)) {
-                emit ackReceived();
-                emit responseReceived(line);
-            } else if (line.startsWith(GrblResponse::ErrorPrefix)) {
-                emit commandErrorReceived(line);
-                emit responseReceived(line);
-            } else if (line.startsWith(GrblResponse::WelcomeStart)) {
-                m_grblReady = true;
-                emit responseReceived(line);
-            } else {
-                emit responseReceived(line);
+            QString line = QString::fromUtf8(m_buffer.left(splitPos)).trimmed();
+            m_buffer.remove(0, endPos + 1);
+
+            if (!line.isEmpty()) {
+                bool isAck = line.startsWith(GrblResponse::OkPrefix)
+                          || line.startsWith(GrblResponse::ErrorPrefix);
+                if (isAck && !m_sentLineLengths.isEmpty())
+                    m_rxBufUsed -= m_sentLineLengths.dequeue();
+
+                linesToEmit.append({line, isAck});
             }
         }
-
-        locker.relock();
     }
+
+    // Emit signals outside the lock.
+    for (const auto &entry : linesToEmit) {
+        const QString &line = entry.first;
+        bool isAck = entry.second;
+
+        if (line.startsWith(GrblResponse::StatusStart) && line.endsWith(GrblResponse::StatusEnd)) {
+            emit responseReceived(line);
+        } else if (line.startsWith(GrblResponse::OkPrefix)) {
+            emit ackReceived();
+            emit responseReceived(line);
+        } else if (line.startsWith(GrblResponse::ErrorPrefix)) {
+            emit commandErrorReceived(line);
+            emit responseReceived(line);
+        } else if (line.startsWith(GrblResponse::WelcomeStart)) {
+            m_grblReady = true;
+            emit responseReceived(line);
+        } else {
+            emit responseReceived(line);
+        }
+    }
+
+    // Each ack frees space in the RX buffer — try to push more queued
+    // commands now.
+    drainQueue();
 }
 
 void SerialManager::closePort()
@@ -230,5 +348,8 @@ void SerialManager::closePort()
         m_port->close();
     }
     m_buffer.clear();
+    m_txQueue.clear();
+    m_sentLineLengths.clear();
+    m_rxBufUsed = 0;
     m_grblReady = false;
 }

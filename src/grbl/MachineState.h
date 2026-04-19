@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QVector3D>
+#include <QMap>
 
 class MachineState : public QObject
 {
@@ -41,6 +42,7 @@ public:
     SubState subState() const;
     QVector3D machinePosition() const;
     QVector3D workPosition() const;
+    QVector3D wco() const;
     double feedRate() const;
     double spindleSpeed() const;
     bool isConnected() const;
@@ -50,9 +52,14 @@ public:
     void setSubState(SubState subState);
     void setMachinePosition(const QVector3D &pos);
     void setWorkPosition(const QVector3D &pos);
+    void setWco(const QVector3D &wco);
     void setFeedRate(double rate);
     void setSpindleSpeed(double speed);
     void setConnected(bool connected);
+    void setMessage(const QString &msg);
+
+    void setGrblSetting(int id, double value);
+    QMap<int, double> grblSettings() const;
 
     void reset();
 
@@ -61,17 +68,22 @@ signals:
     void subStateChanged(SubState subState);
     void machinePositionChanged(const QVector3D &pos);
     void workPositionChanged(const QVector3D &pos);
+    void wcoChanged(const QVector3D &wco);
     void feedRateChanged(double rate);
     void spindleSpeedChanged(double speed);
     void connectedChanged(bool connected);
     void alarmChanged(bool alarm);
+    void messageReceived(const QString &msg);
+    void grblSettingsChanged(const QMap<int, double> &settings);
 
 private:
     State m_state = State::Unknown;
     SubState m_subState = SubState::None;
     QVector3D m_machinePos;
     QVector3D m_workPos;
+    QVector3D m_wco;
     double m_feedRate = 0.0;
     double m_spindleSpeed = 0.0;
     bool m_connected = false;
+    QMap<int, double> m_grblSettings;
 };

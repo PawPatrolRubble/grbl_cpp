@@ -67,6 +67,21 @@ void SelectTool::mouseMove(const QPointF& pos)
         // Check if we've moved far enough to start dragging
         if (QLineF(m_pressPos, pos).length() > 5.0) {
             m_mode = Mode::MovingEntity;
+            // Create initial move preview
+            Entity* selected = document().selectedEntity();
+            if (selected) {
+                m_dragEntityPreview = selected->clone();
+                m_dragEntityPreview->translate(pos - m_pressPos);
+                m_lastMovePos = pos;
+            }
+        }
+    } else if (m_mode == Mode::MovingEntity) {
+        // Update move preview — reuse existing preview, just update position
+        Entity* selected = document().selectedEntity();
+        if (selected && m_dragEntityPreview) {
+            // Reset to original position, then apply new delta
+            m_dragEntityPreview->translate(pos - m_lastMovePos);
+            m_lastMovePos = pos;
         }
     }
 }
@@ -113,7 +128,7 @@ void SelectTool::cancel()
 
 void SelectTool::paintPreview(QPainter& painter) const
 {
-    if (m_mode == Mode::DraggingHandle && m_dragEntityPreview) {
+    if ((m_mode == Mode::DraggingHandle || m_mode == Mode::MovingEntity) && m_dragEntityPreview) {
         m_dragEntityPreview->draw(painter);
     }
 }

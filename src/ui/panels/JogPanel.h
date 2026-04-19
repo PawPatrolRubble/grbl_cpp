@@ -1,12 +1,11 @@
 #pragma once
 
 #include <QWidget>
-#include <QComboBox>
-#include <QSlider>
-#include <QLabel>
-#include <QDoubleSpinBox>
+#include <QPushButton>
 
 class QKeyEvent;
+
+namespace Ui { class JogPanel; }
 
 class JogPanel : public QWidget
 {
@@ -14,16 +13,22 @@ class JogPanel : public QWidget
 
 public:
     explicit JogPanel(QWidget *parent = nullptr);
+    ~JogPanel();
 
-    /// Delegate keyboard jog events from MainWindow.
-    /// Returns true if the event was handled.
     bool handleKeyPress(QKeyEvent *event);
     bool handleKeyRelease(QKeyEvent *event);
+
+public slots:
+    void setMotionEnabled(bool enabled);
 
 signals:
     void jogContinuousRequested(const QString &axis, int direction, double feed);
     void jogStepRequested(const QString &axis, double distance, double feed);
     void jogCancelRequested();
+    void goToAbsoluteRequested(double x, double y, double z, double feed);
+    void goToXRequested(double x, double feed);
+    void goToYRequested(double y, double feed);
+    void goToZRequested(double z, double feed);
 
 private:
     enum class JogMode { Continuous, Step };
@@ -31,8 +36,5 @@ private:
     void doJog(const QString &axis, int direction);
 
     JogMode m_jogMode = JogMode::Continuous;
-    QComboBox *m_jogModeCombo;
-    QSlider *m_jogStepSlider;
-    QLabel *m_jogStepLabel;
-    QDoubleSpinBox *m_jogFeedSpin;
+    Ui::JogPanel *ui;
 };

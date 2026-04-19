@@ -3,6 +3,7 @@
 #include "SvgFontParser.h"
 #include "HpglFontParser.h"
 #include "JsonFontParser.h"
+#include "ShxFontParser.h"
 #include <QFileInfo>
 #include <QFile>
 
@@ -15,6 +16,7 @@ std::shared_ptr<VectorFontParser> VectorFontLoader::getParserForFile(const QStri
     if (ext == "svg") return std::make_shared<SvgFontParser>();
     if (ext == "hpgl" || ext == "glf") return std::make_shared<HpglFontParser>();
     if (ext == "json") return std::make_shared<JsonFontParser>();
+    if (ext == "shx") return std::make_shared<ShxFontParser>();
 
     return nullptr;
 }
@@ -34,6 +36,11 @@ FontLoadResult VectorFontLoader::loadFont(const QString& filePath)
         result.errorMessage = QString("Unsupported font format: .%1").arg(fi.suffix());
         return result;
     }
+
+    // For SHX bigfont files, set the file path so companion unifont can be loaded
+    auto shxParser = std::dynamic_pointer_cast<ShxFontParser>(parser);
+    if (shxParser)
+        shxParser->setFilePath(fi.absoluteFilePath());
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {

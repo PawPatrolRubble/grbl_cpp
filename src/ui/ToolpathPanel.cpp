@@ -38,9 +38,18 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
         m_currentMoves = newMoves;
         m_currentLines = GcodeParser::movesToGcode(m_currentMoves);
         m_listWidget->setLines(m_currentLines);
-        m_canvas->setMoves(newMoves);  // Re-render toolpath on canvas
+        m_canvas->setMovesNoFit(newMoves);  // Re-render but preserve zoom/pan
         emit gcodeTransformed(m_currentLines);
     });
+
+    // Clear G-code
+    connect(m_listWidget, &GcodeListWidget::clearRequested,
+            this, &ToolpathPanel::clearRequested);
+}
+
+void ToolpathPanel::setWorktableSize(const QSizeF &size)
+{
+    m_canvas->setWorktableSize(size);
 }
 
 void ToolpathPanel::setGcodeLines(const QStringList &lines)
@@ -70,4 +79,18 @@ void ToolpathPanel::setCutterPosition(const QVector3D &pos)
 QStringList ToolpathPanel::currentGcodeLines() const
 {
     return m_currentLines;
+}
+
+void ToolpathPanel::clearAll()
+{
+    m_originalMoves.clear();
+    m_currentMoves.clear();
+    m_currentLines.clear();
+    m_listWidget->setLines({});
+    m_canvas->setMoves({});
+}
+
+bool ToolpathPanel::returnToOriginEnabled() const
+{
+    return m_listWidget->returnToOriginEnabled();
 }

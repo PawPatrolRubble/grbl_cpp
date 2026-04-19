@@ -2,11 +2,24 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QScrollBar>
+#include <QTextCursor>
 
 ConsolePanel::ConsolePanel(QWidget *parent)
     : QWidget(parent)
+    , m_flushTimer(this)
 {
     setObjectName("consolePanel");
+    m_flushTimer.setSingleShot(true);
+    m_flushTimer.setInterval(200);
+    connect(&m_flushTimer, &QTimer::timeout, this, [this]() {
+        if (!m_pendingMessages.isEmpty()) {
+            m_consoleEdit->appendPlainText(m_pendingMessages.join("\n"));
+            m_pendingMessages.clear();
+            trimExcessLines();
+        }
+        m_flushPending = false;
+    });
     setAttribute(Qt::WA_StyledBackground, true);
     auto *vLayout = new QVBoxLayout(this);
     vLayout->setContentsMargins(0, 0, 0, 0);
@@ -22,10 +35,11 @@ ConsolePanel::ConsolePanel(QWidget *parent)
     contentLayout->setContentsMargins(8, 8, 8, 8);
     contentLayout->setSpacing(4);
 
-    m_consoleEdit = new QTextEdit();
+    m_consoleEdit = new QPlainTextEdit();
     m_consoleEdit->setReadOnly(true);
     m_consoleEdit->setFont(QFont("Consolas", 9));
     m_consoleEdit->setObjectName("consoleEdit");
+    m_consoleEdit->setMaximumBlockCount(MAX_CONSOLE_LINES);
     contentLayout->addWidget(m_consoleEdit);
 
     auto *cmdLayout = new QHBoxLayout();
@@ -52,5 +66,27 @@ ConsolePanel::ConsolePanel(QWidget *parent)
 
 void ConsolePanel::appendMessage(const QString &msg)
 {
-    m_consoleEdit->append(msg);
+    m_consoleEdit->appendPlainText(msg);
+}
+
+void ConsolePanel::queueMessage(const QString &msg)
+{
+    m_pendingMessages.append(msg);
+    if (!m_flushPending) {
+        m_flushPending = true;
+        m_flushTimer.start(200);
+    }
+}
+
+void ConsolePanel::trimExcessLines()
+{
+    // QPlainTextEdit::setMaximumBlockCount handles this automatically,
+    // but we keep this as a safety net.
+    if (m_consoleEdit->document()->blockCount() > MAX_CONSOLE_LINES) {
+        QTextCursor cursor = m_consoleEdit->textCursor();
+        cursor.movePosition(QTextCursor::Start);
+        cursor.movePosition(QTextCursor::Down, QTextCursor::KeepAnchor,
+                            m_consoleEdit->document()->blockCount() - MAX_CONSOLE_LINES);
+        cursor.removeSelectedText();
+    }
 }

@@ -1,6 +1,8 @@
 #include <QCoreApplication>
+#include <QFile>
 #include <iostream>
 #include "../src/grbl/GcodeParser.h"
+#include "../src/grbl/TextToGcode/ShxFontParser.h"
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
@@ -93,5 +95,34 @@ int main(int argc, char *argv[]) {
     std::cout << "Test 1 (Modal behavior): " << (test1Pass ? "PASS" : "FAIL") << std::endl;
     std::cout << "Test 3 (Round-trip): " << (test3Pass ? "PASS" : "FAIL") << std::endl;
 
-    return (test1Pass && test3Pass) ? 0 : 1;
+    std::cout << std::endl << "=== Test 4: SHX bigfont Chinese glyph ===" << std::endl;
+    bool test4Pass = true;
+    QString shxPath = "C:/Program Files/浩辰软件/浩辰CAD2022/Fonts/chineset.shx";
+    if (QFile::exists(shxPath)) {
+        QFile shxFile(shxPath);
+        if (!shxFile.open(QIODevice::ReadOnly)) {
+            std::cout << "Cannot open SHX file: " << shxPath.toStdString() << std::endl;
+            test4Pass = false;
+        } else {
+            ShxFontParser parser;
+            auto glyphs = parser.parse(shxFile);
+            int cjkCount = 0;
+            for (auto it = glyphs.constBegin(); it != glyphs.constEnd(); ++it) {
+                uint16_t u = it.key().unicode();
+                if (u >= 0x4E00 && u <= 0x9FFF) {
+                    ++cjkCount;
+                }
+            }
+            bool hasCjkGlyphs = cjkCount > 100;
+            std::cout << "Loaded glyph count: " << glyphs.size() << std::endl;
+            std::cout << "Detected CJK glyphs: " << cjkCount << std::endl;
+            test4Pass = hasCjkGlyphs;
+        }
+    } else {
+        std::cout << "SKIP: SHX file not found at " << shxPath.toStdString() << std::endl;
+    }
+
+    std::cout << "Test 4 (Chinese glyph parse): " << (test4Pass ? "PASS" : "FAIL") << std::endl;
+
+    return (test1Pass && test3Pass && test4Pass) ? 0 : 1;
 }

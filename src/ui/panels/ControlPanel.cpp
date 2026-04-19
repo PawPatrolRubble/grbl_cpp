@@ -1,139 +1,94 @@
 #include "ControlPanel.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QFormLayout>
+#include "ui_ControlPanel.h"
 
 ControlPanel::ControlPanel(QWidget *parent)
     : QWidget(parent)
+    , ui(new Ui::ControlPanel)
 {
+    ui->setupUi(this);
     setObjectName("controlPanel");
     setAttribute(Qt::WA_StyledBackground, true);
-    auto *ctrlLayout = new QVBoxLayout(this);
-    ctrlLayout->setContentsMargins(8, 8, 8, 8);
 
-    // Load button
-    m_loadBtn = new QPushButton("Load G-Code File");
-    ctrlLayout->addWidget(m_loadBtn);
-
-    // Streaming buttons
-    m_startBtn = new QPushButton("Start");
-    m_startBtn->setEnabled(false);
-    m_pauseBtn = new QPushButton("Pause");
-    m_pauseBtn->setEnabled(false);
-    m_resumeBtn = new QPushButton("Resume");
-    m_resumeBtn->setEnabled(false);
-    m_stopBtn = new QPushButton("Stop");
-    m_stopBtn->setEnabled(false);
-
-    auto *streamLayout = new QHBoxLayout();
-    streamLayout->addWidget(m_startBtn);
-    streamLayout->addWidget(m_pauseBtn);
-    streamLayout->addWidget(m_resumeBtn);
-    streamLayout->addWidget(m_stopBtn);
-    ctrlLayout->addLayout(streamLayout);
-
-    // Progress
-    m_progressLabel = new QLabel("No file loaded");
-    ctrlLayout->addWidget(m_progressLabel);
-
-    // Overrides section
-    auto *overrideLabel = new QLabel("Overrides");
-    overrideLabel->setObjectName("sectionTitle");
-    ctrlLayout->addWidget(overrideLabel);
-
-    m_feedOverrideSlider = new QSlider(Qt::Horizontal);
-    m_feedOverrideSlider->setRange(0, 200);
-    m_feedOverrideSlider->setValue(100);
-    m_feedOverrideLabel = new QLabel("100%");
-    auto *feedLayout = new QHBoxLayout();
-    feedLayout->addWidget(new QLabel("Feed:"));
-    feedLayout->addWidget(m_feedOverrideSlider);
-    feedLayout->addWidget(m_feedOverrideLabel);
-    ctrlLayout->addLayout(feedLayout);
-
-    m_spindleOverrideSlider = new QSlider(Qt::Horizontal);
-    m_spindleOverrideSlider->setRange(0, 200);
-    m_spindleOverrideSlider->setValue(100);
-    m_spindleOverrideLabel = new QLabel("100%");
-    auto *spindleLayout = new QHBoxLayout();
-    spindleLayout->addWidget(new QLabel("Spindle:"));
-    spindleLayout->addWidget(m_spindleOverrideSlider);
-    spindleLayout->addWidget(m_spindleOverrideLabel);
-    ctrlLayout->addLayout(spindleLayout);
-
-    // Quick Commands section
-    auto *cmdLabel = new QLabel("Quick Commands");
-    cmdLabel->setObjectName("sectionTitle");
-    ctrlLayout->addWidget(cmdLabel);
-
-    auto *cmdLayout = new QHBoxLayout();
-    auto *homeBtn = new QPushButton("Home ($H)");
-    auto *unlockBtn = new QPushButton("Unlock ($X)");
-    auto *resetBtn = new QPushButton("Reset");
-    auto *statusBtn = new QPushButton("Status (?)");
-    cmdLayout->addWidget(homeBtn);
-    cmdLayout->addWidget(unlockBtn);
-    cmdLayout->addWidget(resetBtn);
-    cmdLayout->addWidget(statusBtn);
-    ctrlLayout->addLayout(cmdLayout);
+    // Set slider ranges and initial values
+    ui->feedOverrideSlider->setRange(0, 200);
+    ui->feedOverrideSlider->setValue(100);
+    ui->spindleOverrideSlider->setRange(0, 200);
+    ui->spindleOverrideSlider->setValue(100);
 
     // Connections
-    connect(m_loadBtn, &QPushButton::clicked, this, &ControlPanel::loadFileRequested);
-    connect(m_startBtn, &QPushButton::clicked, this, &ControlPanel::startRequested);
-    connect(m_pauseBtn, &QPushButton::clicked, this, &ControlPanel::pauseRequested);
-    connect(m_resumeBtn, &QPushButton::clicked, this, &ControlPanel::resumeRequested);
-    connect(m_stopBtn, &QPushButton::clicked, this, &ControlPanel::stopRequested);
-    connect(homeBtn, &QPushButton::clicked, this, &ControlPanel::homeRequested);
-    connect(unlockBtn, &QPushButton::clicked, this, &ControlPanel::unlockRequested);
-    connect(resetBtn, &QPushButton::clicked, this, &ControlPanel::resetRequested);
-    connect(statusBtn, &QPushButton::clicked, this, &ControlPanel::statusRequested);
+    connect(ui->loadBtn, &QPushButton::clicked, this, &ControlPanel::loadFileRequested);
+    connect(ui->startBtn, &QPushButton::clicked, this, &ControlPanel::startRequested);
+    connect(ui->pauseBtn, &QPushButton::clicked, this, &ControlPanel::pauseRequested);
+    connect(ui->resumeBtn, &QPushButton::clicked, this, &ControlPanel::resumeRequested);
+    connect(ui->stopBtn, &QPushButton::clicked, this, &ControlPanel::stopRequested);
+    connect(ui->homeBtn, &QPushButton::clicked, this, &ControlPanel::homeRequested);
+    connect(ui->unlockBtn, &QPushButton::clicked, this, &ControlPanel::unlockRequested);
+    connect(ui->resetBtn, &QPushButton::clicked, this, &ControlPanel::resetRequested);
+    connect(ui->statusBtn, &QPushButton::clicked, this, &ControlPanel::statusRequested);
+
+    // Slider connections
+    connect(ui->feedOverrideSlider, &QSlider::valueChanged, this, [this](int val) {
+        ui->feedOverrideLabel->setText(QString("%1%").arg(val));
+    });
+    connect(ui->spindleOverrideSlider, &QSlider::valueChanged, this, [this](int val) {
+        ui->spindleOverrideLabel->setText(QString("%1%").arg(val));
+    });
+}
+
+ControlPanel::~ControlPanel()
+{
+    delete ui;
 }
 
 void ControlPanel::setConnected(bool connected)
 {
     Q_UNUSED(connected)
-    // Could enable/disable quick command buttons here if needed
 }
 
 void ControlPanel::setFileLoaded(const QString &fileName, int lineCount)
 {
-    m_progressLabel->setText(QString("Loaded: %1 (%2 lines)").arg(fileName).arg(lineCount));
-    m_startBtn->setEnabled(true);
+    if (fileName.isEmpty() || lineCount == 0) {
+        ui->progressLabel->setText("No file loaded");
+        ui->startBtn->setEnabled(false);
+    } else {
+        ui->progressLabel->setText(QString("Loaded: %1 (%2 lines)").arg(fileName).arg(lineCount));
+        ui->startBtn->setEnabled(true);
+    }
 }
 
 void ControlPanel::setStreamingProgress(int current, int total)
 {
-    m_progressLabel->setText(QString("Streaming: %1 / %2").arg(current).arg(total));
+    ui->progressLabel->setText(QString("Streaming: %1 / %2").arg(current).arg(total));
 }
 
 void ControlPanel::setStreamingFinished()
 {
-    m_startBtn->setEnabled(true);
-    m_pauseBtn->setEnabled(false);
-    m_resumeBtn->setEnabled(false);
-    m_stopBtn->setEnabled(false);
-    m_progressLabel->setText("Streaming complete");
+    ui->startBtn->setEnabled(true);
+    ui->pauseBtn->setEnabled(false);
+    ui->resumeBtn->setEnabled(false);
+    ui->stopBtn->setEnabled(false);
+    ui->progressLabel->setText("Streaming complete");
 }
 
 void ControlPanel::setStreamingStarted()
 {
-    m_startBtn->setEnabled(false);
-    m_pauseBtn->setEnabled(true);
-    m_resumeBtn->setEnabled(false);
-    m_stopBtn->setEnabled(true);
-    m_progressLabel->setText("Streaming started...");
+    ui->startBtn->setEnabled(false);
+    ui->pauseBtn->setEnabled(true);
+    ui->resumeBtn->setEnabled(false);
+    ui->stopBtn->setEnabled(true);
+    ui->progressLabel->setText("Streaming started...");
 }
 
 void ControlPanel::setStreamingPaused()
 {
-    m_pauseBtn->setEnabled(false);
-    m_resumeBtn->setEnabled(true);
-    m_progressLabel->setText("Streaming paused");
+    ui->pauseBtn->setEnabled(false);
+    ui->resumeBtn->setEnabled(true);
+    ui->progressLabel->setText("Streaming paused");
 }
 
 void ControlPanel::setStreamingResumed()
 {
-    m_pauseBtn->setEnabled(true);
-    m_resumeBtn->setEnabled(false);
-    m_progressLabel->setText("Streaming resumed");
+    ui->pauseBtn->setEnabled(true);
+    ui->resumeBtn->setEnabled(false);
+    ui->progressLabel->setText("Streaming resumed");
 }

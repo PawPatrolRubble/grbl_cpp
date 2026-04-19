@@ -3,7 +3,10 @@
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
+#include <QLineEdit>
 #include "grbl/MachineState.h"
+
+namespace Ui { class StatusPanel; }
 
 class StatusPanel : public QWidget
 {
@@ -11,6 +14,7 @@ class StatusPanel : public QWidget
 
 public:
     explicit StatusPanel(QWidget *parent = nullptr);
+    ~StatusPanel();
 
 public slots:
     void setMachinePosition(const QVector3D &pos);
@@ -18,21 +22,18 @@ public slots:
     void setState(MachineState::State state);
     void setFeedRate(double rate);
     void setSpindleSpeed(double speed);
+    void setMessage(const QString &msg);
+    void setMotionEnabled(bool enabled);
 
 signals:
     void zeroAxisRequested(const QString &axis);
+    void setAxisPositionRequested(const QString &axis, double value);
     void zeroAllRequested();
     void goToZeroRequested();
-    void resetWorkOffsetRequested();  // Set work = machine (G10 L2 P1)
+    void resetWorkOffsetRequested();
+    void emergencyStopRequested();
+    void homeMachineRequested();
 
 private:
-    QLabel *createAxisLabel(const QString &axis, const QString &objectName);
-    QLabel *createSideLabel(const QString &text, const QString &objectName);
-    QPushButton *createZeroButton(const QString &axis);
-
-    QLabel *m_stateLabel;
-    QLabel *m_mposX, *m_mposY, *m_mposZ;
-    QLabel *m_wposX, *m_wposY, *m_wposZ;
-    QLabel *m_feedLabel;
-    QLabel *m_spindleLabel;
+    Ui::StatusPanel *ui;
 };

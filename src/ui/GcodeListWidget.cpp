@@ -2,28 +2,48 @@
 #include <QFont>
 #include <QScrollBar>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QRegularExpression>
+#include <QFileDialog>
+#include <QMessageBox>
 
-// G-code type detection for coloring
-enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
-
+// G-code type detection for coloring — fast string-based, no regex
 static GcodeType detectGcodeType(const QString &line)
 {
     QString stripped = line.trimmed();
     if (stripped.isEmpty() || stripped.startsWith(';') || stripped.startsWith('('))
         return GcodeType::Comment;
 
-    static const QRegularExpression gRegex("[Gg](\\d+)");
-    QRegularExpressionMatch match = gRegex.match(stripped);
-
-    if (match.hasMatch()) {
-        int code = match.captured(1).toInt();
-        if (code == 0) return GcodeType::Rapid;
-        if (code == 1) return GcodeType::Linear;
-        if (code == 2) return GcodeType::ArcCW;
-        if (code == 3) return GcodeType::ArcCCW;
+    // Scan for G<digits> pattern
+    for (int i = 0; i < stripped.size(); ++i) {
+        QChar ch = stripped[i];
+        if (ch == 'G' || ch == 'g') {
+            // Read the integer that follows
+            int j = i + 1;
+            while (j < stripped.size() && stripped[j].isDigit())
+                ++j;
+            if (j > i + 1) {
+                int code = QStringView(stripped).mid(i + 1, j - i - 1).toInt();
+                if (code == 0) return GcodeType::Rapid;
+                if (code == 1) return GcodeType::Linear;
+                if (code == 2) return GcodeType::ArcCW;
+                if (code == 3) return GcodeType::ArcCCW;
+            }
+        }
     }
     return GcodeType::Other;
+}
+
+static QColor colorForType(GcodeType type)
+{
+    switch (type) {
+    case GcodeType::Rapid:    return QColor("#f87171");
+    case GcodeType::Linear:   return QColor("#4ade80");
+    case GcodeType::ArcCW:    return QColor("#60a5fa");
+    case GcodeType::ArcCCW:   return QColor("#c084fc");
+    case GcodeType::Comment:  return QColor("#6b7280");
+    default:                  return QColor("#cdd6f4");
+    }
 }
 
 GcodeListModel::GcodeListModel(QObject *parent)
@@ -37,37 +57,34 @@ int GcodeListModel::rowCount(const QModelIndex &parent) const
     return m_lines.size();
 }
 
+GcodeType GcodeListModel::typeAt(int row) const
+{
+    auto it = m_typeCache.find(row);
+    if (it != m_typeCache.end()) return it.value();
+    GcodeType t = detectGcodeType(m_lines.at(row));
+    m_typeCache.insert(row, t);
+    return t;
+}
+
 QVariant GcodeListModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_lines.size())
         return {};
 
     const int row = index.row();
-    const QString &line = m_lines.at(row);
 
     if (role == Qt::DisplayRole)
-        return QString("%1: %2").arg(row + 1, 5).arg(line);
+        return QString("%1: %2").arg(row + 1, 5).arg(m_lines.at(row));
 
     if (role == Qt::ForegroundRole) {
-        // Executing line - bright yellow highlight
         if (row == m_executingLine)
-            return QColor("#ffcc00");  // Bright yellow
-
-        GcodeType type = detectGcodeType(line);
-        switch (type) {
-        case GcodeType::Rapid:    return QColor("#f87171");  // Red - G0 rapid moves
-        case GcodeType::Linear:   return QColor("#4ade80");  // Green - G1 linear moves
-        case GcodeType::ArcCW:    return QColor("#60a5fa");  // Blue - G2 clockwise arcs
-        case GcodeType::ArcCCW:   return QColor("#c084fc");  // Purple - G3 counter-clockwise arcs
-        case GcodeType::Comment:  return QColor("#6b7280");  // Gray - comments
-        default:                  return QColor("#cdd6f4");  // Default text color
-        }
+            return QColor("#ffcc00");
+        return colorForType(typeAt(row));
     }
 
     if (role == Qt::BackgroundRole) {
-        // Executing line - highlighted background
         if (row == m_executingLine)
-            return QColor("#3d3d00");  // Dark yellow background
+            return QColor("#3d3d00");
     }
 
     if (role == Qt::FontRole) {
@@ -84,8 +101,14 @@ void GcodeListModel::setLines(const QStringList &lines)
 {
     beginResetModel();
     m_lines = lines;
+    m_typeCache.clear();
     m_executingLine = -1;
     endResetModel();
+}
+
+QStringList GcodeListModel::lines() const
+{
+    return m_lines;
 }
 
 int GcodeListModel::lineCount() const
@@ -119,6 +142,9 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     , m_model(new GcodeListModel(this))
     , m_listView(new QListView(this))
     , m_countLabel(new QLabel("0 lines", this))
+    , m_exportBtn(new QPushButton("Export"))
+    , m_clearBtn(new QPushButton("Clear"))
+    , m_returnToOriginCheck(new QCheckBox("Return to origin after streaming"))
 {
     // Setup count label
     m_countLabel->setObjectName("gcodeCountLabel");
@@ -127,9 +153,21 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     countFont.setBold(true);
     m_countLabel->setFont(countFont);
 
+    // Setup export button
+    m_exportBtn->setObjectName("exportBtn");
+
+    // Setup clear button
+    m_clearBtn->setObjectName("clearGcodeBtn");
+    m_clearBtn->setToolTip("Clear all loaded G-code lines and toolpath");
+
+    // Return to origin checkbox
+    m_returnToOriginCheck->setObjectName("returnToOriginCheck");
+    m_returnToOriginCheck->setToolTip("Append G90 G0 X0 Y0 Z0 when streaming to move back to work origin");
+
     // Setup list view
     m_listView->setModel(m_model);
     m_listView->setFont(QFont("Consolas", 10));
+    m_listView->setUniformItemSizes(true);   // critical for 100k+ lines perf
     m_listView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_listView->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_listView->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -147,18 +185,28 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
         "}"
     );
 
+    // Header layout (count + buttons)
+    auto *headerLayout = new QHBoxLayout();
+    headerLayout->addWidget(m_countLabel);
+    headerLayout->addStretch();
+    headerLayout->addWidget(m_clearBtn);
+    headerLayout->addWidget(m_exportBtn);
+
     // Layout
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
-    layout->addWidget(m_countLabel);
+    layout->addLayout(headerLayout);
     layout->addWidget(m_listView, 1);
+    layout->addWidget(m_returnToOriginCheck);
 
     // Max width constraint
     setMaximumWidth(350);
     setMinimumWidth(200);
 
     connect(m_listView, &QListView::clicked, this, &GcodeListWidget::onItemClicked);
+    connect(m_exportBtn, &QPushButton::clicked, this, &GcodeListWidget::onExportClicked);
+    connect(m_clearBtn, &QPushButton::clicked, this, &GcodeListWidget::clearRequested);
 }
 
 void GcodeListWidget::setLines(const QStringList &lines)
@@ -166,6 +214,11 @@ void GcodeListWidget::setLines(const QStringList &lines)
     m_lastHighlight = -1;
     m_model->setLines(lines);
     m_countLabel->setText(QString("%1 lines").arg(lines.size()));
+}
+
+QStringList GcodeListWidget::lines() const
+{
+    return m_model->lines();
 }
 
 void GcodeListWidget::highlightLine(int lineNumber)
@@ -198,14 +251,42 @@ void GcodeListWidget::setExecutingLine(int lineNumber)
 {
     m_model->setExecutingLine(lineNumber);
 
-    // Auto-scroll to keep executing line visible
+    // Throttle auto-scroll: only scroll every 20 lines or on the last line
+    // to avoid expensive layout recalculations that freeze the UI.
     if (lineNumber >= 0 && lineNumber < m_model->lineCount()) {
-        QModelIndex idx = m_model->index(lineNumber, 0);
-        m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        if (lineNumber % 20 == 0 || lineNumber == m_model->lineCount() - 1) {
+            QModelIndex idx = m_model->index(lineNumber, 0);
+            m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        }
     }
 }
 
 void GcodeListWidget::onItemClicked(const QModelIndex &index)
 {
     emit lineClicked(index.row());
+}
+
+void GcodeListWidget::onExportClicked()
+{
+    QString file = QFileDialog::getSaveFileName(this, "Export G-code",
+        QString(), "G-code Files (*.nc *.ngc *.gcode *.txt)");
+    if (!file.isEmpty()) {
+        QFile f(file);
+        if (f.open(QIODevice::WriteOnly)) {
+            for (const QString &line : m_model->lines()) {
+                f.write(line.toUtf8());
+                f.write("\r\n");
+            }
+            f.close();
+            QMessageBox::information(this, "Export Complete",
+                QString("Exported %1 lines to %2").arg(m_model->lineCount()).arg(file));
+        } else {
+            QMessageBox::warning(this, "Export Failed", "Could not write file.");
+        }
+    }
+}
+
+bool GcodeListWidget::returnToOriginEnabled() const
+{
+    return m_returnToOriginCheck->isChecked();
 }

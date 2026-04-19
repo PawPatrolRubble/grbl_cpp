@@ -42,7 +42,31 @@ void ToolpathCanvas::setMoves(const QList<GcodeMove> &moves)
     m_pathsDirty = true;
     m_executingLine = -1;
     m_highlightedLine = -1;
+    m_pastBuiltLine = -1;
+
+    // Build O(1) lineNumber → move index lookup
+    m_lineToIndex.clear();
+    m_lineToIndex.reserve(moves.size());
+    for (int i = 0; i < moves.size(); ++i)
+        m_lineToIndex.insert(moves[i].lineNumber, i);
+
     autoFit();
+    update();
+}
+
+void ToolpathCanvas::setMovesNoFit(const QList<GcodeMove> &moves)
+{
+    m_moves = moves;
+    m_bboxDirty = true;
+    m_pathsDirty = true;
+    m_pastBuiltLine = -1;
+
+    // Build O(1) lineNumber → move index lookup
+    m_lineToIndex.clear();
+    m_lineToIndex.reserve(moves.size());
+    for (int i = 0; i < moves.size(); ++i)
+        m_lineToIndex.insert(moves[i].lineNumber, i);
+
     update();
 }
 
@@ -96,14 +120,24 @@ void ToolpathCanvas::autoFit()
     double minX = 0, maxX = m_worktableSize.width();
     double minY = 0, maxY = m_worktableSize.height();
     for (const auto &mv : m_moves) {
-        auto pts = (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW)
-                       ? approximateArc(mv) : QVector<QPointF>{QPointF(mv.start.x(), mv.start.y()),
-                                                                QPointF(mv.end.x(), mv.end.y())};
-        for (const auto &p : pts) {
-            minX = std::min(minX, p.x());
-            maxX = std::max(maxX, p.x());
-            minY = std::min(minY, p.y());
-            maxY = std::max(maxY, p.y());
+        minX = std::min(minX, (double)mv.start.x());
+        maxX = std::max(maxX, (double)mv.start.x());
+        minX = std::min(minX, (double)mv.end.x());
+        maxX = std::max(maxX, (double)mv.end.x());
+        minY = std::min(minY, (double)mv.start.y());
+        maxY = std::max(maxY, (double)mv.start.y());
+        minY = std::min(minY, (double)mv.end.y());
+        maxY = std::max(maxY, (double)mv.end.y());
+
+        // Include arc center points for accurate bounds
+        if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
+            double cx = mv.start.x() + mv.iOffset;
+            double cy = mv.start.y() + mv.jOffset;
+            double r = std::hypot(mv.start.x() - cx, mv.start.y() - cy);
+            minX = std::min(minX, cx - r);
+            maxX = std::max(maxX, cx + r);
+            minY = std::min(minY, cy - r);
+            maxY = std::max(maxY, cy + r);
         }
     }
 
@@ -295,13 +329,18 @@ void ToolpathCanvas::paintEvent(QPaintEvent *)
     drawMoves(painter);
     drawBoundingBox(painter);
     drawCutter(painter);
+    drawCrosshair(painter);
 }
 
 void ToolpathCanvas::rebuildPaths()
 {
-    m_rapidPath = QPainterPath();
-    m_linearPath = QPainterPath();
-    m_arcPath = QPainterPath();
+    m_rapidLines.clear();
+    m_linearLines.clear();
+    m_arcLines.clear();
+
+    // Pre-allocate reasonable sizes
+    m_rapidLines.reserve(m_moves.size() / 3);
+    m_linearLines.reserve(m_moves.size() / 3);
 
     for (int i = 0; i < m_moves.size(); ++i) {
         const auto &mv = m_moves[i];
@@ -309,21 +348,16 @@ void ToolpathCanvas::rebuildPaths()
         if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
             auto pts = approximateArc(mv);
             for (int j = 0; j + 1 < pts.size(); ++j) {
-                QPointF a = machineToScreen(pts[j]);
-                QPointF b = machineToScreen(pts[j + 1]);
-                m_arcPath.moveTo(a);
-                m_arcPath.lineTo(b);
+                m_arcLines << QLineF(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
             }
         } else if (mv.type == GcodeMove::Type::Rapid) {
             QPointF a = machineToScreen(QPointF(mv.start.x(), mv.start.y()));
             QPointF b = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
-            m_rapidPath.moveTo(a);
-            m_rapidPath.lineTo(b);
+            m_rapidLines << QLineF(a, b);
         } else {
             QPointF a = machineToScreen(QPointF(mv.start.x(), mv.start.y()));
             QPointF b = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
-            m_linearPath.moveTo(a);
-            m_linearPath.lineTo(b);
+            m_linearLines << QLineF(a, b);
         }
     }
 
@@ -341,46 +375,70 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
     if (m_pathsDirty || scaleChanged)
         rebuildPaths();
 
-    painter.setPen(QPen(QColor("#ff8800"), 1.8, Qt::DashLine));  // Orange dashed for rapid moves
-    painter.drawPath(m_rapidPath);
+    painter.setPen(QPen(QColor("#ff8800"), 1.8, Qt::DashLine));
+    painter.drawLines(m_rapidLines);
 
     painter.setPen(QPen(QColor("#2266aa"), 1.8));
-    painter.drawPath(m_linearPath);
+    painter.drawLines(m_linearLines);
 
     painter.setPen(QPen(QColor("#22aa66"), 1.8));
-    painter.drawPath(m_arcPath);
+    painter.drawLines(m_arcLines);
 
-    // Overlay highlights on top
-    if (m_executingLine >= 0 || m_highlightedLine >= 0) {
-        for (int i = 0; i < m_moves.size(); ++i) {
-            const auto &mv = m_moves[i];
-            int ln = mv.lineNumber;
+    // Overlay highlights — O(1) via hash lookup instead of O(N) scan
+    auto drawMoveHighlight = [&](int moveIdx, const QColor &color) {
+        if (moveIdx < 0 || moveIdx >= m_moves.size()) return;
+        const auto &mv = m_moves[moveIdx];
 
-            bool isHighlight = (ln == m_highlightedLine);
-            bool isCurrent = (m_executingLine >= 0 && ln == m_executingLine);
-            bool isPast = (m_executingLine >= 0 && ln < m_executingLine);
+        painter.setPen(QPen(color, 2.2));
 
-            if (!(isHighlight || isCurrent || isPast))
-                continue;
+        if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
+            auto pts = approximateArc(mv);
+            for (int j = 0; j + 1 < pts.size(); ++j)
+                painter.drawLine(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
+        } else {
+            painter.drawLine(machineToScreen(QPointF(mv.start.x(), mv.start.y())),
+                             machineToScreen(QPointF(mv.end.x(), mv.end.y())));
+        }
+    };
 
-            QColor color;
-            if (isHighlight)
-                color = QColor("#ffdd44");
-            else if (isCurrent)
-                color = QColor("#ffdd44");
-            else if (isPast)
-                color = QColor("#666666");
+    // Highlight specific line (user clicked)
+    if (m_highlightedLine >= 0) {
+        auto it = m_lineToIndex.find(m_highlightedLine);
+        if (it != m_lineToIndex.end())
+            drawMoveHighlight(it.value(), QColor("#ffdd44"));
+    }
 
-            painter.setPen(QPen(color, 2.2));
+    // Executing line (currently streaming)
+    if (m_executingLine >= 0) {
+        auto it = m_lineToIndex.find(m_executingLine);
+        if (it != m_lineToIndex.end())
+            drawMoveHighlight(it.value(), QColor("#ffdd44"));
 
-            if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
-                auto pts = approximateArc(mv);
-                for (int j = 0; j + 1 < pts.size(); ++j)
-                    painter.drawLine(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
-            } else {
-                painter.drawLine(machineToScreen(QPointF(mv.start.x(), mv.start.y())),
-                                 machineToScreen(QPointF(mv.end.x(), mv.end.y())));
+        // Past moves — dimmed.  Rebuild the batch cache only when the
+        // executing line changes (or when paths/view changed).
+        if (m_pastBuiltLine != m_executingLine || scaleChanged) {
+            m_pastSegments.clear();
+            for (auto mapIt = m_lineToIndex.begin(); mapIt != m_lineToIndex.end(); ++mapIt) {
+                if (mapIt.key() >= m_executingLine || mapIt.key() == m_highlightedLine)
+                    continue;
+                int idx = mapIt.value();
+                if (idx < 0 || idx >= m_moves.size()) continue;
+                const auto &mv = m_moves[idx];
+                if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
+                    auto pts = approximateArc(mv);
+                    for (int j = 0; j + 1 < pts.size(); ++j)
+                        m_pastSegments << QLineF(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
+                } else {
+                    m_pastSegments << QLineF(
+                        machineToScreen(QPointF(mv.start.x(), mv.start.y())),
+                        machineToScreen(QPointF(mv.end.x(), mv.end.y())));
+                }
             }
+            m_pastBuiltLine = m_executingLine;
+        }
+        if (!m_pastSegments.isEmpty()) {
+            painter.setPen(QPen(QColor("#666666"), 2.2));
+            painter.drawLines(m_pastSegments);
         }
     }
 }
@@ -394,8 +452,12 @@ void ToolpathCanvas::drawCutter(QPainter &painter)
     painter.drawEllipse(cPos, 6, 6);
 
     if (m_executingLine >= 0) {
-        for (const auto &mv : m_moves) {
-            if (mv.lineNumber >= m_executingLine) {
+        // Use the lineToIndex hash for O(1) lookup instead of O(N) scan.
+        auto it = m_lineToIndex.find(m_executingLine);
+        if (it != m_lineToIndex.end()) {
+            int idx = it.value();
+            if (idx >= 0 && idx < m_moves.size()) {
+                const auto &mv = m_moves[idx];
                 QPointF target = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
                 QPointF dir = target - cPos;
                 double len = std::hypot(dir.x(), dir.y());
@@ -408,7 +470,6 @@ void ToolpathCanvas::drawCutter(QPainter &painter)
                     painter.drawLine(tip, tip - dir * 5 + perp * 3);
                     painter.drawLine(tip, tip - dir * 5 - perp * 3);
                 }
-                break;
             }
         }
     }
@@ -630,6 +691,8 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
 void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF pos = event->position();
+    m_mouseScreenPos = pos;
+    m_mouseInWidget = true;
 
     switch (m_dragMode) {
     case DragMode::Pan: {
@@ -734,6 +797,7 @@ void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
     } else {
         setCursor(Qt::ArrowCursor);
     }
+    update(); // Repaint crosshair
 }
 
 void ToolpathCanvas::mouseReleaseEvent(QMouseEvent *event)
@@ -773,4 +837,59 @@ void ToolpathCanvas::resizeEvent(QResizeEvent *event)
         m_pathsDirty = true;
         update();
     }
+}
+
+void ToolpathCanvas::leaveEvent(QEvent *event)
+{
+    QWidget::leaveEvent(event);
+    m_mouseInWidget = false;
+    update();
+}
+
+void ToolpathCanvas::drawCrosshair(QPainter &painter)
+{
+    if (!m_mouseInWidget) return;
+
+    painter.save();
+
+    // Dashed crosshair lines
+    QPen crossPen(QColor(100, 100, 100, 150), 1.0, Qt::DashLine);
+    painter.setPen(crossPen);
+    painter.drawLine(QPointF(m_mouseScreenPos.x(), 0),
+                     QPointF(m_mouseScreenPos.x(), height()));
+    painter.drawLine(QPointF(0, m_mouseScreenPos.y()),
+                     QPointF(width(), m_mouseScreenPos.y()));
+
+    // Convert to machine coordinates
+    QPointF machPos = screenToMachine(m_mouseScreenPos);
+
+    // Draw coordinate label near cursor
+    QString coordText = QString("X:%1  Y:%2")
+                            .arg(machPos.x(), 0, 'f', 2)
+                            .arg(machPos.y(), 0, 'f', 2);
+
+    QFont font("Consolas", 9);
+    painter.setFont(font);
+    QFontMetrics fm(font);
+    QRect textRect = fm.boundingRect(coordText);
+    textRect.adjust(-4, -2, 4, 2);
+
+    // Position label offset from cursor to avoid overlap
+    double labelX = m_mouseScreenPos.x() + 12;
+    double labelY = m_mouseScreenPos.y() - 12;
+    // Keep label within widget bounds
+    if (labelX + textRect.width() > width())
+        labelX = m_mouseScreenPos.x() - textRect.width() - 12;
+    if (labelY - textRect.height() < 0)
+        labelY = m_mouseScreenPos.y() + textRect.height() + 4;
+
+    QRectF bgRect(labelX, labelY - textRect.height(), textRect.width(), textRect.height());
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 255, 255, 210));
+    painter.drawRoundedRect(bgRect.adjusted(-2, -1, 2, 1), 3, 3);
+
+    painter.setPen(QColor(50, 50, 50));
+    painter.drawText(bgRect, Qt::AlignCenter, coordText);
+
+    painter.restore();
 }

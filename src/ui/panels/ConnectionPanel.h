@@ -1,9 +1,8 @@
 #pragma once
 
 #include <QWidget>
-#include <QComboBox>
-#include <QPushButton>
-#include <QVBoxLayout>
+
+namespace Ui { class ConnectionPanel; }
 
 class ConnectionPanel : public QWidget
 {
@@ -11,6 +10,7 @@ class ConnectionPanel : public QWidget
 
 public:
     explicit ConnectionPanel(QWidget *parent = nullptr);
+    ~ConnectionPanel();
 
     void setAvailablePorts(const QStringList &ports);
     void setAvailableBaudRates(const QStringList &rates);
@@ -24,11 +24,7 @@ signals:
     void disconnectRequested();
 
 private:
-    /// Extract port name from "COM3 - USB2.0-Serial" format.
     static QString extractPortName(const QString &portString);
 
-    QComboBox *m_portCombo;
-    QComboBox *m_baudCombo;
-    QPushButton *m_connectBtn;
-    QPushButton *m_disconnectBtn;
+    Ui::ConnectionPanel *ui;
 };

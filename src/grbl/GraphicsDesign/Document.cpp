@@ -19,8 +19,11 @@ Document::~Document()
 void Document::addEntity(std::unique_ptr<Entity> entity)
 {
     m_entities.push_back(std::move(entity));
-    emit changed();
+    if (m_batchDepth == 0) emit changed();
 }
+
+void Document::beginBatch() { ++m_batchDepth; }
+void Document::endBatch() { if (--m_batchDepth <= 0) { m_batchDepth = 0; emit changed(); } }
 
 void Document::insertEntity(int index, std::unique_ptr<Entity> entity)
 {
@@ -33,6 +36,8 @@ void Document::insertEntity(int index, std::unique_ptr<Entity> entity)
 void Document::replaceEntity(int index, std::unique_ptr<Entity> entity)
 {
     if (index >= 0 && index < entityCount()) {
+        // Preserve entity ID so selection stays valid
+        entity->setId(m_entities[index]->id());
         m_entities[index] = std::move(entity);
         emit changed();
     }
@@ -154,6 +159,7 @@ QStringList Document::generateGcode(double feedRateXY, double plungeRateZ,
     }
 
     gcode << QString("G0 Z%1        ; final raise").arg(safeZ, 0, 'f', 2);
+    gcode << "G0 X0 Y0        ; return to origin";
     gcode << "; End of design G-code";
     return gcode;
 }
