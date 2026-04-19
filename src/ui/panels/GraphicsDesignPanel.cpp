@@ -175,30 +175,35 @@ void GraphicsDesignPanel::setupUi()
     m_statusLabel = new QLabel();
     rightLayout->addWidget(m_statusLabel);
 
-    // Bottom buttons
-    auto *buttonBar = new QHBoxLayout();
+    // Bottom buttons (two rows)
+    auto *buttonBar1 = new QHBoxLayout();
     m_saveBtn = new QPushButton("Save");
-    buttonBar->addWidget(m_saveBtn);
+    buttonBar1->addWidget(m_saveBtn);
 
     m_loadBtn = new QPushButton("Load");
-    buttonBar->addWidget(m_loadBtn);
+    buttonBar1->addWidget(m_loadBtn);
 
     m_exportBtn = new QPushButton("Export");
-    buttonBar->addWidget(m_exportBtn);
-
-    auto *importImgBtn = new QPushButton("Import Image");
-    connect(importImgBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportImageClicked);
-    buttonBar->addWidget(importImgBtn);
-
-    auto *importDxfBtn = new QPushButton("Import DXF");
-    connect(importDxfBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportDxfClicked);
-    buttonBar->addWidget(importDxfBtn);
+    buttonBar1->addWidget(m_exportBtn);
 
     m_generateBtn = new QPushButton("Generate & Load");
     m_generateBtn->setObjectName("startBtn");
-    buttonBar->addWidget(m_generateBtn);
+    buttonBar1->addWidget(m_generateBtn);
 
-    rightLayout->addLayout(buttonBar);
+    rightLayout->addLayout(buttonBar1);
+
+    auto *buttonBar2 = new QHBoxLayout();
+    auto *importImgBtn = new QPushButton("Import Image");
+    connect(importImgBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportImageClicked);
+    buttonBar2->addWidget(importImgBtn);
+
+    auto *importDxfBtn = new QPushButton("Import DXF");
+    connect(importDxfBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onImportDxfClicked);
+    buttonBar2->addWidget(importDxfBtn);
+
+    buttonBar2->addStretch();
+
+    rightLayout->addLayout(buttonBar2);
 
     splitter->addWidget(rightPanel);
     splitter->setStretchFactor(0, 3);  // Canvas gets 3x stretch
@@ -428,6 +433,24 @@ void GraphicsDesignPanel::buildTextPage()
     m_textSsCleanup->setToolTip("Remove skeleton spur branches shorter than this. Higher = cleaner but may lose small details.");
     ssLayout->addRow("Cleanup:", m_textSsCleanup);
 
+    m_textSsMergeGap = new QDoubleSpinBox();
+    m_textSsMergeGap->setRange(0, 20);
+    m_textSsMergeGap->setDecimals(1);
+    m_textSsMergeGap->setValue(4.0);
+    m_textSsMergeGap->setSingleStep(1.0);
+    m_textSsMergeGap->setSuffix(" px");
+    m_textSsMergeGap->setToolTip("Merge chain endpoints closer than this distance. Higher = fewer toolpaths. 0 = off.");
+    ssLayout->addRow("Merge Gap:", m_textSsMergeGap);
+
+    m_textSsMinSegLen = new QDoubleSpinBox();
+    m_textSsMinSegLen->setRange(0, 30);
+    m_textSsMinSegLen->setDecimals(1);
+    m_textSsMinSegLen->setValue(3.0);
+    m_textSsMinSegLen->setSingleStep(1.0);
+    m_textSsMinSegLen->setSuffix(" px");
+    m_textSsMinSegLen->setToolTip("Remove segments with total length shorter than this. Eliminates tiny stray marks. 0 = off.");
+    ssLayout->addRow("Min Segment:", m_textSsMinSegLen);
+
     m_textSingleStrokeParams->setVisible(false);
     layout->addRow("", m_textSingleStrokeParams);
 
@@ -581,6 +604,10 @@ void GraphicsDesignPanel::setupConnections()
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textSsCleanup, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSsMergeGap, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSsMinSegLen, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
 }
 
 void GraphicsDesignPanel::onToolChanged(int index)
@@ -705,10 +732,14 @@ void GraphicsDesignPanel::onSelectionChanged()
                 QSignalBlocker bres(m_textSsResolution);
                 QSignalBlocker bsmo(m_textSsSmoothing);
                 QSignalBlocker bcln(m_textSsCleanup);
+                QSignalBlocker bmrg(m_textSsMergeGap);
+                QSignalBlocker bmin(m_textSsMinSegLen);
                 m_textSingleStrokeCheck->setChecked(text->singleStroke());
                 m_textSsResolution->setValue(text->ssResolution());
                 m_textSsSmoothing->setValue(text->ssSmoothing());
                 m_textSsCleanup->setValue(text->ssCleanup());
+                m_textSsMergeGap->setValue(text->ssMergeGap());
+                m_textSsMinSegLen->setValue(text->ssMinSegLen());
                 m_textSingleStrokeParams->setVisible(!isVector && text->singleStroke());
             }
 
@@ -1189,6 +1220,8 @@ void GraphicsDesignPanel::applyTextProperties()
             newText->setSsResolution(static_cast<int>(m_textSsResolution->value()));
             newText->setSsSmoothing(m_textSsSmoothing->value());
             newText->setSsCleanup(static_cast<int>(m_textSsCleanup->value()));
+            newText->setSsMergeGap(m_textSsMergeGap->value());
+            newText->setSsMinSegLen(m_textSsMinSegLen->value());
         }
     }
 
