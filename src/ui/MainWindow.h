@@ -31,11 +31,14 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void keyReleaseEvent(QKeyEvent *event) override;
     void changeEvent(QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
     void setupUi();
     void setupTitleBar();
     void setupDocks();
+    void setupDockTabBars();
     void setupMenuBar();
     void setupStatusBar();
     void setupConnections();

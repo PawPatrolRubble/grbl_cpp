@@ -16,6 +16,7 @@ class ToolpathPanel : public QWidget
 public:
     explicit ToolpathPanel(QWidget *parent = nullptr);
 
+    void setWorktableSize(const QSizeF &size);
     void setGcodeLines(const QStringList &lines);
     void setMoves(const QList<GcodeMove> &moves);
     void setExecutingLine(int lineNumber);

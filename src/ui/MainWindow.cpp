@@ -24,6 +24,10 @@
 #include <QStatusBar>
 #include <QMenuBar>
 #include <QVBoxLayout>
+#include <QTabBar>
+#include <QTimer>
+#include <QMouseEvent>
+#include <QWindow>
 #include <QtConcurrent>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -99,9 +103,9 @@ void MainWindow::setupMenuBar()
     viewMenu->addAction("Jog Control", m_dockJog, &QDockWidget::toggleViewAction);
     viewMenu->addAction("Settings", m_dockSettings, &QDockWidget::toggleViewAction);
     viewMenu->addSeparator();
-    viewMenu->addAction("Toolpath", m_dockToolpath, &QDockWidget::toggleViewAction);
-    viewMenu->addAction("Console", m_dockConsole, &QDockWidget::toggleViewAction);
-    viewMenu->addAction("Design", m_dockDesign, &QDockWidget::toggleViewAction);
+    viewMenu->addAction("Toolpath", this, [this]() { m_dockToolpath->show(); m_dockToolpath->raise(); });
+    viewMenu->addAction("Console", this, [this]() { m_dockConsole->show(); m_dockConsole->raise(); });
+    viewMenu->addAction("Design", this, [this]() { m_dockDesign->show(); m_dockDesign->raise(); });
     viewMenu->addSeparator();
     viewMenu->addAction("Reset Layout", this, [this]() {
         m_settings->resetToDefaults();
@@ -116,16 +120,16 @@ void MainWindow::setupMenuBar()
         addDockWidget(Qt::RightDockWidgetArea, m_dockSettings);
         addDockWidget(Qt::RightDockWidgetArea, m_dockToolpath);
         addDockWidget(Qt::RightDockWidgetArea, m_dockDesign);
-        addDockWidget(Qt::BottomDockWidgetArea, m_dockConsole);
+        addDockWidget(Qt::RightDockWidgetArea, m_dockConsole);
         tabifyDockWidget(m_dockToolpath, m_dockDesign);
-        tabifyDockWidget(m_dockConnection, m_dockStatus);
-        tabifyDockWidget(m_dockStatus, m_dockControl);
-        tabifyDockWidget(m_dockControl, m_dockJog);
-        m_dockSettings->hide();
-        m_dockConnection->raise();
+        tabifyDockWidget(m_dockToolpath, m_dockSettings);
+        splitDockWidget(m_dockToolpath, m_dockConsole, Qt::Vertical);
+        splitDockWidget(m_dockConnection, m_dockStatus, Qt::Vertical);
+        splitDockWidget(m_dockStatus, m_dockControl, Qt::Vertical);
+        splitDockWidget(m_dockControl, m_dockJog, Qt::Vertical);
         m_dockToolpath->raise();
         for (auto *dock : {m_dockConnection, m_dockStatus, m_dockControl, m_dockJog,
-                           m_dockToolpath, m_dockConsole, m_dockDesign}) {
+                           m_dockToolpath, m_dockConsole, m_dockDesign, m_dockSettings}) {
             dock->show();
         }
     });
@@ -149,56 +153,158 @@ void MainWindow::setupStatusBar()
 void MainWindow::setupDocks()
 {
     setDockNestingEnabled(true);
+    setTabPosition(Qt::LeftDockWidgetArea, QTabWidget::North);
+    setTabPosition(Qt::RightDockWidgetArea, QTabWidget::North);
 
-    // Connection panel (left)
+    // Use a minimal central widget — all content lives in docks
+    auto *placeholder = new QWidget();
+    placeholder->setMaximumSize(0, 0);
+    setCentralWidget(placeholder);
+
+    int dockWidth = 450;
+
+    // --- Left side docks ---
     m_connectionPanel = new ConnectionPanel();
     m_connectionPanel->setAvailablePorts(SerialManager::availablePorts());
     m_connectionPanel->setAvailableBaudRates(SerialManager::commonBaudRates());
     m_connectionPanel->setDefaultBaudRate("115200");
-    m_dockConnection = createDock("Connection", m_connectionPanel, Qt::LeftDockWidgetArea);
+    m_dockConnection = createDock("Connection", m_connectionPanel, Qt::LeftDockWidgetArea, false);
+    m_dockConnection->setMaximumWidth(dockWidth);
 
-    // Status panel (left)
     m_statusPanel = new StatusPanel();
-    m_dockStatus = createDock("Machine Status", m_statusPanel, Qt::LeftDockWidgetArea);
+    m_dockStatus = createDock("Machine Status", m_statusPanel, Qt::LeftDockWidgetArea, false);
+    m_dockStatus->setMaximumWidth(dockWidth);
 
-    // Control panel (left)
     m_controlPanel = new ControlPanel();
-    m_dockControl = createDock("Streaming Control", m_controlPanel, Qt::LeftDockWidgetArea);
+    m_dockControl = createDock("Streaming Control", m_controlPanel, Qt::LeftDockWidgetArea, false);
+    m_dockControl->setMaximumWidth(dockWidth);
 
-    // Jog panel (left)
     m_jogPanel = new JogPanel();
-    m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea);
+    m_dockJog = createDock("Jog Control", m_jogPanel, Qt::LeftDockWidgetArea, false);
+    m_dockJog->setMaximumWidth(dockWidth);
 
-    // Settings panel (right, hidden by default)
-    m_settingsPanel = new SettingsPanel();
-    m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
-    m_dockSettings->hide();
+    // Left docks stacked vertically (no tabify)
+    splitDockWidget(m_dockConnection, m_dockStatus, Qt::Vertical);
+    splitDockWidget(m_dockStatus, m_dockControl, Qt::Vertical);
+    splitDockWidget(m_dockControl, m_dockJog, Qt::Vertical);
 
-    // Tabify left docks
-    tabifyDockWidget(m_dockConnection, m_dockStatus);
-    tabifyDockWidget(m_dockStatus, m_dockControl);
-    tabifyDockWidget(m_dockControl, m_dockJog);
-    m_dockConnection->raise();
-
-    // --- Central panels as dockable widgets ---
-
-    // Toolpath panel
+    // --- Right side: Toolpath + Design as tabs, Console below ---
     m_toolpathPanel = new ToolpathPanel();
-    m_dockToolpath = createDock("Toolpath", m_toolpathPanel, Qt::RightDockWidgetArea, false);
+    m_dockToolpath = createDock("Toolpath", m_toolpathPanel, Qt::RightDockWidgetArea);
 
-    // Console panel
-    m_consolePanel = new ConsolePanel();
-    m_consolePanel->setMinimumHeight(120);
-    m_consolePanel->setMaximumHeight(250);
-    m_dockConsole = createDock("Console", m_consolePanel, Qt::BottomDockWidgetArea, false);
-
-    // Graphics Design panel
     m_graphicsDesignPanel = new GraphicsDesignPanel();
-    m_dockDesign = createDock("Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea, false);
+    m_dockDesign = createDock("Design", m_graphicsDesignPanel, Qt::RightDockWidgetArea);
 
-    // Tabify central panels so they appear as tabs
+    // Tabify Toolpath and Design in the same area
     tabifyDockWidget(m_dockToolpath, m_dockDesign);
     m_dockToolpath->raise();
+
+    // Console below the tabbed Toolpath/Design area
+    m_consolePanel = new ConsolePanel();
+    m_consolePanel->setMinimumHeight(120);
+    m_dockConsole = createDock("Console", m_consolePanel, Qt::RightDockWidgetArea);
+    // Split Console below the Toolpath dock
+    splitDockWidget(m_dockToolpath, m_dockConsole, Qt::Vertical);
+
+    // Settings (tabified with Toolpath/Design)
+    m_settingsPanel = new SettingsPanel();
+    m_dockSettings = createDock("Settings", m_settingsPanel, Qt::RightDockWidgetArea);
+    tabifyDockWidget(m_dockToolpath, m_dockSettings);
+    m_dockToolpath->raise();
+
+    // Set left panel initial width to dockWidth
+    resizeDocks({m_dockConnection}, {dockWidth}, Qt::Horizontal);
+}
+
+void MainWindow::setupDockTabBars()
+{
+    for (auto *tabBar : findChildren<QTabBar *>()) {
+        if (tabBar->property("_dockTabSetup").toBool())
+            continue;
+        tabBar->setProperty("_dockTabSetup", true);
+        tabBar->setTabsClosable(true);
+
+        connect(tabBar, &QTabBar::tabCloseRequested, this, [tabBar, this](int index) {
+            QString tabText = tabBar->tabText(index);
+            for (auto *dock : findChildren<DockPanel *>()) {
+                if (dock->windowTitle() == tabText) {
+                    dock->close();
+                    break;
+                }
+            }
+        });
+
+        // Double-click tab to toggle float
+        tabBar->installEventFilter(this);
+    }
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    QTimer::singleShot(100, this, &MainWindow::setupDockTabBars);
+
+    // Re-setup tab bars whenever any dock's floating/location changes
+    for (auto *dock : findChildren<DockPanel *>()) {
+        if (dock->property("_dockSignalsConnected").toBool())
+            continue;
+        dock->setProperty("_dockSignalsConnected", true);
+        connect(dock, &QDockWidget::topLevelChanged, this, [this]() {
+            QTimer::singleShot(100, this, &MainWindow::setupDockTabBars);
+        });
+        connect(dock, &QDockWidget::dockLocationChanged, this, [this]() {
+            QTimer::singleShot(100, this, &MainWindow::setupDockTabBars);
+        });
+    }
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    auto *tabBar = qobject_cast<QTabBar *>(obj);
+    if (!tabBar)
+        return QMainWindow::eventFilter(obj, event);
+
+    if (event->type() == QEvent::MouseButtonPress) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton) {
+            int tabIndex = tabBar->tabAt(me->pos());
+            if (tabIndex >= 0) {
+                tabBar->setProperty("_dragTabIndex", tabIndex);
+                tabBar->setProperty("_dragStartPos", me->globalPosition().toPoint());
+            }
+        }
+    } else if (event->type() == QEvent::MouseMove) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->buttons() & Qt::LeftButton) {
+            QPoint startPos = tabBar->property("_dragStartPos").toPoint();
+            int tabIndex = tabBar->property("_dragTabIndex").toInt();
+            if (!startPos.isNull() && tabIndex >= 0) {
+                QPoint delta = me->globalPosition().toPoint() - startPos;
+                if (delta.manhattanLength() > 20) {
+                    // Find the dock for this tab and float it
+                    QString tabText = tabBar->tabText(tabIndex);
+                    for (auto *dock : findChildren<DockPanel *>()) {
+                        if (dock->windowTitle() == tabText) {
+                            dock->setFloating(true);
+                            dock->move(me->globalPosition().toPoint());
+                            dock->raise();
+                            // Start native window drag
+                            if (dock->windowHandle())
+                                dock->windowHandle()->startSystemMove();
+                            tabBar->setProperty("_dragStartPos", QPoint());
+                            tabBar->setProperty("_dragTabIndex", -1);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } else if (event->type() == QEvent::MouseButtonRelease) {
+        tabBar->setProperty("_dragStartPos", QPoint());
+        tabBar->setProperty("_dragTabIndex", -1);
+    }
+
+    return QMainWindow::eventFilter(obj, event);
 }
 
 DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
@@ -216,7 +322,7 @@ DockPanel *MainWindow::createDock(const QString &title, QWidget *widget,
 void MainWindow::saveLayout()
 {
     QByteArray geometry = saveGeometry();
-    QByteArray dockState = saveState();
+    QByteArray dockState = saveState(5);  // version 5 = settings tab
     m_settings->saveLayout(dockState, geometry);
 }
 
@@ -225,7 +331,7 @@ void MainWindow::restoreLayout()
     QByteArray geometry;
     QByteArray state = m_settings->restoreLayout(geometry);
     if (!state.isEmpty())
-        restoreState(state);
+        restoreState(state, 5);  // only restore version 5
     if (!geometry.isEmpty())
         restoreGeometry(geometry);
 }
@@ -253,6 +359,13 @@ void MainWindow::setupConnections()
     connect(serial, &SerialManager::connectedChanged,
             this, [this](bool connected) {
                 m_consolePanel->appendMessage(connected ? "Connected to GRBL" : "Disconnected");
+                if (connected) {
+                    // Auto-fetch GRBL settings on connect
+                    QTimer::singleShot(500, this, [this]() {
+                        if (m_core->serialManager()->isConnected())
+                            m_core->serialManager()->sendCommand("$$");
+                    });
+                }
             });
 
     // --- Core responses 鈫?console (filter out status reports)
@@ -326,6 +439,29 @@ void MainWindow::setupConnections()
     connect(state, &MachineState::spindleSpeedChanged,
             m_statusPanel, &StatusPanel::setSpindleSpeed);
 
+    // --- MachineState → SettingsPanel (GRBL settings) ---
+    connect(state, &MachineState::grblSettingsChanged,
+            m_settingsPanel, &SettingsPanel::setGrblSettings);
+    connect(state, &MachineState::grblSettingsChanged,
+            this, [this](const QMap<int, double> &settings) {
+                double w = settings.value(130, 300.0);
+                double h = settings.value(131, 200.0);
+                QSizeF tableSize(w, h);
+                m_toolpathPanel->setWorktableSize(tableSize);
+                m_graphicsDesignPanel->setWorktableSize(tableSize);
+            });
+    connect(m_settingsPanel, &SettingsPanel::grblSettingsRefreshRequested,
+            this, [this]() {
+                if (m_core->serialManager()->isConnected())
+                    m_core->serialManager()->sendCommand("$$");
+            });
+    connect(m_settingsPanel, &SettingsPanel::grblSettingWriteRequested,
+            this, [this](int id, double value) {
+                if (!m_core->serialManager()->isConnected()) return;
+                m_core->serialManager()->sendCommand(QString("$%1=%2").arg(id).arg(value, 0, 'f', 3));
+                m_consolePanel->appendMessage(QString("Set $%1=%2").arg(id).arg(value, 0, 'f', 3));
+            });
+
     // --- StatusPanel 鈫?SerialManager ---
     connect(m_statusPanel, &StatusPanel::zeroAxisRequested,
             this, [this](const QString &axis) {
@@ -353,15 +489,18 @@ void MainWindow::setupConnections()
     connect(m_statusPanel, &StatusPanel::goToZeroRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
-                m_core->serialManager()->sendCommand("G90 G0 X0 Y0 Z0");
-                m_consolePanel->appendMessage("Moving to zero position");
+                // Safety: raise Z first, then move XY, then lower Z
+                m_core->serialManager()->sendCommand("G90 G0 Z5");    // raise Z to safe height
+                m_core->serialManager()->sendCommand("G90 G0 X0 Y0"); // move XY to zero
+                m_core->serialManager()->sendCommand("G90 G0 Z0");    // lower Z to zero
+                m_consolePanel->appendMessage("Moving to zero position (Z up first)");
             });
     connect(m_statusPanel, &StatusPanel::resetWorkOffsetRequested,
             this, [this]() {
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand("G10 L2 P1 X0 Y0 Z0");
                 m_core->serialManager()->sendCommand("$#");
-                m_consolePanel->appendMessage("Reset work offset 鈥?work position now equals machine position");
+                m_consolePanel->appendMessage("Reset work offset work position now equals machine position");
             });
     connect(m_statusPanel, &StatusPanel::emergencyStopRequested,
             this, [this]() {
@@ -446,14 +585,34 @@ void MainWindow::setupConnections()
     connect(m_jogPanel, &JogPanel::goToAbsoluteRequested,
             this, [this](double x, double y, double z, double feed) {
                 if (!m_core->serialManager()->isConnected()) return;
-                QString cmd = QString("G90 G0 X%1 Y%2 Z%3 F%4")
-                    .arg(x, 0, 'f', 3)
-                    .arg(y, 0, 'f', 3)
-                    .arg(z, 0, 'f', 3)
-                    .arg(feed, 0, 'f', 0);
-                m_core->serialManager()->sendCommand(cmd);
-                m_consolePanel->appendMessage(QString("Go to absolute: X%1 Y%2 Z%3 F%4")
+                // Safety: raise Z first, then move XY, then lower Z
+                QString feedStr = QString("F%1").arg(feed, 0, 'f', 0);
+                m_core->serialManager()->sendCommand(QString("G90 G0 Z%1 %2").arg(qMax(z, 5.0), 0, 'f', 3).arg(feedStr));
+                m_core->serialManager()->sendCommand(QString("G90 G0 X%1 Y%2 %3").arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(feedStr));
+                m_core->serialManager()->sendCommand(QString("G90 G0 Z%1 %2").arg(z, 0, 'f', 3).arg(feedStr));
+                m_consolePanel->appendMessage(QString("Go to absolute: X%1 Y%2 Z%3 F%4 (Z up first)")
                     .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(z, 0, 'f', 3).arg(feed, 0, 'f', 0));
+            });
+    connect(m_jogPanel, &JogPanel::goToXRequested,
+            this, [this](double x, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString feedStr = QString("F%1").arg(feed, 0, 'f', 0);
+                m_core->serialManager()->sendCommand(QString("G90 G0 X%1 %2").arg(x, 0, 'f', 3).arg(feedStr));
+                m_consolePanel->appendMessage(QString("Go to X%1 F%2").arg(x, 0, 'f', 3).arg(feed, 0, 'f', 0));
+            });
+    connect(m_jogPanel, &JogPanel::goToYRequested,
+            this, [this](double y, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString feedStr = QString("F%1").arg(feed, 0, 'f', 0);
+                m_core->serialManager()->sendCommand(QString("G90 G0 Y%1 %2").arg(y, 0, 'f', 3).arg(feedStr));
+                m_consolePanel->appendMessage(QString("Go to Y%1 F%2").arg(y, 0, 'f', 3).arg(feed, 0, 'f', 0));
+            });
+    connect(m_jogPanel, &JogPanel::goToZRequested,
+            this, [this](double z, double feed) {
+                if (!m_core->serialManager()->isConnected()) return;
+                QString feedStr = QString("F%1").arg(feed, 0, 'f', 0);
+                m_core->serialManager()->sendCommand(QString("G90 G0 Z%1 %2").arg(z, 0, 'f', 3).arg(feedStr));
+                m_consolePanel->appendMessage(QString("Go to Z%1 F%2").arg(z, 0, 'f', 3).arg(feed, 0, 'f', 0));
             });
 
     // --- ConsolePanel 鈫?SerialManager ---
@@ -496,7 +655,7 @@ void MainWindow::setupConnections()
                 m_consolePanel->appendMessage("Generated Graphics Design G-code loaded.");
                 statusBar()->showMessage("Graphics Design G-code loaded");
 
-                // Switch to toolpath dock to show result
+                // Switch to toolpath tab to show result
                 m_dockToolpath->raise();
                 m_dockToolpath->show();
 

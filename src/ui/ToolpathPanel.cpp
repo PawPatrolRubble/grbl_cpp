@@ -47,6 +47,11 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
             this, &ToolpathPanel::clearRequested);
 }
 
+void ToolpathPanel::setWorktableSize(const QSizeF &size)
+{
+    m_canvas->setWorktableSize(size);
+}
+
 void ToolpathPanel::setGcodeLines(const QStringList &lines)
 {
     m_currentLines = lines;

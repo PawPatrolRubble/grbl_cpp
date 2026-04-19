@@ -25,6 +25,8 @@ public:
     explicit GraphicsDesignPanel(QWidget *parent = nullptr);
     ~GraphicsDesignPanel() = default;
 
+    void setWorktableSize(const QSizeF &size);
+
     struct Options {
         double feedRateXY = 2000.0;
         double plungeRateZ = 1500.0;
