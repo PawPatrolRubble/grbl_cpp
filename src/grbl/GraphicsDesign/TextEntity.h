@@ -6,6 +6,7 @@
 #include <QFont>
 #include <QMap>
 #include <QList>
+#include <QPolygonF>
 
 /// Text entity supporting both system fonts and vector (single-line) fonts.
 /// System fonts are rendered via QPainterPath outlines.
@@ -41,6 +42,10 @@ public:
     QString vectorFontPath() const { return m_vectorFontPath; }
     double letterSpacing() const { return m_letterSpacing; }
     double maxWidth() const { return m_maxWidth; }
+    bool singleStroke() const { return m_singleStroke; }
+    int ssResolution() const { return m_ssResolution; }
+    double ssSmoothing() const { return m_ssSmoothing; }
+    int ssCleanup() const { return m_ssCleanup; }
 
     void setPosition(const QPointF& pos) { m_position = pos; }
     void setText(const QString& text) { m_text = text; }
@@ -49,6 +54,10 @@ public:
     void setVectorFont(const QString& fontFilePath);
     void setLetterSpacing(double spacing) { m_letterSpacing = spacing; }
     void setMaxWidth(double width) { m_maxWidth = width; }
+    void setSingleStroke(bool enabled) { m_singleStroke = enabled; }
+    void setSsResolution(int v) { m_ssResolution = v; }
+    void setSsSmoothing(double v) { m_ssSmoothing = v; }
+    void setSsCleanup(int v) { m_ssCleanup = v; }
     QString autoWrappedText() const;
 
 private:
@@ -56,14 +65,22 @@ private:
 
     QRectF computeBoundingRect() const;
     QList<QList<QPointF>> computeVectorStrokes() const;
+    const QList<QPolygonF>& singleStrokes() const;
 
     QPointF m_position;
     QString m_text;
     double m_fontSize;
     double m_letterSpacing = 1.2;
     double m_maxWidth = 0.0;  // 0 = no wrapping
+    bool m_singleStroke = false;
+    int m_ssResolution = 256;     // SingleStroke glyph render size (px)
+    double m_ssSmoothing = 1.5;   // RDP epsilon
+    int m_ssCleanup = 8;          // branch prune length (px)
     FontMode m_fontMode = FontMode::SystemFont;
     QString m_fontFamily = "Sans Serif";
     QString m_vectorFontPath;
     GlyphData m_vectorFontData;
+
+    mutable QList<QPolygonF> m_ssCache;
+    mutable bool m_ssCacheValid = false;
 };

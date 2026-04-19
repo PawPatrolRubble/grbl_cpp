@@ -5,6 +5,7 @@
 #include <memory>
 
 class DesignCanvas;
+class QCheckBox;
 class QComboBox;
 class QFontComboBox;
 class QPushButton;
@@ -112,6 +113,11 @@ private:
     QWidget *m_textSystemFontWidget;
     QLineEdit *m_textCustomFontPath;
     QPushButton *m_textBrowseFontBtn;
+    QCheckBox *m_textSingleStrokeCheck;
+    QWidget *m_textSingleStrokeParams;
+    QDoubleSpinBox *m_textSsResolution;
+    QDoubleSpinBox *m_textSsSmoothing;
+    QDoubleSpinBox *m_textSsCleanup;
 
     void setupUi();
     void setupConnections();

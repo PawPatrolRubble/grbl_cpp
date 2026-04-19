@@ -24,6 +24,8 @@ public:
     void addEntity(std::unique_ptr<Entity> entity);
     void insertEntity(int index, std::unique_ptr<Entity> entity);
     void replaceEntity(int index, std::unique_ptr<Entity> entity);
+    void beginBatch();
+    void endBatch();
     std::unique_ptr<Entity> takeLastEntity();
     std::unique_ptr<Entity> takeEntityAt(int index);
     void restoreEntities(std::vector<std::unique_ptr<Entity>> entities);
@@ -68,6 +70,7 @@ private:
     void normalizeSelectionAfterRemoval(int removedIndex);
 
     std::vector<std::unique_ptr<Entity>> m_entities;
+    int m_batchDepth = 0;
     QSet<QUuid> m_selectedIds;
     CommandStack* m_commandStack;
     double m_worktableWidth = 300.0;

@@ -47,28 +47,6 @@ void ArcEntity::draw(QPainter& painter) const
     QRectF arcRect(m_center.x() - m_radius, m_center.y() - m_radius,
                    2.0 * m_radius, 2.0 * m_radius);
 
-    // Draw semi-transparent fill for the full circle (easier selection/move)
-    painter.save();
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(100, 149, 237, 30));
-    painter.drawEllipse(arcRect);
-    painter.restore();
-
-    // Draw the complement (non-arc portion) as dotted line
-    painter.save();
-    QPen dotPen = painter.pen();
-    dotPen.setStyle(Qt::DotLine);
-    dotPen.setColor(dotPen.color().lighter(160));
-    painter.setPen(dotPen);
-    double complementStart = m_startAngleDegrees + m_sweepAngleDegrees;
-    double complementSweep = (m_sweepAngleDegrees >= 0)
-        ? (360.0 - m_sweepAngleDegrees)
-        : -(360.0 + m_sweepAngleDegrees);
-    painter.drawArc(arcRect,
-                    static_cast<int>(complementStart * 16),
-                    static_cast<int>(complementSweep * 16));
-    painter.restore();
-
     // Draw the arc portion as solid line
     painter.drawArc(arcRect,
                     static_cast<int>(m_startAngleDegrees * 16),

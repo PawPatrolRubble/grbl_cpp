@@ -393,6 +393,44 @@ void GraphicsDesignPanel::buildTextPage()
     sysLayout->addWidget(m_textSystemFontCombo);
     layout->addRow("System Font:", m_textSystemFontWidget);
 
+    m_textSingleStrokeCheck = new QCheckBox("Enable single-stroke conversion");
+    m_textSingleStrokeCheck->setToolTip(
+        "Convert system font outlines to centerline strokes via thinning.\n"
+        "Best for pen-plotter / CNC engraving with system fonts.");
+    layout->addRow("Single Stroke:", m_textSingleStrokeCheck);
+
+    // Single-stroke tuning parameters (shown only when checkbox is on)
+    m_textSingleStrokeParams = new QWidget();
+    auto *ssLayout = new QFormLayout(m_textSingleStrokeParams);
+    ssLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_textSsResolution = new QDoubleSpinBox();
+    m_textSsResolution->setRange(64, 512);
+    m_textSsResolution->setDecimals(0);
+    m_textSsResolution->setValue(256);
+    m_textSsResolution->setSuffix(" px");
+    m_textSsResolution->setToolTip("Render resolution per glyph. Higher = finer detail but slower.");
+    ssLayout->addRow("Resolution:", m_textSsResolution);
+
+    m_textSsSmoothing = new QDoubleSpinBox();
+    m_textSsSmoothing->setRange(0.5, 10.0);
+    m_textSsSmoothing->setDecimals(1);
+    m_textSsSmoothing->setValue(1.5);
+    m_textSsSmoothing->setSingleStep(0.5);
+    m_textSsSmoothing->setToolTip("Path simplification tolerance (RDP epsilon). Higher = fewer points, less detail.");
+    ssLayout->addRow("Smoothing:", m_textSsSmoothing);
+
+    m_textSsCleanup = new QDoubleSpinBox();
+    m_textSsCleanup->setRange(0, 30);
+    m_textSsCleanup->setDecimals(0);
+    m_textSsCleanup->setValue(8);
+    m_textSsCleanup->setSuffix(" px");
+    m_textSsCleanup->setToolTip("Remove skeleton spur branches shorter than this. Higher = cleaner but may lose small details.");
+    ssLayout->addRow("Cleanup:", m_textSsCleanup);
+
+    m_textSingleStrokeParams->setVisible(false);
+    layout->addRow("", m_textSingleStrokeParams);
+
     auto updateFontVisibility = [this]() {
         bool isVector = (m_textFontModeCombo->currentIndex() == 0);
         bool isCustom = (m_textVectorFontCombo->currentIndex() == m_textVectorFontCombo->count() - 1);
@@ -400,7 +438,13 @@ void GraphicsDesignPanel::buildTextPage()
         m_textCustomFontPath->setVisible(isVector && isCustom);
         m_textBrowseFontBtn->setVisible(isVector && isCustom);
         m_textSystemFontWidget->setVisible(!isVector);
+        m_textSingleStrokeCheck->setVisible(!isVector);
+        m_textSingleStrokeParams->setVisible(!isVector && m_textSingleStrokeCheck->isChecked());
     };
+
+    connect(m_textSingleStrokeCheck, &QCheckBox::toggled, this, [updateFontVisibility]() {
+        updateFontVisibility();
+    });
     connect(m_textFontModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [updateFontVisibility, this]() { updateFontVisibility(); });
     connect(m_textVectorFontCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -529,6 +573,14 @@ void GraphicsDesignPanel::setupConnections()
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textSystemFontCombo, &QFontComboBox::currentFontChanged,
             this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSingleStrokeCheck, &QCheckBox::toggled,
+            this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSsResolution, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSsSmoothing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
+    connect(m_textSsCleanup, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphicsDesignPanel::applyTextProperties);
 }
 
 void GraphicsDesignPanel::onToolChanged(int index)
@@ -647,6 +699,18 @@ void GraphicsDesignPanel::onSelectionChanged()
             m_textFontModeCombo->setCurrentIndex(isVector ? 0 : 1);
             m_textVectorFontWidget->setVisible(isVector);
             m_textSystemFontWidget->setVisible(!isVector);
+            m_textSingleStrokeCheck->setVisible(!isVector);
+            {
+                QSignalBlocker bss(m_textSingleStrokeCheck);
+                QSignalBlocker bres(m_textSsResolution);
+                QSignalBlocker bsmo(m_textSsSmoothing);
+                QSignalBlocker bcln(m_textSsCleanup);
+                m_textSingleStrokeCheck->setChecked(text->singleStroke());
+                m_textSsResolution->setValue(text->ssResolution());
+                m_textSsSmoothing->setValue(text->ssSmoothing());
+                m_textSsCleanup->setValue(text->ssCleanup());
+                m_textSingleStrokeParams->setVisible(!isVector && text->singleStroke());
+            }
 
             if (isVector) {
                 int idx = -1;
@@ -1120,6 +1184,12 @@ void GraphicsDesignPanel::applyTextProperties()
         }
     } else {
         newText->setFontFamily(m_textSystemFontCombo->currentFont().family());
+        newText->setSingleStroke(m_textSingleStrokeCheck->isChecked());
+        if (m_textSingleStrokeCheck->isChecked()) {
+            newText->setSsResolution(static_cast<int>(m_textSsResolution->value()));
+            newText->setSsSmoothing(m_textSsSmoothing->value());
+            newText->setSsCleanup(static_cast<int>(m_textSsCleanup->value()));
+        }
     }
 
     applyProperties(index, std::move(newText));

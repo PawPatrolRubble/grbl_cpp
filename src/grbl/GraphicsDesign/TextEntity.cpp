@@ -1,6 +1,7 @@
 #include "TextEntity.h"
 
 #include "../TextToGcode/VectorFontLoader.h"
+#include "../TextToGcode/SingleStrokeConverter.h"
 
 #include <QPainterPath>
 #include <QFontMetricsF>
@@ -44,6 +45,20 @@ void TextEntity::draw(QPainter& painter) const
                 painter.drawLine(stroke[i - 1], stroke[i]);
             }
         }
+    } else if (m_singleStroke) {
+        // Draw single-stroke (centerline) rendering of system font
+        const auto &strokes = singleStrokes();
+
+        painter.save();
+        painter.translate(m_position);
+        painter.scale(1, -1);  // Un-flip Y for text
+        for (const QPolygonF &stroke : strokes) {
+            if (stroke.size() < 2) continue;
+            for (int i = 1; i < stroke.size(); ++i) {
+                painter.drawLine(stroke[i - 1], stroke[i]);
+            }
+        }
+        painter.restore();
     } else {
         // Draw system font outlines. The painter has Y-flipped (Y-up),
         // so we need to un-flip for text rendering.
@@ -94,6 +109,10 @@ std::unique_ptr<Entity> TextEntity::clone() const
     copy->m_vectorFontData = m_vectorFontData;
     copy->m_letterSpacing = m_letterSpacing;
     copy->m_maxWidth = m_maxWidth;
+    copy->m_singleStroke = m_singleStroke;
+    copy->m_ssResolution = m_ssResolution;
+    copy->m_ssSmoothing = m_ssSmoothing;
+    copy->m_ssCleanup = m_ssCleanup;
     return copy;
 }
 
@@ -177,22 +196,30 @@ QList<GcodeMove> TextEntity::toGcodeMoves(double zSafe, double zCut, double feed
             moves.append(raise);
         }
     } else {
-        // System font: extract outlines via QPainterPath
+        // System font
         QFont font(m_fontFamily);
         font.setPointSizeF(m_fontSize);
 
-        QPainterPath path;
-        QStringList lines = m_text.split('\n');
-        double yOffset = 0.0;
-        double lineHeight = m_fontSize * 1.5;
-        for (const QString& line : lines) {
-            if (!line.isEmpty()) {
-                path.addText(0, yOffset, font, line);
+        QList<QPolygonF> strokes;
+        if (m_singleStroke) {
+            // Single-stroke (centerline) conversion — cached
+            strokes = singleStrokes();
+        } else {
+            // Outline polygons via QPainterPath
+            QPainterPath path;
+            QStringList lines = m_text.split('\n');
+            double yOffset = 0.0;
+            double lineHeight = m_fontSize * 1.5;
+            for (const QString& line : lines) {
+                if (!line.isEmpty()) {
+                    path.addText(0, yOffset, font, line);
+                }
+                yOffset += lineHeight;
             }
-            yOffset += lineHeight;
+            strokes = path.toSubpathPolygons();
         }
 
-        for (const QPolygonF& stroke : path.toSubpathPolygons()) {
+        for (const QPolygonF& stroke : strokes) {
             if (stroke.isEmpty()) continue;
 
             QPointF p0 = stroke.first();
@@ -254,6 +281,12 @@ QJsonObject TextEntity::toJson() const
         json["vectorFontPath"] = m_vectorFontPath;
     }
     json["rotation"] = rotation();
+    if (m_singleStroke) {
+        json["singleStroke"] = true;
+        json["ssResolution"] = m_ssResolution;
+        json["ssSmoothing"] = m_ssSmoothing;
+        json["ssCleanup"] = m_ssCleanup;
+    }
     return json;
 }
 
@@ -267,6 +300,10 @@ std::unique_ptr<TextEntity> TextEntity::fromJson(const QJsonObject& json)
     entity->m_letterSpacing = json["letterSpacing"].toDouble(1.2);
     entity->m_maxWidth = json["maxWidth"].toDouble(0.0);
     entity->m_fontFamily = json["fontFamily"].toString("Sans Serif");
+    entity->m_singleStroke = json["singleStroke"].toBool(false);
+    entity->m_ssResolution = json["ssResolution"].toInt(256);
+    entity->m_ssSmoothing = json["ssSmoothing"].toDouble(1.5);
+    entity->m_ssCleanup = json["ssCleanup"].toInt(8);
 
     QString fontMode = json["fontMode"].toString("system");
     if (fontMode == "vector") {
@@ -368,6 +405,19 @@ QString TextEntity::autoWrappedText() const
         cursorX += charWidth;
     }
     return result;
+}
+
+const QList<QPolygonF>& TextEntity::singleStrokes() const
+{
+    if (!m_ssCacheValid) {
+        QFont font(m_fontFamily);
+        font.setPointSizeF(m_fontSize);
+        m_ssCache = SingleStrokeConverter::convert(
+            m_text, font, 1.5,
+            {m_ssResolution, m_ssSmoothing, m_ssCleanup, 0});
+        m_ssCacheValid = true;
+    }
+    return m_ssCache;
 }
 
 QList<QList<QPointF>> TextEntity::computeVectorStrokes() const
