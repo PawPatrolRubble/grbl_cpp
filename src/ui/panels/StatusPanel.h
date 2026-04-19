@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
+#include <QLineEdit>
 #include "grbl/MachineState.h"
 
 class StatusPanel : public QWidget
@@ -23,6 +24,7 @@ public slots:
 
 signals:
     void zeroAxisRequested(const QString &axis);
+    void setAxisPositionRequested(const QString &axis, double value);
     void zeroAllRequested();
     void goToZeroRequested();
     void resetWorkOffsetRequested();  // Set work = machine (G10 L2 P1)
@@ -41,6 +43,8 @@ private:
     QLabel *m_feedLabel;
     QLabel *m_spindleLabel;
     QPushButton *m_zeroXBtn, *m_zeroYBtn, *m_zeroZBtn;
+    QLineEdit *m_setXEdit, *m_setYEdit, *m_setZEdit;
+    QPushButton *m_setXBtn, *m_setYBtn, *m_setZBtn;
     QPushButton *m_zeroAllBtn;
     QPushButton *m_goToZeroBtn;
     QPushButton *m_resetOffsetBtn;

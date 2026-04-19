@@ -4,6 +4,7 @@
 #include <QGridLayout>
 #include <QFrame>
 #include <QStyle>
+#include <QRegularExpressionValidator>
 
 StatusPanel::StatusPanel(QWidget *parent)
     : QWidget(parent)
@@ -82,6 +83,37 @@ StatusPanel::StatusPanel(QWidget *parent)
     posGrid->addWidget(m_wposZ, 3, 4);
     posGrid->addWidget(zeroZBtn, 3, 5);
 
+    // Set axis position — input + "Set" button per axis
+    QRegularExpression rx(R"(^-?\d*\.?\d*$)");
+    auto makeSetEdit = [&rx]() {
+        auto *edit = new QLineEdit();
+        edit->setPlaceholderText("0.000");
+        edit->setMaximumWidth(70);
+        edit->setValidator(new QRegularExpressionValidator(rx, edit));
+        return edit;
+    };
+    auto makeSetBtn = [](const QString &axis) {
+        auto *btn = new QPushButton("Set");
+        btn->setObjectName(QString("set%1Btn").arg(axis));
+        btn->setFixedWidth(32);
+        btn->setToolTip(QString("Set %1 work position to entered value").arg(axis));
+        return btn;
+    };
+
+    m_setXEdit = makeSetEdit();
+    m_setYEdit = makeSetEdit();
+    m_setZEdit = makeSetEdit();
+    m_setXBtn = makeSetBtn("X");
+    m_setYBtn = makeSetBtn("Y");
+    m_setZBtn = makeSetBtn("Z");
+
+    posGrid->addWidget(m_setXEdit, 1, 6);
+    posGrid->addWidget(m_setXBtn, 1, 7);
+    posGrid->addWidget(m_setYEdit, 2, 6);
+    posGrid->addWidget(m_setYBtn, 2, 7);
+    posGrid->addWidget(m_setZEdit, 3, 6);
+    posGrid->addWidget(m_setZBtn, 3, 7);
+
     posGrid->setColumnStretch(1, 1);
     posGrid->setColumnStretch(4, 1);
     mainLayout->addWidget(posFrame);
@@ -119,6 +151,16 @@ StatusPanel::StatusPanel(QWidget *parent)
     connect(zeroXBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("X"); });
     connect(zeroYBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("Y"); });
     connect(zeroZBtn, &QPushButton::clicked, this, [this]() { emit zeroAxisRequested("Z"); });
+
+    connect(m_setXBtn, &QPushButton::clicked, this, [this]() {
+        emit setAxisPositionRequested("X", m_setXEdit->text().isEmpty() ? 0.0 : m_setXEdit->text().toDouble());
+    });
+    connect(m_setYBtn, &QPushButton::clicked, this, [this]() {
+        emit setAxisPositionRequested("Y", m_setYEdit->text().isEmpty() ? 0.0 : m_setYEdit->text().toDouble());
+    });
+    connect(m_setZBtn, &QPushButton::clicked, this, [this]() {
+        emit setAxisPositionRequested("Z", m_setZEdit->text().isEmpty() ? 0.0 : m_setZEdit->text().toDouble());
+    });
     connect(m_zeroAllBtn, &QPushButton::clicked, this, &StatusPanel::zeroAllRequested);
     connect(m_goToZeroBtn, &QPushButton::clicked, this, &StatusPanel::goToZeroRequested);
     connect(m_resetOffsetBtn, &QPushButton::clicked, this, &StatusPanel::resetWorkOffsetRequested);
