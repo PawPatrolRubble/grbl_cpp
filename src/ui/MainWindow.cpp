@@ -2,6 +2,7 @@
 #include "DockPanel.h"
 #include "ApplicationCore.h"
 #include "SettingsManager.h"
+#include "DesignCanvas.h"
 #include "panels/ConnectionPanel.h"
 #include "panels/StatusPanel.h"
 #include "panels/ControlPanel.h"
@@ -34,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_core(new ApplicationCore(this))
-    , m_settings(new SettingsManager(this))
+    , m_settings(&SettingsManager::instance())
     , m_parseWatcher(new QFutureWatcher<QList<GcodeMove>>(this))
 {
     // Use default system title bar
@@ -460,6 +461,13 @@ void MainWindow::setupConnections()
                 if (!m_core->serialManager()->isConnected()) return;
                 m_core->serialManager()->sendCommand(QString("$%1=%2").arg(id).arg(value, 0, 'f', 3));
                 m_consolePanel->appendMessage(QString("Set $%1=%2").arg(id).arg(value, 0, 'f', 3));
+            });
+
+    // --- SettingsPanel → SettingsManager (canvas appearance) ---
+    m_settingsPanel->applyCanvasSettings(m_settings->canvasSettings());
+    connect(m_settingsPanel, &SettingsPanel::canvasSettingsChanged,
+            this, [this](const SettingsManager::CanvasSettings &s) {
+                m_settings->setCanvasSettings(s);
             });
 
     // --- StatusPanel 鈫?SerialManager ---

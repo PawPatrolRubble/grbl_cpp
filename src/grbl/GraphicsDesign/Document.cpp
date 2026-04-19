@@ -153,6 +153,7 @@ QStringList Document::generateGcode(double feedRateXY, double plungeRateZ,
     gcode << QString("G0 Z%1        ; raise pen").arg(safeZ, 0, 'f', 2);
 
     for (const auto& entity : m_entities) {
+        if (!entity->isEnabled()) continue;
         QList<GcodeMove> moves = entity->toGcodeMoves(safeZ, cutZ, feedRateXY);
         QStringList entityGcode = GcodeParser::movesToGcode(moves);
         gcode << entityGcode;
@@ -170,7 +171,9 @@ QJsonDocument Document::toJson() const
     QJsonArray entitiesArray;
 
     for (const auto& entity : m_entities) {
-        entitiesArray.append(entity->toJson());
+        QJsonObject entityJson = entity->toJson();
+        entityJson["enabled"] = entity->isEnabled();
+        entitiesArray.append(entityJson);
     }
 
     root["entities"] = entitiesArray;
@@ -185,8 +188,10 @@ bool Document::loadFromJson(const QJsonDocument& doc)
     QJsonArray entitiesArray = root["entities"].toArray();
 
     for (const QJsonValue& val : entitiesArray) {
-        std::unique_ptr<Entity> entity = Entity::fromJson(val.toObject());
+        QJsonObject obj = val.toObject();
+        std::unique_ptr<Entity> entity = Entity::fromJson(obj);
         if (entity) {
+            entity->setEnabled(obj["enabled"].toBool(true));
             m_entities.push_back(std::move(entity));
         }
     }

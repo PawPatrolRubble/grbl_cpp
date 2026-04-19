@@ -31,3 +31,14 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
 
     return nullptr;
 }
+
+QString Entity::displayName() const
+{
+    static const QHash<Kind, QString> names = {
+        {Kind::Line, "Line"}, {Kind::Rectangle, "Rectangle"},
+        {Kind::Circle, "Circle"}, {Kind::Arc, "Arc"},
+        {Kind::Polygon, "Polygon"}, {Kind::Text, "Text"},
+        {Kind::LinearDimension, "Dimension"},
+    };
+    return names.value(m_kind, "Entity");
+}

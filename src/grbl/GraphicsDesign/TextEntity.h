@@ -28,6 +28,7 @@ public:
     double distanceTo(const QPointF& point) const override;
     void translate(const QPointF& delta) override;
     std::unique_ptr<Entity> clone() const override;
+    QString displayName() const override;
     std::vector<EditHandle> editHandles() const override;
     std::unique_ptr<Entity> withDraggedHandle(const QString& handleId, const QPointF& worldPos) const override;
     std::vector<QPointF> snapPoints() const override;
@@ -43,6 +44,7 @@ public:
     QString fontFamily() const { return m_fontFamily; }
     QString vectorFontPath() const { return m_vectorFontPath; }
     double letterSpacing() const { return m_letterSpacing; }
+    double lineHeight() const { return m_lineHeight; }
     double maxWidth() const { return m_maxWidth; }
     bool singleStroke() const { return m_singleStroke; }
     int ssResolution() const { return m_ssResolution; }
@@ -57,6 +59,7 @@ public:
     void setFontFamily(const QString& family) { m_fontFamily = family; }
     void setVectorFont(const QString& fontFilePath);
     void setLetterSpacing(double spacing) { m_letterSpacing = spacing; }
+    void setLineHeight(double height) { m_lineHeight = height; }
     void setMaxWidth(double width) { m_maxWidth = width; }
     void setSingleStroke(bool enabled) { m_singleStroke = enabled; }
     void setSsResolution(int v) { m_ssResolution = v; }
@@ -77,6 +80,7 @@ private:
     QString m_text;
     double m_fontSize;
     double m_letterSpacing = 1.2;
+    double m_lineHeight = 1.5;    // multiplier of fontSize
     double m_maxWidth = 0.0;  // 0 = no wrapping
     bool m_singleStroke = false;
     int m_ssResolution = 256;     // SingleStroke glyph render size (px)

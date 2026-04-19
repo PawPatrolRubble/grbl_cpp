@@ -10,6 +10,8 @@
 #include "../grbl/GraphicsDesign/Tools/ArcTool.h"
 #include "../grbl/GraphicsDesign/Tools/TextTool.h"
 
+#include "SettingsManager.h"
+
 #include <QWidget>
 #include <QTimer>
 #include <QPointF>
@@ -57,6 +59,7 @@ public:
     double zoom() const { return m_zoom; }
     void autoFit();
     void setWorktableSize(const QSizeF &size);
+    void setCanvasSettings(const SettingsManager::CanvasSettings &s);
     bool snapEnabled() const { return m_snapEnabled; }
     void setSnapEnabled(bool enabled);
 
@@ -135,6 +138,7 @@ private:
     double m_zoom = 1.0;
     QPointF m_panOffset;
     QSizeF m_worktableSize = QSizeF(300, 200);
+    SettingsManager::CanvasSettings m_canvasSettings;
     bool m_panning = false;
     QPoint m_lastPanScreenPos;
 
