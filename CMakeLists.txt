@@ -12,14 +12,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# Qt6 and OpenCV: provide path hints for Qt Creator
+if(WIN32)
+    # Always append these paths to help Qt Creator find dependencies
+    list(APPEND CMAKE_PREFIX_PATH "C:/Qt/6.11.0/msvc2022_64")
+    list(APPEND CMAKE_PREFIX_PATH "C:/opencv/build/x64/vc16/lib")
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets Concurrent SerialPort Core5Compat)
 find_package(Qt6CorePrivate REQUIRED)
-# OpenCV: force vc16 runtime (compatible with VS 2026)
-set(OpenCV_ARCH "x64")
-set(OpenCV_RUNTIME "vc16")
-# OpenCV: force vc16 runtime (compatible with VS 2026)
-set(OpenCV_ARCH "x64")
-set(OpenCV_RUNTIME "vc16")
+
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
 
 qt_standard_project_setup()
@@ -50,6 +52,7 @@ set(GRBL_SOURCES
     src/grbl/TextToGcode/ShxFontParser.cpp
     src/grbl/TextToGcode/VectorFontLoader.cpp
     src/grbl/TextToGcode/TextToGcodeGenerator.cpp
+    src/grbl/TextToGcode/SingleStrokeConverter.cpp
     src/grbl/GraphicsDesign/Entity.cpp
     src/grbl/GraphicsDesign/Shape.cpp
     src/grbl/GraphicsDesign/Document.cpp
@@ -93,6 +96,7 @@ set(GRBL_HEADERS
     src/grbl/TextToGcode/ShxFontParser.h
     src/grbl/TextToGcode/VectorFontLoader.h
     src/grbl/TextToGcode/TextToGcodeGenerator.h
+    src/grbl/TextToGcode/SingleStrokeConverter.h
     src/grbl/GraphicsDesign/Entity.h
     src/grbl/GraphicsDesign/Shape.h
     src/grbl/GraphicsDesign/Document.h
