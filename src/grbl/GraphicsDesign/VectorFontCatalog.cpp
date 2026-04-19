@@ -28,7 +28,8 @@ QList<QPair<QString, QString>> findInstalledShxFonts()
     QString appPath = QCoreApplication::applicationDirPath();
     QDir d(appPath + "/bigfonts");
     if (d.exists()) {
-        const auto entries = d.entryInfoList({"*.shx"}, QDir::Files, QDir::Name);
+        // Match both lowercase .shx and uppercase .SHX
+        const auto entries = d.entryInfoList({"*.shx", "*.SHX"}, QDir::Files, QDir::Name);
         for (const QFileInfo &fi : entries) {
             QString path = fi.absoluteFilePath();
             QString label = fi.baseName();
