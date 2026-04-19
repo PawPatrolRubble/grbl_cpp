@@ -329,6 +329,7 @@ void ToolpathCanvas::paintEvent(QPaintEvent *)
     drawMoves(painter);
     drawBoundingBox(painter);
     drawCutter(painter);
+    drawCrosshair(painter);
 }
 
 void ToolpathCanvas::rebuildPaths()
@@ -690,6 +691,8 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
 void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
 {
     QPointF pos = event->position();
+    m_mouseScreenPos = pos;
+    m_mouseInWidget = true;
 
     switch (m_dragMode) {
     case DragMode::Pan: {
@@ -794,6 +797,7 @@ void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
     } else {
         setCursor(Qt::ArrowCursor);
     }
+    update(); // Repaint crosshair
 }
 
 void ToolpathCanvas::mouseReleaseEvent(QMouseEvent *event)
@@ -833,4 +837,59 @@ void ToolpathCanvas::resizeEvent(QResizeEvent *event)
         m_pathsDirty = true;
         update();
     }
+}
+
+void ToolpathCanvas::leaveEvent(QEvent *event)
+{
+    QWidget::leaveEvent(event);
+    m_mouseInWidget = false;
+    update();
+}
+
+void ToolpathCanvas::drawCrosshair(QPainter &painter)
+{
+    if (!m_mouseInWidget) return;
+
+    painter.save();
+
+    // Dashed crosshair lines
+    QPen crossPen(QColor(100, 100, 100, 150), 1.0, Qt::DashLine);
+    painter.setPen(crossPen);
+    painter.drawLine(QPointF(m_mouseScreenPos.x(), 0),
+                     QPointF(m_mouseScreenPos.x(), height()));
+    painter.drawLine(QPointF(0, m_mouseScreenPos.y()),
+                     QPointF(width(), m_mouseScreenPos.y()));
+
+    // Convert to machine coordinates
+    QPointF machPos = screenToMachine(m_mouseScreenPos);
+
+    // Draw coordinate label near cursor
+    QString coordText = QString("X:%1  Y:%2")
+                            .arg(machPos.x(), 0, 'f', 2)
+                            .arg(machPos.y(), 0, 'f', 2);
+
+    QFont font("Consolas", 9);
+    painter.setFont(font);
+    QFontMetrics fm(font);
+    QRect textRect = fm.boundingRect(coordText);
+    textRect.adjust(-4, -2, 4, 2);
+
+    // Position label offset from cursor to avoid overlap
+    double labelX = m_mouseScreenPos.x() + 12;
+    double labelY = m_mouseScreenPos.y() - 12;
+    // Keep label within widget bounds
+    if (labelX + textRect.width() > width())
+        labelX = m_mouseScreenPos.x() - textRect.width() - 12;
+    if (labelY - textRect.height() < 0)
+        labelY = m_mouseScreenPos.y() + textRect.height() + 4;
+
+    QRectF bgRect(labelX, labelY - textRect.height(), textRect.width(), textRect.height());
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 255, 255, 210));
+    painter.drawRoundedRect(bgRect.adjusted(-2, -1, 2, 1), 3, 3);
+
+    painter.setPen(QColor(50, 50, 50));
+    painter.drawText(bgRect, Qt::AlignCenter, coordText);
+
+    painter.restore();
 }

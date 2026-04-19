@@ -4,6 +4,7 @@
 #include "CircleEntity.h"
 #include "ArcEntity.h"
 #include "TextEntity.h"
+#include "PolylineEntity.h"
 
 Entity::Entity(Kind kind)
     : m_id(QUuid::createUuid())
@@ -25,6 +26,8 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
         return ArcEntity::fromJson(json);
     if (typeStr == "text")
         return TextEntity::fromJson(json);
+    if (typeStr == "polyline")
+        return PolylineEntity::fromJson(json);
 
     return nullptr;
 }

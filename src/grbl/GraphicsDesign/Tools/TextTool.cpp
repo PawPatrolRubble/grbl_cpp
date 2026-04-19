@@ -1,5 +1,5 @@
 #include "TextTool.h"
-
+#include "../VectorFontCatalog.h"
 #include "../TextEntity.h"
 
 #include <QDialog>
@@ -41,19 +41,9 @@ void TextTool::mousePress(const QPointF& pos)
     QWidget *parent = QApplication::activeWindow();
 
     // Built-in vector font catalog (resource path → display name)
-    struct BuiltinFont { QString path; QString name; };
-    static const QList<BuiltinFont> builtinFonts = {
-        {":/fonts/fonts/futural.jhf",    "Sans Serif Light"},
-        {":/fonts/fonts/futuram.jhf",    "Sans Serif Medium"},
-        {":/fonts/fonts/rowmans.jhf",    "Serif Simplex"},
-        {":/fonts/fonts/rowmand.jhf",    "Serif Duplex"},
-        {":/fonts/fonts/timesr.jhf",     "Times Roman"},
-        {":/fonts/fonts/timesi.jhf",     "Times Italic"},
-        {":/fonts/fonts/scripts.jhf",    "Script Simplex"},
-        {":/fonts/fonts/scriptc.jhf",    "Script Complex"},
-        {":/fonts/fonts/cursive.jhf",    "Cursive"},
-        {":/fonts/fonts/gothiceng.jhf",  "Gothic English"},
-    };
+    QList<BuiltinFont> builtinFonts = builtinVectorFonts();
+    for (const auto& shx : findInstalledShxFonts())
+        builtinFonts.append({shx.first, shx.second});
 
     // Build text placement dialog
     QDialog dialog(parent);
@@ -140,30 +130,29 @@ void TextTool::mousePress(const QPointF& pos)
     QObject::connect(vectorFontCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
                      [&](int) { updateVisibility(); });
 
-    // Auto-detect CJK: switch to system font mode when Chinese/Japanese text is typed
-    auto detectCJK = [&]() {
+    // Auto-detect CJK: switch to system font only if selected vector font is not a bigfont SHX
+auto detectCJK = [&]() {
         QString txt = textEdit->toPlainText();
-        bool hasCJK = false;
-        for (const QChar& c : txt) {
-            ushort u = c.unicode();
-            if ((u >= 0x4E00 && u <= 0x9FFF) || (u >= 0x3400 && u <= 0x4DBF) ||
-                (u >= 0x3000 && u <= 0x303F) || (u >= 0xFF00 && u <= 0xFFEF) ||
-                (u >= 0x3040 && u <= 0x30FF)) {
-                hasCJK = true;
-                break;
-            }
-        }
+        bool hasCJK = textContainsCJK(txt);
         if (hasCJK) {
+            // Check if current vector selection is a bigfont SHX (CJK-capable)
+            bool currentIsBigfont = false;
             if (modeCombo->currentIndex() == 0) {
-                modeCombo->setCurrentIndex(1); // Switch to System Font
+                int idx = vectorFontCombo->currentIndex();
+                QString selPath = (idx < builtinFonts.size())
+                    ? builtinFonts[idx].path
+                    : fontPathEdit->text();
+                currentIsBigfont = isBigfontShx(selPath);
             }
-            // Filter font combo to show only CJK-capable fonts
-            fontCombo->setWritingSystem(QFontDatabase::SimplifiedChinese);
-            // Select a good default if current font doesn't support CJK
-            QFont testFont(fontCombo->currentFont());
-            QFontMetrics fm(testFont);
-            if (!fm.inFont(QChar(0x4E2D))) {
-                fontCombo->setCurrentFont(QFont("Microsoft YaHei"));
+            if (!currentIsBigfont) {
+                if (modeCombo->currentIndex() == 0)
+                    modeCombo->setCurrentIndex(1); // Switch to System Font
+                // Filter font combo to show only CJK-capable fonts
+                fontCombo->setWritingSystem(QFontDatabase::SimplifiedChinese);
+                QFont testFont(fontCombo->currentFont());
+                QFontMetrics fm(testFont);
+                if (!fm.inFont(QChar(0x4E2D)))
+                    fontCombo->setCurrentFont(QFont("Microsoft YaHei"));
             }
         } else {
             // Reset to show all fonts
@@ -177,7 +166,7 @@ void TextTool::mousePress(const QPointF& pos)
         QString path = QFileDialog::getOpenFileName(
             &dialog, "Select Vector Font",
             QString(),
-            "Vector Fonts (*.jhf *.svg *.hpgl *.glf *.json);;All Files (*)");
+            "Vector Fonts (*.jhf *.shx *.svg *.hpgl *.glf *.json);;All Files (*)");
         if (!path.isEmpty()) {
             fontPathEdit->setText(path);
         }
@@ -217,21 +206,10 @@ void TextTool::mousePress(const QPointF& pos)
         m_vectorFontPath = fontPathEdit->text();
     }
 
-    // Auto-detect CJK characters: fall back to system font if vector mode selected
+    // Auto-detect CJK characters: fall back to system font only if vector font is not bigfont SHX
     if (m_useVectorFont) {
-        bool hasCJK = false;
-        for (const QChar& c : text) {
-            ushort u = c.unicode();
-            if ((u >= 0x4E00 && u <= 0x9FFF) ||   // CJK Unified Ideographs
-                (u >= 0x3400 && u <= 0x4DBF) ||   // CJK Extension A
-                (u >= 0x3000 && u <= 0x303F) ||   // CJK Symbols
-                (u >= 0xFF00 && u <= 0xFFEF) ||   // Fullwidth Forms
-                (u >= 0x3040 && u <= 0x30FF)) {   // Hiragana + Katakana
-                hasCJK = true;
-                break;
-            }
-        }
-        if (hasCJK) {
+        bool hasCJK = textContainsCJK(text);
+        if (hasCJK && !isBigfontShx(m_vectorFontPath)) {
             m_useVectorFont = false;
             // Pick a CJK-capable font if current isn't one
             QFont testFont(m_fontFamily);

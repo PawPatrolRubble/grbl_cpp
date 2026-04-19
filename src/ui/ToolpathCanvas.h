@@ -33,6 +33,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
     // Coordinate helpers
@@ -47,6 +48,7 @@ private:
     void drawMoves(QPainter &painter);
     void drawCutter(QPainter &painter);
     void drawBoundingBox(QPainter &painter);
+    void drawCrosshair(QPainter &painter);
     void rebuildPaths();
 
     // Hit testing
@@ -111,6 +113,10 @@ private:
     // Cached past-move segments for efficient batch drawing
     QVector<QLineF> m_pastSegments;
     int m_pastBuiltLine = -1;   // executing line when cache was last built
+
+    // Mouse crosshair tracking
+    QPointF m_mouseScreenPos;
+    bool m_mouseInWidget = false;
 
     // lineNumber → move index lookup (O(1) highlight)
     QHash<int, int> m_lineToIndex;

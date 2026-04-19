@@ -84,6 +84,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
     Tool& activeTool();
@@ -108,6 +109,7 @@ private:
     void drawEntities(QPainter& painter);
     void drawHandles(QPainter& painter);
     void drawSnapIndicator(QPainter& painter) const;
+    void drawCrosshair(QPainter& painter);
     void drawPreview(QPainter& painter);
 
     // Snap system
@@ -153,4 +155,8 @@ private:
     static constexpr double kHandleHitHalfSizePx = 10.0;
     static constexpr double kGridStep = 25.0;
     static constexpr double kSnapDistancePx = 14.0;
+
+    // Mouse crosshair tracking
+    QPointF m_mouseScreenPos;
+    bool m_mouseInWidget = false;
 };
