@@ -75,9 +75,9 @@ void ApplicationCore::wireServices()
 // Facade operations
 // ---------------------------------------------------------------------------
 
-void ApplicationCore::startStreaming(const QStringList &lines)
+void ApplicationCore::startStreaming(const QStringList &lines, int startLine, int endLine)
 {
-    m_streamer->startStreaming(lines);
+    m_streamer->startStreaming(lines, startLine, endLine);
 }
 
 void ApplicationCore::pauseStreaming()

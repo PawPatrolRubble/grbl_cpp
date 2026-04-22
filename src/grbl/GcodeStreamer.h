@@ -15,7 +15,7 @@ public:
 
     void setSerialManager(SerialManager *serialManager);
 
-    void startStreaming(const QStringList &lines);
+    void startStreaming(const QStringList &lines, int startLine = 0, int endLine = -1);
     void pauseStreaming();
     void resumeStreaming();
     void stopStreaming();

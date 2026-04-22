@@ -12,11 +12,11 @@ void GcodeStreamer::setSerialManager(SerialManager *serialManager)
     m_serialManager = serialManager;
 }
 
-void GcodeStreamer::startStreaming(const QStringList &lines)
+void GcodeStreamer::startStreaming(const QStringList &lines, int startLine, int endLine)
 {
     m_streamQueue = lines;
-    m_totalLines = lines.size();
-    m_linesSent = 0;
+    m_totalLines = (endLine >= 0 && endLine < lines.size()) ? endLine + 1 : lines.size();
+    m_linesSent = qBound(0, startLine, m_totalLines);
     m_commandsSent = 0;
     m_okCount = 0;
     m_errorCount = 0;
