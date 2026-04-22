@@ -60,6 +60,9 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/ShapeModel.cpp
     src/grbl/GraphicsDesign/LineEntity.cpp
     src/grbl/GraphicsDesign/PolylineEntity.cpp
+    src/grbl/GraphicsDesign/LinearDimensionEntity.cpp
+    src/grbl/GraphicsDesign/AngularDimensionEntity.cpp
+    src/grbl/GraphicsDesign/RadiusDimensionEntity.cpp
     src/grbl/GraphicsDesign/RectangleEntity.cpp
     src/grbl/GraphicsDesign/CircleEntity.cpp
     src/grbl/GraphicsDesign/ArcEntity.cpp
@@ -70,6 +73,14 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/ArcShape.cpp
     src/grbl/GraphicsDesign/Tools/SelectTool.cpp
     src/grbl/GraphicsDesign/Tools/LineTool.cpp
+    src/grbl/GraphicsDesign/Tools/PolylineTool.cpp
+    src/grbl/GraphicsDesign/Tools/DimensionTool.cpp
+    src/grbl/GraphicsDesign/Tools/AngularDimensionTool.cpp
+    src/grbl/GraphicsDesign/Tools/RadiusDimensionTool.cpp
+    src/grbl/GraphicsDesign/Tools/TrimExtendTool.cpp
+    src/grbl/GraphicsDesign/Tools/ChamferTool.cpp
+    src/grbl/GraphicsDesign/Tools/FilletTool.cpp
+    src/grbl/GraphicsDesign/Tools/OffsetTool.cpp
     src/grbl/GraphicsDesign/Tools/RectangleTool.cpp
     src/grbl/GraphicsDesign/Tools/CircleTool.cpp
     src/grbl/GraphicsDesign/Tools/ArcTool.cpp
@@ -104,6 +115,10 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/ShapeModel.h
     src/grbl/GraphicsDesign/LineEntity.h
     src/grbl/GraphicsDesign/PolylineEntity.h
+    src/grbl/GraphicsDesign/LinearDimensionEntity.h
+    src/grbl/GraphicsDesign/AngularDimensionEntity.h
+    src/grbl/GraphicsDesign/RadiusDimensionEntity.h
+    src/grbl/GraphicsDesign/Layer.h
     src/grbl/GraphicsDesign/RectangleEntity.h
     src/grbl/GraphicsDesign/CircleEntity.h
     src/grbl/GraphicsDesign/ArcEntity.h
@@ -115,6 +130,10 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/Tools/Tool.h
     src/grbl/GraphicsDesign/Tools/SelectTool.h
     src/grbl/GraphicsDesign/Tools/LineTool.h
+    src/grbl/GraphicsDesign/Tools/PolylineTool.h
+    src/grbl/GraphicsDesign/Tools/DimensionTool.h
+    src/grbl/GraphicsDesign/Tools/AngularDimensionTool.h
+    src/grbl/GraphicsDesign/Tools/RadiusDimensionTool.h
     src/grbl/GraphicsDesign/Tools/RectangleTool.h
     src/grbl/GraphicsDesign/Tools/CircleTool.h
     src/grbl/GraphicsDesign/Tools/ArcTool.h
