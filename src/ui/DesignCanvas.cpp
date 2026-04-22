@@ -10,6 +10,7 @@
 #include "../grbl/GraphicsDesign/Tools/FilletTool.h"
 #include "../grbl/GraphicsDesign/Tools/OffsetTool.h"
 #include "../grbl/GraphicsDesign/Tools/PolylineTool.h"
+#include "../grbl/GraphicsDesign/Tools/SelectTool.h"
 
 #include <QMenu>
 #include <QContextMenuEvent>
@@ -461,6 +462,10 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
         if (m_toolManagerActiveType == ToolManager::Type::Select) {
             auto handle = m_snap.hitHandle(rawWorldPos, selectedHandles());
             m_hoverHandleId = handle ? handle->id : QString();
+            // Pass hit handle ID to SelectTool before mousePress
+            if (auto* selectTool = m_toolManager.toolAs<SelectTool>(ToolManager::Type::Select)) {
+                selectTool->setHitHandleId(m_hoverHandleId);
+            }
         }
 
         const int entityCountBefore = m_document.entityCount();
