@@ -5,6 +5,9 @@
 #include "ArcEntity.h"
 #include "TextEntity.h"
 #include "PolylineEntity.h"
+#include "LinearDimensionEntity.h"
+#include "AngularDimensionEntity.h"
+#include "RadiusDimensionEntity.h"
 
 Entity::Entity(Kind kind)
     : m_id(QUuid::createUuid())
@@ -28,6 +31,12 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
         return TextEntity::fromJson(json);
     if (typeStr == "polyline")
         return PolylineEntity::fromJson(json);
+    if (typeStr == "dimension")
+        return LinearDimensionEntity::fromJson(json);
+    if (typeStr == "angularDimension")
+        return AngularDimensionEntity::fromJson(json);
+    if (typeStr == "radiusDimension")
+        return RadiusDimensionEntity::fromJson(json);
 
     return nullptr;
 }
@@ -39,6 +48,8 @@ QString Entity::displayName() const
         {Kind::Circle, "Circle"}, {Kind::Arc, "Arc"},
         {Kind::Polygon, "Polygon"}, {Kind::Text, "Text"},
         {Kind::LinearDimension, "Dimension"},
+        {Kind::AngularDimension, "Angular Dimension"},
+        {Kind::RadiusDimension,  "Radius Dimension"},
     };
     return names.value(m_kind, "Entity");
 }

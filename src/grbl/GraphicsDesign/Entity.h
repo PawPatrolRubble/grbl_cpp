@@ -23,7 +23,9 @@ public:
         Arc,
         Polygon,
         Text,
-        LinearDimension
+        LinearDimension,
+        AngularDimension,
+        RadiusDimension
     };
 
     enum class HandleRole {
@@ -47,6 +49,10 @@ public:
     QUuid id() const { return m_id; }
     void setId(const QUuid& id) { m_id = id; }
     virtual Kind kind() const { return m_kind; }
+
+    // Layer
+    QUuid layerId() const { return m_layerId; }
+    void setLayerId(const QUuid& id) { m_layerId = id; }
 
     // Geometry
     virtual QRectF boundingRect() const = 0;
@@ -88,6 +94,7 @@ public:
 protected:
     QUuid m_id;
     Kind m_kind;
+    QUuid m_layerId;   // null UUID = default / not assigned
     double m_rotation = 0.0;
     bool m_enabled = true;
 };
