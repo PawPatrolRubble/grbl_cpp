@@ -853,22 +853,22 @@ QPushButton#importBtn:pressed {
 }
 
 /* ============================================================
- *  Design Panel — Dark CAD Theme
+ *  Design Panel — Light CAD Theme
  *  Only applies to children of QWidget#graphicsDesignPanel
  * ============================================================ */
 
 QWidget#graphicsDesignPanel {
-    background-color: #1e1e1e;
+    background-color: #f5f5f5;
     border: 1px solid #ec4899;
     border-top: none;
     border-radius: 0 0 6px 6px;
 }
 
 QWidget#graphicsDesignPanel QGroupBox {
-    background-color: #252525;
-    border: 1px solid #3d3d3d;
+    background-color: #ffffff;
+    border: 1px solid #d0d0d0;
     border-radius: 6px;
-    color: #a0a0a0;
+    color: #4a4a4a;
     margin-top: 12px;
     padding: 16px 10px 10px;
     font-weight: bold;
@@ -876,7 +876,7 @@ QWidget#graphicsDesignPanel QGroupBox {
 }
 
 QWidget#graphicsDesignPanel QGroupBox::title {
-    color: #7c9cc0;
+    color: #4a7aaa;
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 0 6px;
@@ -886,69 +886,69 @@ QWidget#graphicsDesignPanel QGroupBox::title {
 }
 
 QWidget#graphicsDesignPanel QLabel {
-    color: #b0b0b0;
+    color: #3a3a3a;
     background: transparent;
 }
 
 QWidget#graphicsDesignPanel QPushButton {
-    background-color: #2d2d2d;
-    color: #d0d0d0;
-    border: 1px solid #4d4d4d;
+    background-color: #e8e8e8;
+    color: #3a3a3a;
+    border: 1px solid #c0c0c0;
     border-radius: 5px;
     padding: 5px 12px;
 }
 
 QWidget#graphicsDesignPanel QPushButton:hover {
-    background-color: #383838;
+    background-color: #d8d8d8;
     border-color: #6496c8;
-    color: #ffffff;
+    color: #1a1a1a;
 }
 
 QWidget#graphicsDesignPanel QPushButton:pressed {
-    background-color: #444;
+    background-color: #c8c8c8;
     border-color: #4878a0;
 }
 
 QWidget#graphicsDesignPanel QPushButton#undoBtn,
 QWidget#graphicsDesignPanel QPushButton#redoBtn {
-    background-color: #2a2a2a;
-    color: #909090;
-    border-color: #404040;
+    background-color: #ececec;
+    color: #6a6a6a;
+    border-color: #d0d0d0;
 }
 
 QWidget#graphicsDesignPanel QPushButton#actionBtn {
-    background-color: #2a3a4a;
-    color: #90b8d8;
-    border: 1px solid #3a5a78;
+    background-color: #dce8f4;
+    color: #2a5a8a;
+    border: 1px solid #a0c4e0;
 }
 
 QWidget#graphicsDesignPanel QPushButton#actionBtn:hover {
-    background-color: #344a5c;
-    border-color: #5888a8;
-    color: #c0daf0;
+    background-color: #c8d8e8;
+    border-color: #7aaad0;
+    color: #1a3a5a;
 }
 
 QWidget#graphicsDesignPanel QPushButton#importBtn {
-    background-color: #1a3a2a;
-    border-color: #2a5a3a;
-    color: #60c878;
+    background-color: #d4f0dc;
+    border-color: #a0d0b0;
+    color: #1a6a3a;
 }
 
 QWidget#graphicsDesignPanel QPushButton#importBtn:hover {
-    background-color: #204830;
-    border-color: #3a7050;
+    background-color: #c0e8cc;
+    border-color: #80c0a0;
 }
 
 QWidget#graphicsDesignPanel QPushButton#startBtn {
-    background-color: #2a3d5c;
-    border-color: #3a5d8c;
-    color: #80b0e0;
+    background-color: #dce4f0;
+    border-color: #a0b8d8;
+    color: #2a4a7a;
 }
 
 QWidget#graphicsDesignPanel QComboBox {
-    background-color: #2d2d2d;
-    color: #d0d0d0;
-    border: 1px solid #4d4d4d;
+    background-color: #ffffff;
+    color: #3a3a3a;
+    border: 1px solid #c0c0c0;
     border-radius: 5px;
     padding: 3px 8px;
 }
@@ -963,18 +963,18 @@ QWidget#graphicsDesignPanel QComboBox::drop-down {
 }
 
 QWidget#graphicsDesignPanel QComboBox QAbstractItemView {
-    background-color: #282828;
-    color: #d0d0d0;
-    border: 1px solid #4d4d4d;
-    selection-background-color: #3a5a80;
-    selection-color: #ffffff;
+    background-color: #ffffff;
+    color: #3a3a3a;
+    border: 1px solid #c0c0c0;
+    selection-background-color: #a0c4e0;
+    selection-color: #1a1a1a;
 }
 
 QWidget#graphicsDesignPanel QSpinBox,
 QWidget#graphicsDesignPanel QDoubleSpinBox {
-    background-color: #2d2d2d;
-    color: #d0d0d0;
-    border: 1px solid #4d4d4d;
+    background-color: #ffffff;
+    color: #3a3a3a;
+    border: 1px solid #c0c0c0;
     border-radius: 5px;
     padding: 3px 8px;
 }
@@ -990,12 +990,12 @@ QWidget#graphicsDesignPanel QDoubleSpinBox:focus {
 }
 
 QWidget#graphicsDesignPanel QCheckBox {
-    color: #b0b0b0;
+    color: #3a3a3a;
 }
 
 QWidget#graphicsDesignPanel QCheckBox::indicator {
-    background-color: #2d2d2d;
-    border: 2px solid #5d5d5d;
+    background-color: #ffffff;
+    border: 2px solid #b0b0b0;
     border-radius: 3px;
 }
 
@@ -1004,22 +1004,22 @@ QWidget#graphicsDesignPanel QCheckBox::indicator:hover {
 }
 
 QWidget#graphicsDesignPanel QCheckBox::indicator:checked {
-    background-color: #4878a0;
-    border-color: #4878a0;
+    background-color: #6098c8;
+    border-color: #6098c8;
 }
 
 QWidget#graphicsDesignPanel QScrollArea {
-    background-color: #1e1e1e;
+    background-color: #f5f5f5;
     border: none;
 }
 
 QWidget#graphicsDesignPanel QScrollBar:vertical {
-    background-color: #252525;
+    background-color: #f0f0f0;
     width: 8px;
 }
 
 QWidget#graphicsDesignPanel QScrollBar::handle:vertical {
-    background-color: #4d4d4d;
+    background-color: #c0c0c0;
     border-radius: 4px;
     min-height: 20px;
 }

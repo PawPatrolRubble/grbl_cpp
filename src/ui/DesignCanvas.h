@@ -1,55 +1,36 @@
 #pragma once
 
-#include "../grbl/GraphicsDesign/Document.h"
-#include "../grbl/GraphicsDesign/CommandStack.h"
-#include "../grbl/GraphicsDesign/Tools/Tool.h"
-#include "../grbl/GraphicsDesign/Tools/SelectTool.h"
-#include "../grbl/GraphicsDesign/Tools/LineTool.h"
-#include "../grbl/GraphicsDesign/Tools/PolylineTool.h"
-#include "../grbl/GraphicsDesign/Tools/RectangleTool.h"
-#include "../grbl/GraphicsDesign/Tools/CircleTool.h"
-#include "../grbl/GraphicsDesign/Tools/ArcTool.h"
-#include "../grbl/GraphicsDesign/Tools/TextTool.h"
-#include "../grbl/GraphicsDesign/Tools/DimensionTool.h"
-#include "../grbl/GraphicsDesign/Tools/AngularDimensionTool.h"
-#include "../grbl/GraphicsDesign/Tools/RadiusDimensionTool.h"
-#include "../grbl/GraphicsDesign/Tools/TrimExtendTool.h"
-#include "../grbl/GraphicsDesign/Tools/ChamferTool.h"
-#include "../grbl/GraphicsDesign/Tools/FilletTool.h"
-#include "../grbl/GraphicsDesign/Tools/OffsetTool.h"
-
+#include "canvas/ToolManager.h"
+#include "canvas/CoordinateTransform.h"
+#include "canvas/CanvasDrawing.h"
+#include "canvas/CanvasSnap.h"
+#include "canvas/EntityClipboard.h"
 #include "SettingsManager.h"
 
 #include <QWidget>
 #include <QTimer>
-#include <QPointF>
-#include <memory>
 
 /// Canvas widget for drawing and editing entities with pan/zoom/snap.
-/// Uses Document/Entity/Tool system for professional CAD features.
+///
+/// Refactored: delegates to focused subsystems.
+///   - ToolManager      — 15 tools, replaces duplicated switch statements
+///   - CoordinateTransform — screen/world/machine coordinate math
+///   - CanvasDrawing    — all rendering (grid, rulers, entities, handles, etc.)
+///   - CanvasSnap       — snap computation + handle hit-testing
+///   - EntityClipboard  — copy/paste/duplicate entity operations
 class DesignCanvas : public QWidget
 {
     Q_OBJECT
 
 public:
+    /// Public tool type enum (mirrors ToolManager::Type for backward compatibility).
     enum class ToolType {
-        Select,
-        Line,
-        Polyline,
-        Rectangle,
-        Circle,
-        Arc,
-        Text,
-        Dimension,
-        AngularDimension,
-        RadiusDimension,
-        Trim,
-        Extend,
-        Chamfer,
-        Fillet,
-        Offset
+        Select, Line, Polyline, Rectangle, Circle, Arc, Text,
+        Dimension, AngularDimension, RadiusDimension,
+        Trim, Extend, Chamfer, Fillet, Offset
     };
 
+    /// Snap result (forwarded from CanvasSnap).
     struct SnapResult {
         bool active = false;
         QPointF worldPos;
@@ -58,22 +39,22 @@ public:
 
     explicit DesignCanvas(QWidget *parent = nullptr);
 
-    // Tool access
+    // --- Tool access ---
     QString activeToolName() const;
     QString activeToolInstructions() const;
-    ToolType currentToolType() const { return m_activeToolType; }
+    ToolType currentToolType() const { return fromToolManagerType(m_toolManagerActiveType); }
 
-    // Undo/redo
+    // --- Undo/redo ---
     bool canUndo() const;
     bool canRedo() const;
 
-    // Document access
+    // --- Document access ---
     Document* document() { return &m_document; }
     const Document* document() const { return &m_document; }
     const Entity* selectedEntity() const;
 
-    // View
-    double zoom() const { return m_zoom; }
+    // --- View ---
+    double zoom() const { return m_transforms.zoom(); }
     void autoFit();
     void fitToSelection();
     void setWorktableSize(const QSizeF &size);
@@ -123,108 +104,58 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
+    // --- Tool type conversion ---
+    static ToolManager::Type toToolManagerType(ToolType t);
+    static ToolType fromToolManagerType(ToolManager::Type t);
+
     Tool& activeTool();
     const Tool& activeTool() const;
 
+    // --- Helpers ---
     void emitToolStatus();
     void emitUndoRedoState();
-    void copySelectedEntity();
-    void pasteCopiedEntity();
-    void duplicateSelectedEntity();
-    void addEntityFromShortcut(std::unique_ptr<Entity> entity);
-
-    // Coordinate transforms (Y-up machine coordinates)
+    void scheduleUpdate();
+    void cancelActiveToolInternal();
+    void deleteSelectedEntityInternal();
     QPointF toWorld(const QPointF& screenPos) const;
     QPointF toScreen(const QPointF& worldPos) const;
-    QPointF machineToScreen(const QPointF& pt) const;
-    QPointF screenToMachine(const QPointF& pt) const;
-
-    void applyZoom(double factor, const QPointF& screenAnchor);
-    void scheduleUpdate();
-
-    // Drawing helpers
-    void drawGridAndRulers(QPainter& painter);
-    void drawRulerStrips(QPainter& painter);
-    void drawGcodeOverlay(QPainter& painter);
-    void drawWorktable(QPainter& painter);
-    void drawAxisOrigin(QPainter& painter);
-    void drawEntities(QPainter& painter);
-    void drawHandles(QPainter& painter);
-    void drawSnapIndicator(QPainter& painter) const;
-    void drawCrosshair(QPainter& painter);
-    void drawPreview(QPainter& painter);
-
-    // Snap system
-    SnapResult computeSnap(const QPointF& rawWorldPos, bool includeSelection) const;
-
-    // Handle helpers
     std::vector<Entity::EditHandle> selectedHandles() const;
-    std::optional<Entity::EditHandle> hitHandle(const QPointF& worldPos) const;
     void updateHoverCursor(const QPointF& worldPos);
 
-    // Document and tools
+    // --- Subsystems ---
     Document m_document;
     CommandStack m_commandStack;
-    SelectTool m_selectTool;
-    LineTool m_lineTool;
-    PolylineTool m_polylineTool;
-    RectangleTool m_rectangleTool;
-    CircleTool m_circleTool;
-    ArcTool m_arcTool;
-    TextTool m_textTool;
-    DimensionTool m_dimensionTool;
-    AngularDimensionTool m_angularDimensionTool;
-    RadiusDimensionTool m_radiusDimensionTool;
-    TrimExtendTool m_trimTool;
-    TrimExtendTool m_extendTool;
-    ChamferTool    m_chamferTool;
-    FilletTool     m_filletTool;
-    OffsetTool     m_offsetTool;
-    ToolType m_activeToolType = ToolType::Select;
 
-    // View state
-    double m_zoom = 1.0;
-    QPointF m_panOffset;
+    ToolManager m_toolManager;
+    ToolManager::Type m_toolManagerActiveType = ToolManager::Type::Select;
+
+    CoordinateTransform m_transforms;
+    CanvasDrawing m_drawing;
+    CanvasSnap m_snap;
+    EntityClipboard m_clipboard;
+
+    // --- State ---
     QSizeF m_worktableSize = QSizeF(300, 200);
     SettingsManager::CanvasSettings m_canvasSettings;
+    bool m_snapEnabled = true;
+    double m_gridSize = 10.0;
+    bool m_showGcodeOverlay = false;
     bool m_panning = false;
     QPoint m_lastPanScreenPos;
+    bool m_initialFitDone = false;
+    bool m_mouseInWidget = false;
+    QPointF m_mouseScreenPos;
 
-    // Handle hover
+    // --- Snap state ---
+    CanvasSnap::SnapResult m_snapResult;
     QString m_hoverHandleId;
 
-    // Snap result
-    SnapResult m_snapResult;
-    bool m_snapEnabled = true;
-    double m_gridSize = 10.0;  // machine units (mm)
-    bool m_showGcodeOverlay = false;
-
-    // Repaint throttle
+    // --- Timers ---
     QTimer m_repaintTimer;
     bool m_repaintPending = false;
-    bool m_initialFitDone = false;
-
-    // Entity render cache — render entities to pixmap, blit on pan/zoom
-    QPixmap m_entityCache;
-    double m_entityCacheZoom = 0;
-    QPointF m_entityCachePanOffset;
-    QSize m_entityCacheSize;
-    bool m_entityCacheDirty = true;
-
-    // Shortcut clipboard for basic CAD edit operations.
-    std::unique_ptr<Entity> m_copiedEntity;
-    int m_pasteSerial = 0;
-
-    // Deferred crisp render after zoom
     QTimer m_zoomSettleTimer;
 
-    // Constants
-    static constexpr double kHandleHalfSizePx = 6.0;
-    static constexpr double kHandleHitHalfSizePx = 10.0;
-    static constexpr double kGridStep = 25.0;
+    // --- Constants ---
     static constexpr double kSnapDistancePx = 14.0;
-
-    // Mouse crosshair tracking
-    QPointF m_mouseScreenPos;
-    bool m_mouseInWidget = false;
+    static constexpr double kHandleHitHalfSizePx = 10.0;
 };

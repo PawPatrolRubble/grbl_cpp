@@ -84,20 +84,20 @@ public:
         bool visible = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
         bool locked  = index.data(Qt::UserRole + 1).toBool();
         QColor layerColor = index.data(Qt::UserRole + 2).value<QColor>();
-        if (!layerColor.isValid()) layerColor = QColor("#1f2937");
+        if (!layerColor.isValid()) layerColor = QColor("#374151");
         QRect eyeRect( option.rect.left(),          option.rect.top(), kEyeColW,  option.rect.height());
         QRect lockRect(option.rect.left()+kEyeColW, option.rect.top(), kLockColW, option.rect.height());
         p->save();
         p->setFont(QFont("Segoe UI Emoji", 11));
-        p->setPen(visible ? QColor("#1f2937") : QColor("#9ca3af"));
+        p->setPen(visible ? QColor("#374151") : QColor("#6b7280"));
         p->drawText(eyeRect, Qt::AlignCenter, visible ? "\U0001F441" : "\u2298");
-        p->setPen(locked ? QColor("#dc2626") : QColor("#9ca3af"));
+        p->setPen(locked ? QColor("#dc2626") : QColor("#6b7280"));
         p->drawText(lockRect, Qt::AlignCenter, locked ? "\U0001F512" : "\U0001F513");
         // Color swatch
         QRect swRect(option.rect.left() + kSwatchOff,
                      option.rect.top() + (option.rect.height() - kColorSwW) / 2,
                      kColorSwW, kColorSwW);
-        p->setPen(QColor("#9ca3af"));
+        p->setPen(QColor("#6b7280"));
         p->setBrush(layerColor);
         p->drawRect(swRect);
         p->restore();
@@ -136,11 +136,22 @@ void GraphicsDesignPanel::setupUi()
     auto *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->setChildrenCollapsible(false);
 
-    // ---- Left: Canvas ----
+    // ---- Left: Vertical toolbar + Canvas ----
+    auto *leftContainer = new QWidget();
+    auto *leftLayout = new QHBoxLayout(leftContainer);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
+    leftLayout->setSpacing(0);
+
+    // Vertical tool toolbar
+    m_toolBar = createToolToolBar();
+    leftLayout->addWidget(m_toolBar);
+
     m_canvas = new DesignCanvas();
     m_canvas->setMinimumWidth(300);
     m_canvas->setMinimumHeight(200);
-    splitter->addWidget(m_canvas);
+    leftLayout->addWidget(m_canvas, 1);  // stretch=1 so canvas takes remaining space
+
+    splitter->addWidget(leftContainer);
 
     // ---- Right: Operations panel ----
     auto *rightPanel = new QWidget();
@@ -150,27 +161,9 @@ void GraphicsDesignPanel::setupUi()
     rightLayout->setContentsMargins(10, 10, 10, 10);
     rightLayout->setSpacing(8);
 
-    // Tool bar row
-    auto *toolBar = new QHBoxLayout();
-    toolBar->setSpacing(6);
-    m_toolCombo = new QComboBox();
-    m_toolCombo->setMinimumWidth(120);
-    m_toolCombo->addItem("Select");
-    m_toolCombo->addItem("Line");
-    m_toolCombo->addItem("Polyline");
-    m_toolCombo->addItem("Rectangle");
-    m_toolCombo->addItem("Circle");
-    m_toolCombo->addItem("Arc");
-    m_toolCombo->addItem("Text");
-    m_toolCombo->addItem("Dimension");
-    m_toolCombo->addItem("Angular Dimension");
-    m_toolCombo->addItem("Radius Dimension");
-    m_toolCombo->addItem("Trim");
-    m_toolCombo->addItem("Extend");
-    m_toolCombo->addItem("Chamfer");
-    m_toolCombo->addItem("Fillet");
-    m_toolCombo->addItem("Offset");
-    toolBar->addWidget(m_toolCombo);
+    // Controls bar (snap, grid, view controls)
+    auto *ctrlBar = new QHBoxLayout();
+    ctrlBar->setSpacing(6);
 
     m_snapBtn = new QToolButton();
     m_snapBtn->setText("Snap");
@@ -178,10 +171,10 @@ void GraphicsDesignPanel::setupUi()
     m_snapBtn->setChecked(true);
     m_snapBtn->setToolTip("Toggle grid/entity snap (S)");
     m_snapBtn->setMinimumWidth(50);
-    toolBar->addWidget(m_snapBtn);
+    ctrlBar->addWidget(m_snapBtn);
 
     // Grid size spinbox
-    toolBar->addWidget(new QLabel("Grid:"));
+    ctrlBar->addWidget(new QLabel("Grid:"));
     m_gridSizeSpin = new QDoubleSpinBox();
     m_gridSizeSpin->setRange(0.1, 100.0);
     m_gridSizeSpin->setValue(10.0);
@@ -190,11 +183,11 @@ void GraphicsDesignPanel::setupUi()
     m_gridSizeSpin->setSuffix(" mm");
     m_gridSizeSpin->setToolTip("Grid size in mm");
     m_gridSizeSpin->setMaximumWidth(90);
-    toolBar->addWidget(m_gridSizeSpin);
+    ctrlBar->addWidget(m_gridSizeSpin);
 
     // Fillet radius (shown only when Fillet tool active)
     m_filletRadiusLabel = new QLabel("Radius:");
-    toolBar->addWidget(m_filletRadiusLabel);
+    ctrlBar->addWidget(m_filletRadiusLabel);
     m_filletRadiusSpin = new QDoubleSpinBox();
     m_filletRadiusSpin->setRange(0.1, 500.0);
     m_filletRadiusSpin->setValue(5.0);
@@ -203,13 +196,13 @@ void GraphicsDesignPanel::setupUi()
     m_filletRadiusSpin->setSuffix(" mm");
     m_filletRadiusSpin->setToolTip("Fillet radius in mm");
     m_filletRadiusSpin->setMaximumWidth(100);
-    toolBar->addWidget(m_filletRadiusSpin);
+    ctrlBar->addWidget(m_filletRadiusSpin);
     m_filletRadiusLabel->setVisible(false);
     m_filletRadiusSpin->setVisible(false);
 
     // Chamfer distance (shown only when Chamfer tool active)
     m_chamferDistLabel = new QLabel("Dist:");
-    toolBar->addWidget(m_chamferDistLabel);
+    ctrlBar->addWidget(m_chamferDistLabel);
     m_chamferDistSpin = new QDoubleSpinBox();
     m_chamferDistSpin->setRange(0.1, 500.0);
     m_chamferDistSpin->setValue(5.0);
@@ -218,13 +211,13 @@ void GraphicsDesignPanel::setupUi()
     m_chamferDistSpin->setSuffix(" mm");
     m_chamferDistSpin->setToolTip("Chamfer distance in mm");
     m_chamferDistSpin->setMaximumWidth(100);
-    toolBar->addWidget(m_chamferDistSpin);
+    ctrlBar->addWidget(m_chamferDistSpin);
     m_chamferDistLabel->setVisible(false);
     m_chamferDistSpin->setVisible(false);
 
     // Offset distance (shown only when Offset tool active)
     m_offsetDistLabel = new QLabel("Dist:");
-    toolBar->addWidget(m_offsetDistLabel);
+    ctrlBar->addWidget(m_offsetDistLabel);
     m_offsetDistSpin = new QDoubleSpinBox();
     m_offsetDistSpin->setRange(0.001, 500.0);
     m_offsetDistSpin->setValue(5.0);
@@ -233,7 +226,7 @@ void GraphicsDesignPanel::setupUi()
     m_offsetDistSpin->setSuffix(" mm");
     m_offsetDistSpin->setToolTip("Offset distance in mm");
     m_offsetDistSpin->setMaximumWidth(100);
-    toolBar->addWidget(m_offsetDistSpin);
+    ctrlBar->addWidget(m_offsetDistSpin);
     m_offsetDistLabel->setVisible(false);
     m_offsetDistSpin->setVisible(false);
 
@@ -244,25 +237,25 @@ void GraphicsDesignPanel::setupUi()
     gcodeOverlayBtn->setToolTip("Show G-code toolpath overlay");
     gcodeOverlayBtn->setMinimumWidth(44);
     connect(gcodeOverlayBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setGcodeOverlayVisible);
-    toolBar->addWidget(gcodeOverlayBtn);
+    ctrlBar->addWidget(gcodeOverlayBtn);
 
     auto *fitBtn = new QToolButton();
     fitBtn->setText("Fit");
     fitBtn->setToolTip("Auto-fit worktable to view");
     fitBtn->setMinimumWidth(40);
     connect(fitBtn, &QToolButton::clicked, m_canvas, &DesignCanvas::autoFit);
-    toolBar->addWidget(fitBtn);
+    ctrlBar->addWidget(fitBtn);
 
     auto *fitSelBtn = new QToolButton();
     fitSelBtn->setText("Fit Sel");
     fitSelBtn->setToolTip("Fit view to selected entity");
     fitSelBtn->setMinimumWidth(55);
     connect(fitSelBtn, &QToolButton::clicked, m_canvas, &DesignCanvas::fitToSelection);
-    toolBar->addWidget(fitSelBtn);
+    ctrlBar->addWidget(fitSelBtn);
 
     auto *sepLabel = new QLabel("|");
     sepLabel->setStyleSheet("color: #555; margin: 0 2px;");
-    toolBar->addWidget(sepLabel);
+    ctrlBar->addWidget(sepLabel);
 
     auto *exportToolBtn = new QToolButton();
     exportToolBtn->setText("Export...");
@@ -270,10 +263,10 @@ void GraphicsDesignPanel::setupUi()
     exportToolBtn->setMinimumWidth(60);
     exportToolBtn->setShortcut(QKeySequence("Ctrl+E"));
     connect(exportToolBtn, &QToolButton::clicked, this, &GraphicsDesignPanel::onExportGcodeClicked);
-    toolBar->addWidget(exportToolBtn);
+    ctrlBar->addWidget(exportToolBtn);
 
-    toolBar->addStretch();
-    rightLayout->addLayout(toolBar);
+    ctrlBar->addStretch();
+    rightLayout->addLayout(ctrlBar);
 
     // Action buttons row
     auto *actionRow = new QHBoxLayout();
@@ -430,6 +423,82 @@ void GraphicsDesignPanel::setupUi()
     splitter->setStretchFactor(1, 1);  // Panel gets 1x stretch
 
     outerLayout->addWidget(splitter);
+}
+
+QWidget* GraphicsDesignPanel::createToolToolBar()
+{
+    auto *toolbar = new QWidget();
+    toolbar->setObjectName("sketchToolBar");
+    toolbar->setFixedWidth(44);
+    
+    auto *layout = new QVBoxLayout(toolbar);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(2);
+    
+    // Tool definitions: icon text, tooltip
+    struct ToolDef {
+        const char *icon;
+        const char *tooltip;
+        const char *shortcut;
+    };
+    
+    static const ToolDef tools[] = {
+        {"↖", "Select entities (Esc)", "Esc"},
+        {"∕", "Line tool (L)", "L"},
+        {"⌇", "Polyline tool (P)", "P"},
+        {"▭", "Rectangle tool (R)", "R"},
+        {"○", "Circle tool (C)", "C"},
+        {"◠", "Arc tool (A)", "A"},
+        {"T", "Text tool (T)", "Ctrl+T"},
+        {"↔", "Linear dimension (D)", "D"},
+        {"∠", "Angular dimension", "Ctrl+D"},
+        {"⦿", "Radius dimension", "Ctrl+R"},
+        {"✂", "Trim tool (X)", "X"},
+        {"⌁", "Extend tool (E)", "E"},
+        {"∟", "Chamfer tool (H)", "H"},
+        {"⌒", "Fillet tool (F)", "F"},
+        {"∥", "Offset tool (O)", "O"},
+    };
+    
+    for (int i = 0; i < 15; ++i) {
+        auto *btn = new QToolButton();
+        btn->setText(tools[i].icon);
+        btn->setToolTip(QString("%1\n%2").arg(tools[i].tooltip, tools[i].shortcut));
+        btn->setCheckable(true);
+        btn->setAutoRaise(true);
+        btn->setFixedSize(36, 36);
+        btn->setStyleSheet(
+            "QToolButton {"
+            "  background: #ffffff;"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 4px;"
+            "  font-size: 18px;"
+            "}"
+            "QToolButton:hover {"
+            "  background: #e8f0f8;"
+            "  border-color: #a0c4e0;"
+            "}"
+            "QToolButton:checked {"
+            "  background: #dce8f4;"
+            "  border: 2px solid #5090c0;"
+            "  color: #205080;"
+            "}"
+        );
+        
+        connect(btn, &QToolButton::clicked, this, [this, i]() {
+            onToolButtonClicked(i);
+        });
+        
+        m_toolButtons[i] = btn;
+        layout->addWidget(btn);
+    }
+    
+    layout->addStretch();
+    
+    // Set first button (Select) as checked by default
+    m_toolButtons[0]->setChecked(true);
+    
+    return toolbar;
 }
 
 void GraphicsDesignPanel::buildEmptyPage()
@@ -1144,11 +1213,7 @@ void GraphicsDesignPanel::buildLayerSection()
 
 void GraphicsDesignPanel::setupConnections()
 {
-    // Tool selection
-    connect(m_toolCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &GraphicsDesignPanel::onToolChanged);
-
-    // Sync combo when canvas changes tool internally (e.g. auto-select after draw)
+    // Sync toolbar buttons when canvas changes tool internally (e.g. auto-select after draw)
     connect(m_canvas, &DesignCanvas::toolChanged, this, &GraphicsDesignPanel::onCanvasToolChanged);
 
     // Snap toggle (bidirectional: button ↔ canvas)
@@ -1317,15 +1382,38 @@ void GraphicsDesignPanel::onToolChanged(int index)
     m_offsetDistSpin->setVisible(isOffset);
 }
 
+void GraphicsDesignPanel::onToolButtonClicked(int toolIndex)
+{
+    // Update all button checked states
+    for (int i = 0; i < 15; ++i) {
+        m_toolButtons[i]->setChecked(i == toolIndex);
+    }
+    
+    // Call the core tool change logic
+    onToolChanged(toolIndex);
+}
+
 void GraphicsDesignPanel::onCanvasToolChanged()
 {
-    // Sync combo box when canvas changes tool internally (e.g. auto-select after drawing)
+    // Sync toolbar buttons when canvas changes tool internally (e.g. auto-select after drawing)
     int index = static_cast<int>(m_canvas->currentToolType());
-    if (m_toolCombo->currentIndex() != index) {
-        m_toolCombo->blockSignals(true);
-        m_toolCombo->setCurrentIndex(index);
-        m_toolCombo->blockSignals(false);
+    
+    // Update button checked state
+    for (int i = 0; i < 15; ++i) {
+        m_toolButtons[i]->setChecked(i == index);
     }
+    
+    // Update tool-specific parameter widgets
+    DesignCanvas::ToolType tool = static_cast<DesignCanvas::ToolType>(index);
+    bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
+    bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
+    bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
+    m_filletRadiusLabel->setVisible(isFillet);
+    m_filletRadiusSpin->setVisible(isFillet);
+    m_chamferDistLabel->setVisible(isChamfer);
+    m_chamferDistSpin->setVisible(isChamfer);
+    m_offsetDistLabel->setVisible(isOffset);
+    m_offsetDistSpin->setVisible(isOffset);
 }
 
 void GraphicsDesignPanel::onSelectionChanged()
@@ -1733,7 +1821,7 @@ void GraphicsDesignPanel::onImportImageClicked()
     auto *previewLabel = new QLabel;
     previewLabel->setAlignment(Qt::AlignCenter);
     previewLabel->setMinimumSize(400, 400);
-    previewLabel->setStyleSheet("background: #222; border: 1px solid #555;");
+    previewLabel->setStyleSheet("background: #f5f5f5; border: 1px solid #ccc;");
     mainLayout->addWidget(previewLabel, 1);
 
     // Right side: settings

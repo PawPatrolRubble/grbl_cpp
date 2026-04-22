@@ -84,13 +84,17 @@ private slots:
     void onLockLayerClicked();
     void onLayerCurrentRowChanged(int row);
     void onMoveEntityToLayerClicked();
+    void onToolButtonClicked(int toolIndex);
 
 private:
     QStringList m_generatedLines;
 
     DesignCanvas *m_canvas;
-    QComboBox *m_toolCombo;
+    QWidget *m_toolBar;                    // vertical icon toolbar
+    QToolButton *m_toolButtons[15];        // one per tool type
     QComboBox *m_toolModeCombo;
+
+    QWidget* createToolToolBar();
     QPushButton *m_deleteBtn;
     QPushButton *m_clearBtn;
     QPushButton *m_saveBtn;

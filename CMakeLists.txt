@@ -160,6 +160,10 @@ set(UI_SOURCES
     src/ui/panels/SettingsPanel.cpp
     src/ui/panels/GraphicsDesignPanel.cpp
     src/ui/DesignCanvas.cpp
+    src/ui/canvas/ToolManager.cpp
+    src/ui/canvas/CanvasDrawing.cpp
+    src/ui/canvas/CanvasSnap.cpp
+    src/ui/canvas/EntityClipboard.cpp
     src/ui/GraphicsDesignDialog.cpp
     src/ui/LineNumberPlainTextEdit.cpp
 )
@@ -190,6 +194,11 @@ set(UI_HEADERS
     src/ui/panels/SettingsPanel.h
     src/ui/panels/GraphicsDesignPanel.h
     src/ui/DesignCanvas.h
+    src/ui/canvas/ToolManager.h
+    src/ui/canvas/CoordinateTransform.h
+    src/ui/canvas/CanvasDrawing.h
+    src/ui/canvas/CanvasSnap.h
+    src/ui/canvas/EntityClipboard.h
     src/ui/GraphicsDesignDialog.h
     src/ui/LineNumberPlainTextEdit.h
 )
