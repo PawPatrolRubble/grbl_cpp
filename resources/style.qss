@@ -63,7 +63,7 @@ QWidget#settingsPanel {
 }
 
 QWidget#graphicsDesignPanel {
-    background-color: #ffffff;
+    /* Dark theme overrides defined at end of file */
     border: 1px solid #ec4899;
     border-top: none;
     border-radius: 0 0 6px 6px;
@@ -850,4 +850,180 @@ QPushButton#importBtn:hover {
 QPushButton#importBtn:pressed {
     background-color: #047857;
     border-color: #047857;
+}
+
+/* ============================================================
+ *  Design Panel — Dark CAD Theme
+ *  Only applies to children of QWidget#graphicsDesignPanel
+ * ============================================================ */
+
+QWidget#graphicsDesignPanel {
+    background-color: #1e1e1e;
+    border: 1px solid #ec4899;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+QWidget#graphicsDesignPanel QGroupBox {
+    background-color: #252525;
+    border: 1px solid #3d3d3d;
+    border-radius: 6px;
+    color: #a0a0a0;
+    margin-top: 12px;
+    padding: 16px 10px 10px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+QWidget#graphicsDesignPanel QGroupBox::title {
+    color: #7c9cc0;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+QWidget#graphicsDesignPanel QLabel {
+    color: #b0b0b0;
+    background: transparent;
+}
+
+QWidget#graphicsDesignPanel QPushButton {
+    background-color: #2d2d2d;
+    color: #d0d0d0;
+    border: 1px solid #4d4d4d;
+    border-radius: 5px;
+    padding: 5px 12px;
+}
+
+QWidget#graphicsDesignPanel QPushButton:hover {
+    background-color: #383838;
+    border-color: #6496c8;
+    color: #ffffff;
+}
+
+QWidget#graphicsDesignPanel QPushButton:pressed {
+    background-color: #444;
+    border-color: #4878a0;
+}
+
+QWidget#graphicsDesignPanel QPushButton#undoBtn,
+QWidget#graphicsDesignPanel QPushButton#redoBtn {
+    background-color: #2a2a2a;
+    color: #909090;
+    border-color: #404040;
+}
+
+QWidget#graphicsDesignPanel QPushButton#actionBtn {
+    background-color: #2a3a4a;
+    color: #90b8d8;
+    border: 1px solid #3a5a78;
+}
+
+QWidget#graphicsDesignPanel QPushButton#actionBtn:hover {
+    background-color: #344a5c;
+    border-color: #5888a8;
+    color: #c0daf0;
+}
+
+QWidget#graphicsDesignPanel QPushButton#importBtn {
+    background-color: #1a3a2a;
+    border-color: #2a5a3a;
+    color: #60c878;
+}
+
+QWidget#graphicsDesignPanel QPushButton#importBtn:hover {
+    background-color: #204830;
+    border-color: #3a7050;
+}
+
+QWidget#graphicsDesignPanel QPushButton#startBtn {
+    background-color: #2a3d5c;
+    border-color: #3a5d8c;
+    color: #80b0e0;
+}
+
+QWidget#graphicsDesignPanel QComboBox {
+    background-color: #2d2d2d;
+    color: #d0d0d0;
+    border: 1px solid #4d4d4d;
+    border-radius: 5px;
+    padding: 3px 8px;
+}
+
+QWidget#graphicsDesignPanel QComboBox:hover {
+    border-color: #6496c8;
+}
+
+QWidget#graphicsDesignPanel QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QWidget#graphicsDesignPanel QComboBox QAbstractItemView {
+    background-color: #282828;
+    color: #d0d0d0;
+    border: 1px solid #4d4d4d;
+    selection-background-color: #3a5a80;
+    selection-color: #ffffff;
+}
+
+QWidget#graphicsDesignPanel QSpinBox,
+QWidget#graphicsDesignPanel QDoubleSpinBox {
+    background-color: #2d2d2d;
+    color: #d0d0d0;
+    border: 1px solid #4d4d4d;
+    border-radius: 5px;
+    padding: 3px 8px;
+}
+
+QWidget#graphicsDesignPanel QSpinBox:hover,
+QWidget#graphicsDesignPanel QDoubleSpinBox:hover {
+    border-color: #6496c8;
+}
+
+QWidget#graphicsDesignPanel QSpinBox:focus,
+QWidget#graphicsDesignPanel QDoubleSpinBox:focus {
+    border-color: #5080b0;
+}
+
+QWidget#graphicsDesignPanel QCheckBox {
+    color: #b0b0b0;
+}
+
+QWidget#graphicsDesignPanel QCheckBox::indicator {
+    background-color: #2d2d2d;
+    border: 2px solid #5d5d5d;
+    border-radius: 3px;
+}
+
+QWidget#graphicsDesignPanel QCheckBox::indicator:hover {
+    border-color: #6496c8;
+}
+
+QWidget#graphicsDesignPanel QCheckBox::indicator:checked {
+    background-color: #4878a0;
+    border-color: #4878a0;
+}
+
+QWidget#graphicsDesignPanel QScrollArea {
+    background-color: #1e1e1e;
+    border: none;
+}
+
+QWidget#graphicsDesignPanel QScrollBar:vertical {
+    background-color: #252525;
+    width: 8px;
+}
+
+QWidget#graphicsDesignPanel QScrollBar::handle:vertical {
+    background-color: #4d4d4d;
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+QWidget#graphicsDesignPanel QScrollBar::handle:vertical:hover {
+    background-color: #6496c8;
 }

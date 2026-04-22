@@ -1,5 +1,7 @@
 #include "DesignCanvas.h"
 
+#include <QMenu>
+#include <QContextMenuEvent>
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -10,9 +12,10 @@
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kShortcutDuplicateOffset = 10.0;
 
 QPen createEntityPen() {
-    QPen pen(QColor(25, 25, 25));
+    QPen pen(QColor(210, 210, 210));
     pen.setWidth(2);
     pen.setCosmetic(true);
     return pen;
@@ -36,6 +39,11 @@ QPen createPreviewPen() {
 bool isRotateRole(Entity::HandleRole role) {
     return role == Entity::HandleRole::Rotate;
 }
+
+QPointF shortcutOffsetForStep(int step) {
+    const double offset = kShortcutDuplicateOffset * std::max(step, 1);
+    return QPointF(offset, offset);
+}
 }
 
 DesignCanvas::DesignCanvas(QWidget *parent)
@@ -43,10 +51,19 @@ DesignCanvas::DesignCanvas(QWidget *parent)
     , m_commandStack(m_document)
     , m_selectTool(m_document, m_commandStack)
     , m_lineTool(m_document, m_commandStack)
+    , m_polylineTool(m_document, m_commandStack)
     , m_rectangleTool(m_document, m_commandStack)
     , m_circleTool(m_document, m_commandStack)
     , m_arcTool(m_document, m_commandStack)
     , m_textTool(m_document, m_commandStack)
+    , m_dimensionTool(m_document, m_commandStack)
+    , m_angularDimensionTool(m_document, m_commandStack)
+    , m_radiusDimensionTool(m_document, m_commandStack)
+    , m_trimTool(m_document, m_commandStack, TrimExtendTool::Mode::Trim)
+    , m_extendTool(m_document, m_commandStack, TrimExtendTool::Mode::Extend)
+    , m_chamferTool(m_document, m_commandStack)
+    , m_filletTool(m_document, m_commandStack)
+    , m_offsetTool(m_document, m_commandStack)
 {
     setMinimumSize(300, 300);
     setMouseTracking(true);
@@ -149,15 +166,22 @@ void DesignCanvas::clearDocument()
 
 void DesignCanvas::deleteSelectedEntity()
 {
-    Entity* selected = m_document.selectedEntity();
-    if (!selected) {
-        return;
+    const QSet<QUuid> ids = m_document.selectedIds();
+    if (ids.isEmpty()) return;
+
+    // Collect indices; delete from high to low so indices don't shift
+    std::vector<int> indices;
+    indices.reserve(ids.size());
+    for (const QUuid& id : ids) {
+        int idx = m_document.indexOf(id);
+        if (idx >= 0) indices.push_back(idx);
+    }
+    std::sort(indices.begin(), indices.end(), std::greater<int>());
+
+    for (int idx : indices) {
+        m_commandStack.execute(std::make_unique<DeleteEntityCommand>(idx));
     }
 
-    int index = m_document.indexOf(selected->id());
-    if (index >= 0) {
-        m_commandStack.execute(std::make_unique<DeleteEntityCommand>(index));
-    }
     emitToolStatus();
     emitUndoRedoState();
 }
@@ -204,7 +228,119 @@ void DesignCanvas::setCanvasSettings(const SettingsManager::CanvasSettings &s)
 
 void DesignCanvas::setSnapEnabled(bool enabled)
 {
+    if (m_snapEnabled == enabled) return;
     m_snapEnabled = enabled;
+    emit snapEnabledChanged(enabled);
+    scheduleUpdate();
+}
+
+void DesignCanvas::setGridSize(double size)
+{
+    if (size <= 0.0 || qFuzzyCompare(size, m_gridSize)) return;
+    m_gridSize = size;
+    emit gridSizeChanged(size);
+    scheduleUpdate();
+}
+
+double DesignCanvas::filletRadius() const { return m_filletTool.filletRadius(); }
+void DesignCanvas::setFilletRadius(double r) { m_filletTool.setFilletRadius(r); }
+double DesignCanvas::chamferDistance() const { return m_chamferTool.chamferDistance(); }
+void DesignCanvas::setChamferDistance(double d) { m_chamferTool.setChamferDistance(d); }
+double DesignCanvas::offsetDistance() const { return m_offsetTool.offsetDistance(); }
+void DesignCanvas::setOffsetDistance(double d) { m_offsetTool.setOffsetDistance(d); }
+
+void DesignCanvas::setGcodeOverlayVisible(bool visible)
+{
+    if (m_showGcodeOverlay == visible) return;
+    m_showGcodeOverlay = visible;
+    scheduleUpdate();
+}
+
+void DesignCanvas::drawGcodeOverlay(QPainter& painter)
+{
+    // Draw the G-code toolpath over the canvas.
+    // Rapid (G0) moves are shown as thin dashed cyan lines.
+    // Cut (G1/arc) moves are shown as solid orange lines.
+
+    QPen rapidPen(QColor(6, 182, 212, 160), 1, Qt::DashLine);  // cyan dashed
+    rapidPen.setCosmetic(true);
+    QPen cutPen(QColor(249, 115, 22, 200), 1.5);                // orange solid
+    cutPen.setCosmetic(true);
+
+    const double zSafe  = 5.0;
+    const double zCut   = -1.0;
+    const double feed   = 1000.0;
+
+    painter.save();
+
+    for (int i = 0; i < m_document.entityCount(); ++i) {
+        const Entity *e = m_document.entityAt(i);
+        if (!e || !e->isEnabled()) continue;
+        // Skip if on hidden layer
+        if (!m_document.isEntityVisible(e)) continue;
+
+        const auto moves = e->toGcodeMoves(zSafe, zCut, feed);
+        for (const GcodeMove &mv : moves) {
+            QPointF sp = machineToScreen(QPointF(mv.start.x(), mv.start.y()));
+            QPointF ep = machineToScreen(QPointF(mv.end.x(),   mv.end.y()));
+
+            if (mv.type == GcodeMove::Type::Rapid) {
+                painter.setPen(rapidPen);
+                painter.drawLine(sp, ep);
+            } else if (mv.type == GcodeMove::Type::Linear) {
+                painter.setPen(cutPen);
+                painter.drawLine(sp, ep);
+            } else {
+                // Arc — approximate with polyline segments
+                painter.setPen(cutPen);
+                double cx = mv.start.x() + mv.iOffset;
+                double cy = mv.start.y() + mv.jOffset;
+                double r  = std::hypot(mv.start.x() - cx, mv.start.y() - cy);
+                if (r < 1e-6) { painter.drawLine(sp, ep); continue; }
+                double a0 = std::atan2(mv.start.y() - cy, mv.start.x() - cx);
+                double a1 = std::atan2(mv.end.y()   - cy, mv.end.x()   - cx);
+                bool ccw = (mv.type == GcodeMove::Type::ArcCCW);
+                if (ccw && a1 < a0) a1 += 2 * kPi;
+                if (!ccw && a1 > a0) a1 -= 2 * kPi;
+                int steps = std::max(8, (int)(std::abs(a1 - a0) * r * m_zoom / 4.0));
+                QPointF prev = sp;
+                for (int s = 1; s <= steps; ++s) {
+                    double t = a0 + (a1 - a0) * s / steps;
+                    QPointF pt = machineToScreen(QPointF(cx + r * std::cos(t),
+                                                         cy + r * std::sin(t)));
+                    painter.drawLine(prev, pt);
+                    prev = pt;
+                }
+            }
+        }
+    }
+
+    painter.restore();
+}
+
+void DesignCanvas::fitToSelection()
+{
+    const Entity* sel = selectedEntity();
+    if (!sel) { autoFit(); return; }
+
+    QRectF bb = sel->boundingRect();
+    if (!bb.isValid() || bb.isEmpty()) { autoFit(); return; }
+
+    // Inflate bounding box a bit
+    double margin = 40.0;
+    double bbW = bb.width();  if (bbW < 1.0) bbW = 1.0;
+    double bbH = bb.height(); if (bbH < 1.0) bbH = 1.0;
+
+    double scaleX = (width()  - 2 * margin) / bbW;
+    double scaleY = (height() - 2 * margin) / bbH;
+    m_zoom = std::min(scaleX, scaleY);
+
+    // Center the bounding box
+    // machineToScreen(x) = x * zoom + panX  =>  panX = screenX - x * zoom
+    double centerX = (bb.left() + bb.right())  / 2.0;
+    double centerY = (bb.top()  + bb.bottom()) / 2.0;
+    m_panOffset = QPointF(width()  / 2.0 - centerX * m_zoom,
+                          height() / 2.0 + centerY * m_zoom); // Y-flip: screen = -y*z + pan
     scheduleUpdate();
 }
 
@@ -293,13 +429,65 @@ void DesignCanvas::leaveEvent(QEvent *event)
     update();
 }
 
+void DesignCanvas::contextMenuEvent(QContextMenuEvent *event)
+{
+    if (m_document.selectedIds().isEmpty()) {
+        event->ignore();
+        return;
+    }
+
+    QMenu menu(this);
+
+    // Move to Layer submenu
+    if (m_document.layerCount() > 0) {
+        QMenu *moveMenu = menu.addMenu("Move to Layer");
+        for (int i = 0; i < m_document.layerCount(); ++i) {
+            const Layer &layer = m_document.layerAt(i);
+            QAction *act = moveMenu->addAction(layer.name);
+            // Show color swatch icon
+            QPixmap px(12, 12);
+            px.fill(layer.color);
+            act->setIcon(QIcon(px));
+            const QUuid targetId = layer.id;
+            connect(act, &QAction::triggered, this, [this, targetId]() {
+                const QSet<QUuid> ids = m_document.selectedIds();
+                for (const QUuid &id : ids) {
+                    int idx = m_document.indexOf(id);
+                    if (idx < 0) continue;
+                    const Entity *e = m_document.entityAt(idx);
+                    if (!e) continue;
+                    auto before = e->clone();
+                    auto after  = e->clone();
+                    after->setLayerId(targetId);
+                    m_commandStack.execute(
+                        std::make_unique<UpdateEntityCommand>(idx, std::move(before), std::move(after)));
+                }
+                emitUndoRedoState();
+                scheduleUpdate();
+            });
+        }
+    }
+
+    // Delete selected
+    menu.addSeparator();
+    QAction *delAct = menu.addAction("Delete Selected");
+    connect(delAct, &QAction::triggered, this, &DesignCanvas::deleteSelectedEntity);
+
+    // Export G-code
+    menu.addSeparator();
+    QAction *expAct = menu.addAction("Export G-code...");
+    connect(expAct, &QAction::triggered, this, [this]() { emit exportGcodeRequested(); });
+
+    menu.exec(event->globalPos());
+}
+
 void DesignCanvas::drawCrosshair(QPainter &painter)
 {
     if (!m_mouseInWidget) return;
 
     painter.save();
 
-    QPen crossPen(QColor(100, 100, 100, 150), 1.0, Qt::DashLine);
+    QPen crossPen(QColor(180, 180, 180, 100), 1.0, Qt::DashLine);
     painter.setPen(crossPen);
     painter.drawLine(QPointF(m_mouseScreenPos.x(), 0),
                      QPointF(m_mouseScreenPos.x(), height()));
@@ -326,10 +514,10 @@ void DesignCanvas::drawCrosshair(QPainter &painter)
 
     QRectF bgRect(labelX, labelY - textRect.height(), textRect.width(), textRect.height());
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255, 210));
+    painter.setBrush(QColor(30, 30, 30, 220));
     painter.drawRoundedRect(bgRect.adjusted(-2, -1, 2, 1), 3, 3);
 
-    painter.setPen(QColor(50, 50, 50));
+    painter.setPen(QColor(210, 210, 210));
     painter.drawText(bgRect, Qt::AlignCenter, coordText);
 
     painter.restore();
@@ -338,7 +526,7 @@ void DesignCanvas::drawCrosshair(QPainter &painter)
 void DesignCanvas::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(248, 246, 240));
+    painter.fillRect(rect(), QColor(30, 30, 30));
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     // Rulers are drawn in screen coordinates
@@ -396,15 +584,18 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     painter.restore();
 
     drawCrosshair(painter);
+    if (m_showGcodeOverlay)
+        drawGcodeOverlay(painter);
+    drawRulerStrips(painter);
 }
 
 void DesignCanvas::drawGridAndRulers(QPainter& painter)
 {
-    // Adaptive step like ToolpathCanvas
-    double stepMachine = 10.0;
-    while (stepMachine * m_zoom < 30.0) {
+    // Adaptive step: start from the configured grid size, scale up until visible
+    double stepMachine = m_gridSize;
+    while (stepMachine * m_zoom < 20.0) {
         stepMachine *= 2.0;
-        if (stepMachine * m_zoom >= 30.0) break;
+        if (stepMachine * m_zoom >= 20.0) break;
         stepMachine *= 2.5;
     }
 
@@ -430,21 +621,95 @@ void DesignCanvas::drawGridAndRulers(QPainter& painter)
         gridLines.append(QLineF(machineToScreen(QPointF(startX, y)),
                                 machineToScreen(QPointF(endX, y))));
     }
-    painter.setPen(QPen(QColor("#d1d5db"), 1));
+    painter.setPen(QPen(QColor(70, 70, 70), 1));
     painter.drawLines(gridLines);
+}
 
-    // Ruler labels along X-axis (bottom) and Y-axis (left)
-    QFont rulerFont("Sans Serif", 8);
+void DesignCanvas::drawRulerStrips(QPainter& painter)
+{
+    // Ruler strip dimensions
+    const int kRulerW = 20;  // pixels for the ruler strip width
+    const QColor bgColor(40, 40, 40);
+    const QColor borderColor(75, 75, 75);
+    const QColor tickColor(180, 180, 180);
+    const QColor labelColor(180, 180, 180);
+
+    // Adaptive step: same logic as drawGridAndRulers
+    double stepMachine = 10.0;
+    while (stepMachine * m_zoom < 30.0) {
+        stepMachine *= 2.0;
+        if (stepMachine * m_zoom >= 30.0) break;
+        stepMachine *= 2.5;
+    }
+
+    QPointF machineTL = screenToMachine(QPointF(0, 0));
+    QPointF machineBR = screenToMachine(QPointF(width(), height()));
+    double startX = std::floor(std::min(machineTL.x(), machineBR.x()) / stepMachine) * stepMachine;
+    double endX   = std::ceil(std::max(machineTL.x(), machineBR.x()) / stepMachine) * stepMachine;
+    double startY = std::floor(std::min(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
+    double endY   = std::ceil(std::max(machineTL.y(), machineBR.y()) / stepMachine) * stepMachine;
+
+    QFont rulerFont("Sans Serif", 7);
     painter.setFont(rulerFont);
-    painter.setPen(QColor("#6b7280"));
+    QFontMetrics fm(rulerFont);
+
+    // --- Horizontal ruler strip (top) ---
+    painter.fillRect(QRect(kRulerW, 0, width() - kRulerW, kRulerW), bgColor);
+    painter.setPen(QPen(borderColor, 1));
+    painter.drawLine(kRulerW, kRulerW, width(), kRulerW);          // bottom border
+    painter.drawLine(kRulerW, 0, width(), 0);                      // top border
 
     for (double x = startX; x <= endX; x += stepMachine) {
-        QPointF p = machineToScreen(QPointF(x, 0));
-        painter.drawText(QPointF(p.x() + 3, height() - 4), QString::number(x, 'g', 6));
+        double sx = machineToScreen(QPointF(x, 0)).x();
+        if (sx < kRulerW || sx > width()) continue;
+        painter.setPen(QPen(tickColor, 1));
+        painter.drawLine(QPointF(sx, kRulerW), QPointF(sx, kRulerW - 6));
+        QString label = QString::number(x, 'g', 5);
+        int lw = fm.horizontalAdvance(label);
+        painter.setPen(labelColor);
+        painter.drawText(QPointF(sx - lw / 2.0, kRulerW - 8), label);
     }
+
+    // --- Vertical ruler strip (left) ---
+    painter.fillRect(QRect(0, kRulerW, kRulerW, height() - kRulerW), bgColor);
+    painter.setPen(QPen(borderColor, 1));
+    painter.drawLine(kRulerW, kRulerW, kRulerW, height());         // right border
+    painter.drawLine(0, kRulerW, 0, height());                     // left border
+
     for (double y = startY; y <= endY; y += stepMachine) {
-        QPointF p = machineToScreen(QPointF(0, y));
-        painter.drawText(QPointF(4, p.y() - 3), QString::number(y, 'g', 6));
+        double sy = machineToScreen(QPointF(0, y)).y();
+        if (sy < kRulerW || sy > height()) continue;
+        painter.setPen(QPen(tickColor, 1));
+        painter.drawLine(QPointF(kRulerW, sy), QPointF(kRulerW - 6, sy));
+        // Draw rotated label
+        QString label = QString::number(y, 'g', 5);
+        painter.save();
+        painter.translate(kRulerW - 8, sy);
+        painter.rotate(-90);
+        int lw = fm.horizontalAdvance(label);
+        painter.setPen(labelColor);
+        painter.drawText(QPointF(-lw / 2.0, 0), label);
+        painter.restore();
+    }
+
+    // --- Corner square (covers intersection) ---
+    painter.fillRect(QRect(0, 0, kRulerW, kRulerW), QColor(35, 35, 35));
+    painter.setPen(QPen(borderColor, 1));
+    painter.drawLine(kRulerW, 0, kRulerW, kRulerW);
+    painter.drawLine(0, kRulerW, kRulerW, kRulerW);
+
+    // --- Cursor position indicators ---
+    if (m_mouseInWidget) {
+        QPen cursorPen(QColor("#ef4444"), 1);
+        painter.setPen(cursorPen);
+        // Vertical line on horizontal ruler
+        double cx = m_mouseScreenPos.x();
+        if (cx >= kRulerW && cx <= width())
+            painter.drawLine(QPointF(cx, 0), QPointF(cx, kRulerW));
+        // Horizontal line on vertical ruler
+        double cy = m_mouseScreenPos.y();
+        if (cy >= kRulerW && cy <= height())
+            painter.drawLine(QPointF(0, cy), QPointF(kRulerW, cy));
     }
 }
 
@@ -458,7 +723,7 @@ void DesignCanvas::drawWorktable(QPainter& painter)
 
     // Fill worktable with paper background
     painter.setPen(Qt::NoPen);
-    painter.setBrush(m_canvasSettings.paperColor);
+    painter.setBrush(QColor(38, 38, 38));
     painter.drawRect(QRectF(bl, tr));
 
     double tableW = m_worktableSize.width();
@@ -493,7 +758,7 @@ void DesignCanvas::drawWorktable(QPainter& painter)
     }
 
     // Worktable border
-    painter.setPen(QPen(QColor("#9ca3af"), 0.5, Qt::DotLine));
+    painter.setPen(QPen(QColor(100, 140, 220), 0.5, Qt::DotLine));
     painter.drawLine(bl, br);
     painter.drawLine(br, tr);
     painter.drawLine(tr, tl);
@@ -506,7 +771,7 @@ void DesignCanvas::drawWorktable(QPainter& painter)
     painter.setFont(labelFont);
     painter.translate(tr);
     painter.scale(invZoom, -invZoom);  // Un-flip Y for text
-    painter.setPen(QColor("#9ca3af"));
+    painter.setPen(QColor(130, 160, 220));
     painter.drawText(QPointF(4, 12), QString("%1 x %2 mm")
                      .arg(m_worktableSize.width(), 0, 'f', 0)
                      .arg(m_worktableSize.height(), 0, 'f', 0));
@@ -556,7 +821,7 @@ void DesignCanvas::drawAxisOrigin(QPainter& painter)
 
 void DesignCanvas::drawEntities(QPainter& painter)
 {
-    Entity* selected = m_document.selectedEntity();
+    const QSet<QUuid>& selectedIds = m_document.selectedIds();
 
     // Compute visible rect in machine coordinates for culling
     QPointF visTL = screenToMachine(QPointF(0, 0));
@@ -566,18 +831,27 @@ void DesignCanvas::drawEntities(QPainter& painter)
 
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
+        // Skip entities on hidden layers
+        if (!m_document.isEntityVisible(entity))
+            continue;
         // Frustum culling: skip entities outside visible area
         if (!visibleRect.intersects(entity->boundingRect()))
             continue;
-        bool isSelected = (selected && entity->id() == selected->id());
+        bool isSelected = selectedIds.contains(entity->id());
         if (!entity->isEnabled()) {
             painter.setOpacity(0.3);
         }
-        painter.setPen(isSelected ? createSelectedPen() : createEntityPen());
-        entity->draw(painter);
-        if (!entity->isEnabled()) {
-            painter.setOpacity(1.0);
+        // Indicate locked layer entities with reduced opacity
+        if (m_document.isEntityLocked(entity)) {
+            painter.setOpacity(0.5);
         }
+        painter.setPen(isSelected ? createSelectedPen() : [&]() {
+            QPen p = createEntityPen();
+            p.setColor(m_document.entityLayerColor(entity));
+            return p;
+        }());
+        entity->draw(painter);
+        painter.setOpacity(1.0);
     }
 }
 
@@ -660,8 +934,8 @@ DesignCanvas::SnapResult DesignCanvas::computeSnap(const QPointF& rawWorldPos, b
     };
 
     // Grid snap
-    const QPointF gridPoint(std::round(rawWorldPos.x() / kGridStep) * kGridStep,
-                            std::round(rawWorldPos.y() / kGridStep) * kGridStep);
+    const QPointF gridPoint(std::round(rawWorldPos.x() / m_gridSize) * m_gridSize,
+                            std::round(rawWorldPos.y() / m_gridSize) * m_gridSize);
     tryCandidate(gridPoint, "Grid");
 
     // Entity snap points
@@ -740,10 +1014,19 @@ Tool& DesignCanvas::activeTool()
 {
     switch (m_activeToolType) {
         case ToolType::Select:    return m_selectTool;
+        case ToolType::Polyline:  return m_polylineTool;
         case ToolType::Rectangle: return m_rectangleTool;
         case ToolType::Circle:    return m_circleTool;
         case ToolType::Arc:       return m_arcTool;
         case ToolType::Text:      return m_textTool;
+        case ToolType::Dimension:         return m_dimensionTool;
+        case ToolType::AngularDimension:   return m_angularDimensionTool;
+        case ToolType::RadiusDimension:    return m_radiusDimensionTool;
+        case ToolType::Trim:               return m_trimTool;
+        case ToolType::Extend:             return m_extendTool;
+        case ToolType::Chamfer:            return m_chamferTool;
+        case ToolType::Fillet:             return m_filletTool;
+        case ToolType::Offset:             return m_offsetTool;
         case ToolType::Line:
         default:                  return m_lineTool;
     }
@@ -753,10 +1036,19 @@ const Tool& DesignCanvas::activeTool() const
 {
     switch (m_activeToolType) {
         case ToolType::Select:    return m_selectTool;
+        case ToolType::Polyline:  return m_polylineTool;
         case ToolType::Rectangle: return m_rectangleTool;
         case ToolType::Circle:    return m_circleTool;
         case ToolType::Arc:       return m_arcTool;
         case ToolType::Text:      return m_textTool;
+        case ToolType::Dimension:         return m_dimensionTool;
+        case ToolType::AngularDimension:  return m_angularDimensionTool;
+        case ToolType::RadiusDimension:   return m_radiusDimensionTool;
+        case ToolType::Trim:              return m_trimTool;
+        case ToolType::Extend:            return m_extendTool;
+        case ToolType::Chamfer:           return m_chamferTool;
+        case ToolType::Fillet:            return m_filletTool;
+        case ToolType::Offset:            return m_offsetTool;
         case ToolType::Line:
         default:                  return m_lineTool;
     }
@@ -774,6 +1066,66 @@ void DesignCanvas::emitToolStatus()
 void DesignCanvas::emitUndoRedoState()
 {
     emit undoRedoStateChanged(canUndo(), canRedo());
+}
+
+void DesignCanvas::copySelectedEntity()
+{
+    const Entity* selected = selectedEntity();
+    if (!selected) {
+        return;
+    }
+
+    m_copiedEntity = selected->clone();
+    m_pasteSerial = 0;
+}
+
+void DesignCanvas::pasteCopiedEntity()
+{
+    if (!m_copiedEntity) {
+        return;
+    }
+
+    auto entity = m_copiedEntity->clone();
+    ++m_pasteSerial;
+    entity->translate(shortcutOffsetForStep(m_pasteSerial));
+    addEntityFromShortcut(std::move(entity));
+}
+
+void DesignCanvas::duplicateSelectedEntity()
+{
+    const Entity* selected = selectedEntity();
+    if (!selected) {
+        return;
+    }
+
+    auto entity = selected->clone();
+    entity->translate(shortcutOffsetForStep(1));
+    addEntityFromShortcut(std::move(entity));
+
+    m_copiedEntity = selected->clone();
+    m_pasteSerial = 1;
+}
+
+void DesignCanvas::addEntityFromShortcut(std::unique_ptr<Entity> entity)
+{
+    if (!entity) {
+        return;
+    }
+
+    const int entityCountBefore = m_document.entityCount();
+    m_commandStack.execute(std::make_unique<AddEntityCommand>(std::move(entity)));
+
+    if (m_document.entityCount() > entityCountBefore) {
+        m_document.clearSelection();
+        if (Entity* created = m_document.entityAt(entityCountBefore)) {
+            m_document.select(created->id());
+        }
+    }
+
+    setTool(ToolType::Select);
+    emitToolStatus();
+    emitUndoRedoState();
+    scheduleUpdate();
 }
 
 void DesignCanvas::mousePressEvent(QMouseEvent *event)
@@ -794,6 +1146,13 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
             m_snapResult = {};
         }
         const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
+
+        // Pre-resolve handle hit in screen space for SelectTool
+        if (m_activeToolType == ToolType::Select) {
+            auto handle = hitHandle(rawWorldPos);
+            m_selectTool.setHitHandleId(handle ? handle->id : QString());
+            m_selectTool.setCtrlPressed(event->modifiers() & Qt::ControlModifier);
+        }
 
         const int entityCountBefore = m_document.entityCount();
         activeTool().mousePress(snappedPos);
@@ -871,6 +1230,33 @@ void DesignCanvas::mouseReleaseEvent(QMouseEvent *event)
     }
 }
 
+void DesignCanvas::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton || m_activeToolType != ToolType::Polyline) {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+
+    const int entityCountBefore = m_document.entityCount();
+    if (m_snapEnabled) {
+        m_snapResult = computeSnap(toWorld(event->position()), true);
+    } else {
+        m_snapResult = {};
+    }
+
+    if (m_polylineTool.finish() && m_document.entityCount() > entityCountBefore) {
+        m_document.clearSelection();
+        if (Entity* created = m_document.entityAt(entityCountBefore)) {
+            m_document.select(created->id());
+        }
+        setTool(ToolType::Select);
+    }
+
+    emitToolStatus();
+    scheduleUpdate();
+    event->accept();
+}
+
 void DesignCanvas::wheelEvent(QWheelEvent *event)
 {
     const double factor = event->angleDelta().y() > 0 ? 1.15 : 1.0 / 1.15;
@@ -880,6 +1266,48 @@ void DesignCanvas::wheelEvent(QWheelEvent *event)
 
 void DesignCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (m_activeToolType == ToolType::Polyline) {
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            const int entityCountBefore = m_document.entityCount();
+            if (m_polylineTool.finish() && m_document.entityCount() > entityCountBefore) {
+                m_document.clearSelection();
+                if (Entity* created = m_document.entityAt(entityCountBefore)) {
+                    m_document.select(created->id());
+                }
+                setTool(ToolType::Select);
+            }
+            emitToolStatus();
+            scheduleUpdate();
+            event->accept();
+            return;
+        }
+
+        if (event->key() == Qt::Key_Backspace && m_polylineTool.removeLastVertex()) {
+            emitToolStatus();
+            scheduleUpdate();
+            event->accept();
+            return;
+        }
+    }
+
+    if (event->matches(QKeySequence::Copy)) {
+        copySelectedEntity();
+        event->accept();
+        return;
+    }
+
+    if (event->matches(QKeySequence::Paste)) {
+        pasteCopiedEntity();
+        event->accept();
+        return;
+    }
+
+    if (event->key() == Qt::Key_D && event->modifiers() == Qt::ControlModifier) {
+        duplicateSelectedEntity();
+        event->accept();
+        return;
+    }
+
     if (event->matches(QKeySequence::Undo)) {
         undo();
         event->accept();
@@ -907,6 +1335,20 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
     if (event->key() == Qt::Key_S && event->modifiers() == Qt::NoModifier) {
         setSnapEnabled(!m_snapEnabled);
         emitToolStatus();
+        event->accept();
+        return;
+    }
+
+    if (event->key() == Qt::Key_A && event->modifiers() == Qt::ControlModifier) {
+        m_document.selectAll();
+        emitToolStatus();
+        scheduleUpdate();
+        event->accept();
+        return;
+    }
+
+    if (event->key() == Qt::Key_E && event->modifiers() == Qt::ControlModifier) {
+        emit exportGcodeRequested();
         event->accept();
         return;
     }

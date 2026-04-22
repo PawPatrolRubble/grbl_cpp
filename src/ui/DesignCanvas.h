@@ -5,10 +5,18 @@
 #include "../grbl/GraphicsDesign/Tools/Tool.h"
 #include "../grbl/GraphicsDesign/Tools/SelectTool.h"
 #include "../grbl/GraphicsDesign/Tools/LineTool.h"
+#include "../grbl/GraphicsDesign/Tools/PolylineTool.h"
 #include "../grbl/GraphicsDesign/Tools/RectangleTool.h"
 #include "../grbl/GraphicsDesign/Tools/CircleTool.h"
 #include "../grbl/GraphicsDesign/Tools/ArcTool.h"
 #include "../grbl/GraphicsDesign/Tools/TextTool.h"
+#include "../grbl/GraphicsDesign/Tools/DimensionTool.h"
+#include "../grbl/GraphicsDesign/Tools/AngularDimensionTool.h"
+#include "../grbl/GraphicsDesign/Tools/RadiusDimensionTool.h"
+#include "../grbl/GraphicsDesign/Tools/TrimExtendTool.h"
+#include "../grbl/GraphicsDesign/Tools/ChamferTool.h"
+#include "../grbl/GraphicsDesign/Tools/FilletTool.h"
+#include "../grbl/GraphicsDesign/Tools/OffsetTool.h"
 
 #include "SettingsManager.h"
 
@@ -27,10 +35,19 @@ public:
     enum class ToolType {
         Select,
         Line,
+        Polyline,
         Rectangle,
         Circle,
         Arc,
-        Text
+        Text,
+        Dimension,
+        AngularDimension,
+        RadiusDimension,
+        Trim,
+        Extend,
+        Chamfer,
+        Fillet,
+        Offset
     };
 
     struct SnapResult {
@@ -58,10 +75,21 @@ public:
     // View
     double zoom() const { return m_zoom; }
     void autoFit();
+    void fitToSelection();
     void setWorktableSize(const QSizeF &size);
     void setCanvasSettings(const SettingsManager::CanvasSettings &s);
     bool snapEnabled() const { return m_snapEnabled; }
     void setSnapEnabled(bool enabled);
+    double gridSize() const { return m_gridSize; }
+    void setGridSize(double size);
+    double filletRadius() const;
+    void setFilletRadius(double r);
+    double chamferDistance() const;
+    void setChamferDistance(double d);
+    double offsetDistance() const;
+    void setOffsetDistance(double d);
+    bool gcodeOverlayVisible() const { return m_showGcodeOverlay; }
+    void setGcodeOverlayVisible(bool visible);
 
 public slots:
     void setTool(ToolType toolType);
@@ -77,17 +105,22 @@ signals:
     void selectedEntityChanged();
     void documentStateChanged();
     void toolChanged(ToolType toolType);
+    void snapEnabledChanged(bool enabled);
+    void gridSizeChanged(double size);
+    void exportGcodeRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void leaveEvent(QEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     Tool& activeTool();
@@ -95,6 +128,10 @@ private:
 
     void emitToolStatus();
     void emitUndoRedoState();
+    void copySelectedEntity();
+    void pasteCopiedEntity();
+    void duplicateSelectedEntity();
+    void addEntityFromShortcut(std::unique_ptr<Entity> entity);
 
     // Coordinate transforms (Y-up machine coordinates)
     QPointF toWorld(const QPointF& screenPos) const;
@@ -107,6 +144,8 @@ private:
 
     // Drawing helpers
     void drawGridAndRulers(QPainter& painter);
+    void drawRulerStrips(QPainter& painter);
+    void drawGcodeOverlay(QPainter& painter);
     void drawWorktable(QPainter& painter);
     void drawAxisOrigin(QPainter& painter);
     void drawEntities(QPainter& painter);
@@ -128,10 +167,19 @@ private:
     CommandStack m_commandStack;
     SelectTool m_selectTool;
     LineTool m_lineTool;
+    PolylineTool m_polylineTool;
     RectangleTool m_rectangleTool;
     CircleTool m_circleTool;
     ArcTool m_arcTool;
     TextTool m_textTool;
+    DimensionTool m_dimensionTool;
+    AngularDimensionTool m_angularDimensionTool;
+    RadiusDimensionTool m_radiusDimensionTool;
+    TrimExtendTool m_trimTool;
+    TrimExtendTool m_extendTool;
+    ChamferTool    m_chamferTool;
+    FilletTool     m_filletTool;
+    OffsetTool     m_offsetTool;
     ToolType m_activeToolType = ToolType::Select;
 
     // View state
@@ -147,7 +195,9 @@ private:
 
     // Snap result
     SnapResult m_snapResult;
-    bool m_snapEnabled = false;
+    bool m_snapEnabled = true;
+    double m_gridSize = 10.0;  // machine units (mm)
+    bool m_showGcodeOverlay = false;
 
     // Repaint throttle
     QTimer m_repaintTimer;
@@ -160,6 +210,10 @@ private:
     QPointF m_entityCachePanOffset;
     QSize m_entityCacheSize;
     bool m_entityCacheDirty = true;
+
+    // Shortcut clipboard for basic CAD edit operations.
+    std::unique_ptr<Entity> m_copiedEntity;
+    int m_pasteSerial = 0;
 
     // Deferred crisp render after zoom
     QTimer m_zoomSettleTimer;
