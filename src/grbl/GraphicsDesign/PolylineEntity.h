@@ -25,6 +25,7 @@ public:
     std::vector<QPointF> snapPoints() const override;
     QList<GcodeMove> toGcodeMoves(double zSafe, double zCut, double feedRate) const override;
     QJsonObject toJson() const override;
+    QString displayName() const override;
     static std::unique_ptr<PolylineEntity> fromJson(const QJsonObject& json);
 
     // Geometry

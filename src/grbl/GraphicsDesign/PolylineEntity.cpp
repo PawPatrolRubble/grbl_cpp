@@ -276,6 +276,11 @@ QJsonObject PolylineEntity::toJson() const
     return json;
 }
 
+QString PolylineEntity::displayName() const
+{
+    return QString("Polyline (%1 pts)").arg(m_points.size());
+}
+
 std::unique_ptr<PolylineEntity> PolylineEntity::fromJson(const QJsonObject& json)
 {
     QList<QPointF> points;

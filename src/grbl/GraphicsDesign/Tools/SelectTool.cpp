@@ -23,7 +23,10 @@ QString SelectTool::instructions() const
     if (m_mode == Mode::MovingEntity) {
         return "Drag to move entity. Release to apply.";
     }
-    return "Click to select entity. Drag handle to edit.";
+    if (m_mode == Mode::RubberBand) {
+        return "Drag to select entities in region. Release to confirm.";
+    }
+    return "Click to select. Ctrl+click to add/remove. Drag empty space to box-select.";
 }
 
 void SelectTool::mousePress(const QPointF& pos)
@@ -33,24 +36,56 @@ void SelectTool::mousePress(const QPointF& pos)
     m_dragEntityPreview.reset();
 
     Entity* selected = document().selectedEntity();
-    if (selected) {
-        // Check for handle hit first
-        auto handles = selected->editHandles();
-        for (const auto& handle : handles) {
-            const double dist = QLineF(handle.worldPos, pos).length();
-            if (dist < 15.0) {  // Handle hit threshold
-                m_mode = Mode::DraggingHandle;
-                m_activeHandleId = handle.id;
-                m_dragEntityPreview = selected->withDraggedHandle(handle.id, pos);
-                return;
-            }
+    if (selected && !m_hitHandleId.isEmpty()) {
+        m_mode = Mode::DraggingHandle;
+        m_activeHandleId = m_hitHandleId;
+        m_hitHandleId.clear();
+        m_dragEntityPreview = selected->withDraggedHandle(m_activeHandleId, pos);
+        return;
+    }
+    m_hitHandleId.clear();
+
+    if (m_ctrlPressed) {
+        // Ctrl+click: find nearest and toggle its selection state
+        const double tol = 15.0;
+        // find nearest entity
+        int nearest = -1;
+        double bestDist = tol;
+        for (int i = 0; i < document().entityCount(); ++i) {
+            const Entity* e = document().entityAt(i);
+            if (!e || !e->isEnabled()) continue;
+            double d = e->distanceTo(pos);
+            if (d < bestDist) { bestDist = d; nearest = i; }
         }
+        if (nearest >= 0) {
+            const Entity* e = document().entityAt(nearest);
+            if (document().selectedIds().contains(e->id()))
+                document().deselect(e->id());
+            else
+                document().select(e->id());
+        }
+        m_mode = Mode::None;
+        return;
     }
 
-    // Try selection
-    document().selectNearest(pos, 15.0);
-    if (document().selectedEntity()) {
+    // Normal click: find nearest; if miss, start rubber-band
+    int nearest = -1;
+    double bestDist = 15.0;
+    for (int i = 0; i < document().entityCount(); ++i) {
+        const Entity* e = document().entityAt(i);
+        if (!e || !e->isEnabled()) continue;
+        double d = e->distanceTo(pos);
+        if (d < bestDist) { bestDist = d; nearest = i; }
+    }
+
+    if (nearest >= 0) {
+        document().clearSelection();
+        document().select(document().entityAt(nearest)->id());
         m_mode = Mode::Selecting;
+    } else {
+        // Miss: start rubber-band
+        document().clearSelection();
+        m_mode = Mode::RubberBand;
     }
 }
 
@@ -75,8 +110,9 @@ void SelectTool::mouseMove(const QPointF& pos)
                 m_lastMovePos = pos;
             }
         }
+    } else if (m_mode == Mode::RubberBand) {
+        m_currentPos = pos;  // update current pos for drawing
     } else if (m_mode == Mode::MovingEntity) {
-        // Update move preview — reuse existing preview, just update position
         Entity* selected = document().selectedEntity();
         if (selected && m_dragEntityPreview) {
             // Reset to original position, then apply new delta
@@ -112,6 +148,18 @@ void SelectTool::mouseRelease(const QPointF& pos)
                     index, std::move(before), std::move(after)));
             }
         }
+    } else if (m_mode == Mode::RubberBand) {
+        // Select all entities whose bounding rect intersects the rubber-band
+        QRectF band(m_pressPos, m_currentPos);
+        band = band.normalized();
+        if (band.width() > 1.0 || band.height() > 1.0) {
+            for (int i = 0; i < document().entityCount(); ++i) {
+                const Entity* e = document().entityAt(i);
+                if (!e || !e->isEnabled()) continue;
+                if (band.intersects(e->boundingRect()))
+                    document().select(e->id());
+            }
+        }
     }
 
     m_mode = Mode::None;
@@ -131,9 +179,23 @@ void SelectTool::paintPreview(QPainter& painter) const
     if ((m_mode == Mode::DraggingHandle || m_mode == Mode::MovingEntity) && m_dragEntityPreview) {
         m_dragEntityPreview->draw(painter);
     }
+    if (m_mode == Mode::RubberBand) {
+        QRectF band(m_pressPos, m_currentPos);
+        painter.save();
+        painter.setPen(QPen(QColor(59, 130, 246, 200), 1.5 / painter.transform().m11(), Qt::DashLine));
+        painter.setBrush(QColor(59, 130, 246, 30));
+        painter.drawRect(band);
+        painter.restore();
+    }
 }
 
 bool SelectTool::isActive() const
 {
     return m_mode != Mode::None;
+}
+
+std::optional<QRectF> SelectTool::rubberBandRect() const
+{
+    if (m_mode != Mode::RubberBand) return std::nullopt;
+    return QRectF(m_pressPos, m_currentPos).normalized();
 }

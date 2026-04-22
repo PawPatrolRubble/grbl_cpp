@@ -59,6 +59,15 @@ void TextTool::mousePress(const QPointF& pos)
     textEdit->setPlaceholderText("Enter text (supports multiple lines)");
     layout->addWidget(textEdit);
 
+    // Character count label
+    auto *charCountLabel = new QLabel("0 characters");
+    charCountLabel->setStyleSheet("color: #888;");
+    layout->addWidget(charCountLabel);
+    QObject::connect(textEdit, &QPlainTextEdit::textChanged, [&]() {
+        int count = textEdit->toPlainText().length();
+        charCountLabel->setText(QString("%1 character%2").arg(count).arg(count == 1 ? "" : "s"));
+    });
+
     // Font size
     auto *sizeRow = new QHBoxLayout();
     sizeRow->addWidget(new QLabel("Font Size:"));

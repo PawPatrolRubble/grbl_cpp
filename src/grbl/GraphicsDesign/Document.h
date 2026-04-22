@@ -2,8 +2,10 @@
 
 #include "Entity.h"
 #include "CommandStack.h"
+#include "Layer.h"
 
 #include <QObject>
+#include <QList>
 #include <QSet>
 #include <QJsonDocument>
 #include <memory>
@@ -40,6 +42,7 @@ public:
     void select(const QUuid& id);
     void deselect(const QUuid& id);
     void clearSelection();
+    void selectAll();
     void setSelected(const QUuid& id, bool selected);
     QSet<QUuid> selectedIds() const { return m_selectedIds; }
     Entity* selectedEntity() const;  // Returns first selected or null
@@ -62,9 +65,27 @@ public:
     void undo();
     void redo();
 
+    // Layer management
+    int layerCount() const { return m_layers.size(); }
+    const Layer& layerAt(int index) const { return m_layers[index]; }
+    Layer& layerAt(int index) { return m_layers[index]; }
+    int indexOfLayer(const QUuid& id) const;
+    QUuid activeLayerId() const { return m_activeLayerId; }
+    void setActiveLayerId(const QUuid& id);
+    void addLayer(const QString& name);
+    void removeLayerAt(int index);   // moves entities on that layer to layer 0
+    void setLayerName(int index, const QString& name);
+    void setLayerVisible(int index, bool visible);
+    void setLayerLocked(int index, bool locked);
+    void setLayerColor(int index, const QColor& color);
+    QColor entityLayerColor(const Entity* e) const;
+    bool isEntityVisible(const Entity* e) const;
+    bool isEntityLocked(const Entity* e) const;
+
 signals:
     void changed();
     void selectionChanged();
+    void layersChanged();
 
 private:
     void normalizeSelectionAfterRemoval(int removedIndex);
@@ -74,6 +95,8 @@ private:
     QSet<QUuid> m_selectedIds;
     CommandStack* m_commandStack;
     double m_worktableWidth = 300.0;
+    QList<Layer> m_layers;
+    QUuid m_activeLayerId;
 
 public:
     double worktableWidth() const { return m_worktableWidth; }
