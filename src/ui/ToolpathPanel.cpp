@@ -45,6 +45,10 @@ ToolpathPanel::ToolpathPanel(QWidget *parent)
     // Clear G-code
     connect(m_listWidget, &GcodeListWidget::clearRequested,
             this, &ToolpathPanel::clearRequested);
+
+    // Forward range changes
+    connect(m_listWidget, &GcodeListWidget::rangeChanged,
+            this, &ToolpathPanel::rangeChanged);
 }
 
 void ToolpathPanel::setWorktableSize(const QSizeF &size)
@@ -71,6 +75,11 @@ void ToolpathPanel::setExecutingLine(int lineNumber)
     m_canvas->setExecutingLine(lineNumber);
 }
 
+void ToolpathPanel::setStreamRange(int startLine, int endLine)
+{
+    m_canvas->setStreamRange(startLine, endLine);
+}
+
 void ToolpathPanel::setCutterPosition(const QVector3D &pos)
 {
     m_canvas->setCutterPosition(pos);
@@ -79,6 +88,21 @@ void ToolpathPanel::setCutterPosition(const QVector3D &pos)
 QStringList ToolpathPanel::currentGcodeLines() const
 {
     return m_currentLines;
+}
+
+int ToolpathPanel::startFromLine() const
+{
+    return m_listWidget->selectedLine();
+}
+
+int ToolpathPanel::rangeStart() const
+{
+    return m_listWidget->rangeStart();
+}
+
+int ToolpathPanel::rangeEnd() const
+{
+    return m_listWidget->rangeEnd();
 }
 
 void ToolpathPanel::clearAll()

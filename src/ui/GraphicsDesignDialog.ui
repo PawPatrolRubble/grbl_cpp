@@ -28,6 +28,11 @@
          <string>Line</string>
         </property>
        </item>
+    <item>
+     <property name="text">
+      <string>Polyline</string>
+     </property>
+    </item>
        <item>
         <property name="text">
          <string>Rectangle</string>
@@ -43,6 +48,11 @@
          <string>Arc</string>
         </property>
        </item>
+    <item>
+     <property name="text">
+      <string>Text</string>
+     </property>
+    </item>
       </widget>
      </item>
      <item>

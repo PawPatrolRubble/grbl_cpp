@@ -18,6 +18,7 @@ public:
     void setMoves(const QList<GcodeMove> &moves);
     void setMovesNoFit(const QList<GcodeMove> &moves);  // No autoFit - preserve zoom/pan
     void setExecutingLine(int lineNumber);
+    void setStreamRange(int startLine, int endLine);
     void setCutterPosition(const QVector3D &pos);
     void highlightSegment(int lineNumber);
     void setWorktableSize(const QSizeF &size);
@@ -78,6 +79,8 @@ private:
     QList<GcodeMove> m_moves;
     int m_executingLine = -1;
     int m_highlightedLine = -1;
+    int m_rangeStart = -1;
+    int m_rangeEnd = -1;
     QVector3D m_cutterPos;
     QSizeF m_worktableSize = QSizeF(300, 300);
 
@@ -106,6 +109,8 @@ private:
     QVector<QLineF> m_rapidLines;
     QVector<QLineF> m_linearLines;
     QVector<QLineF> m_arcLines;
+    // Out-of-range segments (dimmed when range is active)
+    QVector<QLineF> m_dimmedLines;
     bool m_pathsDirty = true;
     double m_pathScale = 0.0;
     QPointF m_pathOffset;

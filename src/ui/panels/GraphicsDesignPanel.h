@@ -12,11 +12,14 @@ class QPushButton;
 class QToolButton;
 class QLabel;
 class QDoubleSpinBox;
+class QSpinBox;
 class QStackedWidget;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPlainTextEdit;
+class QTableWidget;
+class QGroupBox;
 class LineNumberPlainTextEdit;
 class Entity;
 
@@ -60,6 +63,27 @@ private slots:
     void applyCircleProperties();
     void applyArcProperties();
     void applyTextProperties();
+    void applyPolylineProperties();
+    void polylineInsertVertex();
+    void polylineDeleteVertex();
+    void applyDimensionProperties();
+    void applyAngularDimensionProperties();
+    void applyRadiusDimensionProperties();
+    void applyMoveBy();
+    void applyRotateBy();
+    void applyFlipH();
+    void applyFlipV();
+    void applyRectArray();
+    void applyScaleBy();
+    void applyPolarArray();
+    void buildLayerSection();
+    void refreshLayerList();
+    void onLayerItemChanged(QListWidgetItem *item);
+    void onAddLayerClicked();
+    void onDeleteLayerClicked();
+    void onLockLayerClicked();
+    void onLayerCurrentRowChanged(int row);
+    void onMoveEntityToLayerClicked();
 
 private:
     QStringList m_generatedLines;
@@ -74,6 +98,13 @@ private:
     QPushButton *m_exportBtn;
     QPushButton *m_generateBtn;
     QToolButton *m_snapBtn;
+    QDoubleSpinBox *m_gridSizeSpin = nullptr;
+    QLabel         *m_filletRadiusLabel  = nullptr;
+    QDoubleSpinBox *m_filletRadiusSpin   = nullptr;
+    QLabel         *m_chamferDistLabel   = nullptr;
+    QDoubleSpinBox *m_chamferDistSpin    = nullptr;
+    QLabel         *m_offsetDistLabel    = nullptr;
+    QDoubleSpinBox *m_offsetDistSpin     = nullptr;
     QLabel *m_lineCountLabel;
     QLabel *m_statusLabel;
     QDoubleSpinBox *m_feedSpeedSpinBox;
@@ -129,6 +160,58 @@ private:
     QDoubleSpinBox *m_textSsMergeGap;
     QDoubleSpinBox *m_textSsMinSegLen;
 
+    QLabel *m_polylinePointCountLabel = nullptr;
+    QTableWidget *m_polylineTable = nullptr;
+    QPushButton *m_polylineInsertBtn = nullptr;
+    QPushButton *m_polylineDeleteBtn = nullptr;
+
+    // Dimension property widgets
+    QDoubleSpinBox *m_dimP1X = nullptr;
+    QDoubleSpinBox *m_dimP1Y = nullptr;
+    QDoubleSpinBox *m_dimP2X = nullptr;
+    QDoubleSpinBox *m_dimP2Y = nullptr;
+    QDoubleSpinBox *m_dimOffset = nullptr;
+
+    // Angular dimension property widgets
+    QDoubleSpinBox *m_adimVertexX = nullptr;
+    QDoubleSpinBox *m_adimVertexY = nullptr;
+    QDoubleSpinBox *m_adimP1X = nullptr;
+    QDoubleSpinBox *m_adimP1Y = nullptr;
+    QDoubleSpinBox *m_adimP2X = nullptr;
+    QDoubleSpinBox *m_adimP2Y = nullptr;
+    QDoubleSpinBox *m_adimRadius = nullptr;
+
+    // Radius dimension property widgets
+    QDoubleSpinBox *m_rdimCX = nullptr;
+    QDoubleSpinBox *m_rdimCY = nullptr;
+    QDoubleSpinBox *m_rdimRadius = nullptr;
+    QDoubleSpinBox *m_rdimAngle = nullptr;
+    QCheckBox     *m_rdimDiameter = nullptr;
+
+    // Transform section (move / rotate, always visible when entity is selected)
+    QGroupBox *m_transformGroup = nullptr;
+    QDoubleSpinBox *m_moveDx = nullptr;
+    QDoubleSpinBox *m_moveDy = nullptr;
+    QDoubleSpinBox *m_rotateAngle = nullptr;
+    QSpinBox       *m_arrayRows   = nullptr;
+    QSpinBox       *m_arrayCols   = nullptr;
+    QDoubleSpinBox *m_arraySpacingX = nullptr;
+    QDoubleSpinBox *m_arraySpacingY = nullptr;
+    QDoubleSpinBox *m_scaleFactor   = nullptr;
+    // Polar array
+    QDoubleSpinBox *m_polarCenterX  = nullptr;
+    QDoubleSpinBox *m_polarCenterY  = nullptr;
+    QSpinBox       *m_polarCount    = nullptr;
+    QDoubleSpinBox *m_polarSpan     = nullptr;
+
+    // Layer management
+    QGroupBox *m_layerGroup = nullptr;
+    QListWidget *m_layerList = nullptr;
+    QPushButton *m_addLayerBtn = nullptr;
+    QPushButton *m_deleteLayerBtn = nullptr;
+    QPushButton *m_lockLayerBtn = nullptr;
+    QPushButton *m_moveToLayerBtn = nullptr;
+
     void setupUi();
     void setupConnections();
     void buildEmptyPage();
@@ -137,6 +220,11 @@ private:
     void buildCirclePage();
     void buildArcPage();
     void buildTextPage();
+    void buildPolylinePage();
+    void buildDimensionPage();
+    void buildAngularDimensionPage();
+    void buildRadiusDimensionPage();
+    void buildTransformSection();
     void refreshEntityList();
     void onEntityItemChanged(QListWidgetItem *item);
     void applyProperties(int index, std::unique_ptr<Entity> newEntity);

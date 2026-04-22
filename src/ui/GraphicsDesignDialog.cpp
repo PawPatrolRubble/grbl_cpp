@@ -74,9 +74,14 @@ void GraphicsDesignDialog::onSelectionChanged()
         QString typeName;
         switch (entity->kind()) {
             case Entity::Kind::Line: typeName = "Line"; break;
+            case Entity::Kind::Polygon: typeName = "Polyline"; break;
             case Entity::Kind::Rectangle: typeName = "Rectangle"; break;
             case Entity::Kind::Circle: typeName = "Circle"; break;
             case Entity::Kind::Arc: typeName = "Arc"; break;
+            case Entity::Kind::Text: typeName = "Text"; break;
+            case Entity::Kind::LinearDimension: typeName = "Dimension"; break;
+            case Entity::Kind::AngularDimension: typeName = "Angular Dimension"; break;
+            case Entity::Kind::RadiusDimension:  typeName = "Radius Dimension"; break;
             default: typeName = "Entity"; break;
         }
         ui->shapeInfoLabel->setText(QString("Selected: %1").arg(typeName));

@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QMenu>
 
 // G-code type detection for coloring — fast string-based, no regex
 static GcodeType detectGcodeType(const QString &line)
@@ -73,18 +74,32 @@ QVariant GcodeListModel::data(const QModelIndex &index, int role) const
 
     const int row = index.row();
 
-    if (role == Qt::DisplayRole)
-        return QString("%1: %2").arg(row + 1, 5).arg(m_lines.at(row));
+    if (role == Qt::DisplayRole) {
+        QString prefix;
+        if (row == m_rangeStart)
+            prefix = QStringLiteral("\u25B6 ");  // ▶
+        else if (row == m_rangeEnd)
+            prefix = QStringLiteral("\u25A0 ");  // ■
+        return QString("%1%2: %3").arg(prefix).arg(row + 1, 5).arg(m_lines.at(row));
+    }
 
     if (role == Qt::ForegroundRole) {
         if (row == m_executingLine)
             return QColor("#ffcc00");
+        if (row == m_rangeStart)
+            return QColor("#22c55e");  // green
+        if (row == m_rangeEnd)
+            return QColor("#ef4444");  // red
         return colorForType(typeAt(row));
     }
 
     if (role == Qt::BackgroundRole) {
         if (row == m_executingLine)
             return QColor("#3d3d00");
+        if (row == m_rangeStart)
+            return QColor("#052e16");  // dark green
+        if (row == m_rangeEnd)
+            return QColor("#450a0a");  // dark red
     }
 
     if (role == Qt::FontRole) {
@@ -137,13 +152,61 @@ void GcodeListModel::setExecutingLine(int line)
     }
 }
 
+void GcodeListModel::setRangeStart(int line)
+{
+    int old = m_rangeStart;
+    m_rangeStart = line;
+    auto notify = [&](int row) {
+        if (row >= 0 && row < m_lines.size()) {
+            QModelIndex idx = index(row, 0);
+            emit dataChanged(idx, idx, {Qt::DisplayRole, Qt::ForegroundRole, Qt::BackgroundRole});
+        }
+    };
+    notify(old);
+    notify(line);
+}
+
+void GcodeListModel::setRangeEnd(int line)
+{
+    int old = m_rangeEnd;
+    m_rangeEnd = line;
+    auto notify = [&](int row) {
+        if (row >= 0 && row < m_lines.size()) {
+            QModelIndex idx = index(row, 0);
+            emit dataChanged(idx, idx, {Qt::DisplayRole, Qt::ForegroundRole, Qt::BackgroundRole});
+        }
+    };
+    notify(old);
+    notify(line);
+}
+
+void GcodeListModel::clearRange()
+{
+    int oldStart = m_rangeStart;
+    int oldEnd = m_rangeEnd;
+    m_rangeStart = -1;
+    m_rangeEnd = -1;
+    auto notify = [&](int row) {
+        if (row >= 0 && row < m_lines.size()) {
+            QModelIndex idx = index(row, 0);
+            emit dataChanged(idx, idx, {Qt::DisplayRole, Qt::ForegroundRole, Qt::BackgroundRole});
+        }
+    };
+    notify(oldStart);
+    notify(oldEnd);
+}
+
 GcodeListWidget::GcodeListWidget(QWidget *parent)
     : QWidget(parent)
     , m_model(new GcodeListModel(this))
     , m_listView(new QListView(this))
     , m_countLabel(new QLabel("0 lines", this))
+    , m_rangeLabel(new QLabel(this))
     , m_exportBtn(new QPushButton("Export"))
     , m_clearBtn(new QPushButton("Clear"))
+    , m_setStartBtn(new QPushButton("Set Start"))
+    , m_setEndBtn(new QPushButton("Set End"))
+    , m_clearRangeBtn(new QPushButton("Clear Range"))
     , m_returnToOriginCheck(new QCheckBox("Return to origin after streaming"))
 {
     // Setup count label
@@ -159,6 +222,17 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     // Setup clear button
     m_clearBtn->setObjectName("clearGcodeBtn");
     m_clearBtn->setToolTip("Clear all loaded G-code lines and toolpath");
+
+    // Range buttons
+    m_setStartBtn->setToolTip("Set selected line as stream start");
+    m_setEndBtn->setToolTip("Set selected line as stream end");
+    m_clearRangeBtn->setToolTip("Clear start/end range");
+    m_clearRangeBtn->setVisible(false);
+
+    // Range label
+    m_rangeLabel->setAlignment(Qt::AlignCenter);
+    m_rangeLabel->setStyleSheet("color: #888; font-size: 11px;");
+    m_rangeLabel->setVisible(false);
 
     // Return to origin checkbox
     m_returnToOriginCheck->setObjectName("returnToOriginCheck");
@@ -192,11 +266,20 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     headerLayout->addWidget(m_clearBtn);
     headerLayout->addWidget(m_exportBtn);
 
+    // Range buttons row
+    auto *rangeLayout = new QHBoxLayout();
+    rangeLayout->addWidget(m_setStartBtn);
+    rangeLayout->addWidget(m_setEndBtn);
+    rangeLayout->addWidget(m_clearRangeBtn);
+    rangeLayout->addStretch();
+
     // Layout
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(2);
     layout->addLayout(headerLayout);
+    layout->addLayout(rangeLayout);
+    layout->addWidget(m_rangeLabel);
     layout->addWidget(m_listView, 1);
     layout->addWidget(m_returnToOriginCheck);
 
@@ -207,6 +290,33 @@ GcodeListWidget::GcodeListWidget(QWidget *parent)
     connect(m_listView, &QListView::clicked, this, &GcodeListWidget::onItemClicked);
     connect(m_exportBtn, &QPushButton::clicked, this, &GcodeListWidget::onExportClicked);
     connect(m_clearBtn, &QPushButton::clicked, this, &GcodeListWidget::clearRequested);
+
+    // Range buttons
+    connect(m_setStartBtn, &QPushButton::clicked, this, [this]() {
+        int sel = selectedLine();
+        if (sel >= 0) {
+            m_model->setRangeStart(sel);
+            updateRangeLabel();
+            emit rangeChanged(m_model->rangeStart(), m_model->rangeEnd());
+        }
+    });
+    connect(m_setEndBtn, &QPushButton::clicked, this, [this]() {
+        int sel = selectedLine();
+        if (sel >= 0) {
+            m_model->setRangeEnd(sel);
+            updateRangeLabel();
+            emit rangeChanged(m_model->rangeStart(), m_model->rangeEnd());
+        }
+    });
+    connect(m_clearRangeBtn, &QPushButton::clicked, this, [this]() {
+        m_model->clearRange();
+        updateRangeLabel();
+        emit rangeChanged(-1, -1);
+    });
+
+    // Right-click context menu for setting start/end range
+    m_listView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_listView, &QListView::customContextMenuRequested, this, &GcodeListWidget::showContextMenu);
 }
 
 void GcodeListWidget::setLines(const QStringList &lines)
@@ -251,14 +361,19 @@ void GcodeListWidget::setExecutingLine(int lineNumber)
 {
     m_model->setExecutingLine(lineNumber);
 
-    // Throttle auto-scroll: only scroll every 20 lines or on the last line
-    // to avoid expensive layout recalculations that freeze the UI.
     if (lineNumber >= 0 && lineNumber < m_model->lineCount()) {
-        if (lineNumber % 20 == 0 || lineNumber == m_model->lineCount() - 1) {
-            QModelIndex idx = m_model->index(lineNumber, 0);
-            m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
-        }
+        m_countLabel->setText(QString("Line %1 / %2").arg(lineNumber + 1).arg(m_model->lineCount()));
+        QModelIndex idx = m_model->index(lineNumber, 0);
+        m_listView->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+    } else {
+        m_countLabel->setText(QString("%1 lines").arg(m_model->lineCount()));
     }
+}
+
+int GcodeListWidget::selectedLine() const
+{
+    QModelIndex idx = m_listView->currentIndex();
+    return idx.isValid() ? idx.row() : -1;
 }
 
 void GcodeListWidget::onItemClicked(const QModelIndex &index)
@@ -289,4 +404,59 @@ void GcodeListWidget::onExportClicked()
 bool GcodeListWidget::returnToOriginEnabled() const
 {
     return m_returnToOriginCheck->isChecked();
+}
+
+int GcodeListWidget::rangeStart() const
+{
+    return m_model->rangeStart();
+}
+
+int GcodeListWidget::rangeEnd() const
+{
+    return m_model->rangeEnd();
+}
+
+void GcodeListWidget::showContextMenu(const QPoint &pos)
+{
+    QModelIndex idx = m_listView->indexAt(pos);
+    if (!idx.isValid()) return;
+
+    int row = idx.row();
+    QMenu menu(this);
+
+    auto *setStart = menu.addAction(QString("Set Start (line %1)").arg(row + 1));
+    auto *setEnd = menu.addAction(QString("Set End (line %1)").arg(row + 1));
+    menu.addSeparator();
+    auto *clearRange = menu.addAction("Clear Range");
+
+    QAction *chosen = menu.exec(m_listView->viewport()->mapToGlobal(pos));
+    if (chosen == setStart) {
+        m_model->setRangeStart(row);
+        updateRangeLabel();
+        emit rangeChanged(m_model->rangeStart(), m_model->rangeEnd());
+    } else if (chosen == setEnd) {
+        m_model->setRangeEnd(row);
+        updateRangeLabel();
+        emit rangeChanged(m_model->rangeStart(), m_model->rangeEnd());
+    } else if (chosen == clearRange) {
+        m_model->clearRange();
+        updateRangeLabel();
+        emit rangeChanged(-1, -1);
+    }
+}
+
+void GcodeListWidget::updateRangeLabel()
+{
+    int start = m_model->rangeStart();
+    int end = m_model->rangeEnd();
+    bool hasRange = (start >= 0 || end >= 0);
+
+    m_rangeLabel->setVisible(hasRange);
+    m_clearRangeBtn->setVisible(hasRange);
+
+    if (hasRange) {
+        QString startStr = start >= 0 ? QString::number(start + 1) : "1";
+        QString endStr = end >= 0 ? QString::number(end + 1) : QString::number(m_model->lineCount());
+        m_rangeLabel->setText(QString("Range: line %1 → %2").arg(startStr, endStr));
+    }
 }

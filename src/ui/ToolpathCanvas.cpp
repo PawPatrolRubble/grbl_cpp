@@ -76,6 +76,14 @@ void ToolpathCanvas::setExecutingLine(int lineNumber)
     scheduleUpdate();
 }
 
+void ToolpathCanvas::setStreamRange(int startLine, int endLine)
+{
+    m_rangeStart = startLine;
+    m_rangeEnd = endLine;
+    m_pathsDirty = true;
+    update();
+}
+
 void ToolpathCanvas::setCutterPosition(const QVector3D &pos)
 {
     m_cutterPos = pos;
@@ -337,27 +345,45 @@ void ToolpathCanvas::rebuildPaths()
     m_rapidLines.clear();
     m_linearLines.clear();
     m_arcLines.clear();
+    m_dimmedLines.clear();
 
     // Pre-allocate reasonable sizes
     m_rapidLines.reserve(m_moves.size() / 3);
     m_linearLines.reserve(m_moves.size() / 3);
 
+    bool hasRange = (m_rangeStart >= 0 || m_rangeEnd >= 0);
+    int rStart = m_rangeStart >= 0 ? m_rangeStart : 0;
+    int rEnd = m_rangeEnd >= 0 ? m_rangeEnd : INT_MAX;
+
     for (int i = 0; i < m_moves.size(); ++i) {
         const auto &mv = m_moves[i];
+        bool inRange = !hasRange || (mv.lineNumber >= rStart && mv.lineNumber <= rEnd);
 
         if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
             auto pts = approximateArc(mv);
             for (int j = 0; j + 1 < pts.size(); ++j) {
-                m_arcLines << QLineF(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
+                QLineF seg(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
+                if (inRange)
+                    m_arcLines << seg;
+                else
+                    m_dimmedLines << seg;
             }
         } else if (mv.type == GcodeMove::Type::Rapid) {
             QPointF a = machineToScreen(QPointF(mv.start.x(), mv.start.y()));
             QPointF b = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
-            m_rapidLines << QLineF(a, b);
+            QLineF seg(a, b);
+            if (inRange)
+                m_rapidLines << seg;
+            else
+                m_dimmedLines << seg;
         } else {
             QPointF a = machineToScreen(QPointF(mv.start.x(), mv.start.y()));
             QPointF b = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
-            m_linearLines << QLineF(a, b);
+            QLineF seg(a, b);
+            if (inRange)
+                m_linearLines << seg;
+            else
+                m_dimmedLines << seg;
         }
     }
 
@@ -383,6 +409,12 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
 
     painter.setPen(QPen(QColor("#22aa66"), 1.8));
     painter.drawLines(m_arcLines);
+
+    // Out-of-range segments drawn dimmed
+    if (!m_dimmedLines.isEmpty()) {
+        painter.setPen(QPen(QColor("#444444"), 1.0));
+        painter.drawLines(m_dimmedLines);
+    }
 
     // Overlay highlights — O(1) via hash lookup instead of O(N) scan
     auto drawMoveHighlight = [&](int moveIdx, const QColor &color) {
@@ -659,7 +691,16 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
             return;
         }
 
-        // 2. Check inside bbox → translate
+        // 2. Segment click (check before bbox so clicks near toolpath select the line)
+        int line = findClickedSegment(pos);
+        if (line >= 0) {
+            m_highlightedLine = line;
+            emit segmentClicked(line);
+            update();
+            return;
+        }
+
+        // 3. Check inside bbox → translate
         if (isInsideBBox(pos)) {
             m_dragMode = DragMode::Translate;
             m_preDragMoves = m_moves;
@@ -667,15 +708,6 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
             m_dragStartMachine = screenToMachine(pos);
             m_dragStartBBox = computeBoundingBox();
             setCursor(Qt::SizeAllCursor);
-            return;
-        }
-
-        // 3. Segment click
-        int line = findClickedSegment(pos);
-        if (line >= 0) {
-            m_highlightedLine = line;
-            emit segmentClicked(line);
-            update();
             return;
         }
     }

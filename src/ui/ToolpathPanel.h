@@ -20,16 +20,21 @@ public:
     void setGcodeLines(const QStringList &lines);
     void setMoves(const QList<GcodeMove> &moves);
     void setExecutingLine(int lineNumber);
+    void setStreamRange(int startLine, int endLine);
     void setCutterPosition(const QVector3D &pos);
     void clearAll();
     bool returnToOriginEnabled() const;
 
     QStringList currentGcodeLines() const;
+    int startFromLine() const;
+    int rangeStart() const;
+    int rangeEnd() const;
 
 signals:
     void lineSelected(int lineNumber);
     void gcodeTransformed(const QStringList &newLines);
     void clearRequested();
+    void rangeChanged(int startLine, int endLine);
 
 private:
     GcodeListWidget *m_listWidget;

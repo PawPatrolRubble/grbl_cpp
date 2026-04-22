@@ -12,7 +12,12 @@
 #include "../../grbl/GraphicsDesign/VectorFontCatalog.h"
 #include "../../grbl/ImageVectorizer.h"
 #include "../../grbl/GraphicsDesign/PolylineEntity.h"
+#include "../../grbl/GraphicsDesign/LinearDimensionEntity.h"
+#include "../../grbl/GraphicsDesign/AngularDimensionEntity.h"
+#include "../../grbl/GraphicsDesign/RadiusDimensionEntity.h"
 #include "../../grbl/DxfParser.h"
+
+#include <cmath>
 
 #include <QComboBox>
 #include <QFontComboBox>
@@ -26,6 +31,9 @@
 #include <QStackedWidget>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QGroupBox>
 #include <QPlainTextEdit>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -38,6 +46,71 @@
 #include <QJsonDocument>
 #include <QSignalBlocker>
 #include <QFontDatabase>
+#include <QStyledItemDelegate>
+#include <QPainter>
+#include <QApplication>
+#include <QCursor>
+#include <QColorDialog>
+
+// ---------------------------------------------------------------------------
+// LayerListDelegate — renders an eye icon in the decoration column to toggle
+// layer visibility, replacing the built-in checkbox rendering.
+// ---------------------------------------------------------------------------
+static const int kEyeColW   = 22;   // pixels reserved on the left for the eye icon
+static const int kLockColW  = 22;   // pixels for the lock icon next to eye
+static const int kColorSwW  = 16;   // pixels for the color swatch
+static const int kIconsW    = kEyeColW + kLockColW;  // total icon cols before text
+static const int kSwatchOff = kIconsW + 2;           // swatch left edge offset
+
+class LayerListDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *p, const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        // Draw default selection background
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        opt.decorationSize = QSize(0, 0);   // hide normal decoration
+
+        // Temporarily remove checkbox flag from display to avoid default checkbox
+        opt.features &= ~QStyleOptionViewItem::HasCheckIndicator;
+
+        QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &opt, p);
+
+        // Draw eye icon text on the left
+        bool visible = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
+        bool locked  = index.data(Qt::UserRole + 1).toBool();
+        QColor layerColor = index.data(Qt::UserRole + 2).value<QColor>();
+        if (!layerColor.isValid()) layerColor = QColor("#1f2937");
+        QRect eyeRect( option.rect.left(),          option.rect.top(), kEyeColW,  option.rect.height());
+        QRect lockRect(option.rect.left()+kEyeColW, option.rect.top(), kLockColW, option.rect.height());
+        p->save();
+        p->setFont(QFont("Segoe UI Emoji", 11));
+        p->setPen(visible ? QColor("#1f2937") : QColor("#9ca3af"));
+        p->drawText(eyeRect, Qt::AlignCenter, visible ? "\U0001F441" : "\u2298");
+        p->setPen(locked ? QColor("#dc2626") : QColor("#9ca3af"));
+        p->drawText(lockRect, Qt::AlignCenter, locked ? "\U0001F512" : "\U0001F513");
+        // Color swatch
+        QRect swRect(option.rect.left() + kSwatchOff,
+                     option.rect.top() + (option.rect.height() - kColorSwW) / 2,
+                     kColorSwW, kColorSwW);
+        p->setPen(QColor("#9ca3af"));
+        p->setBrush(layerColor);
+        p->drawRect(swRect);
+        p->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option,
+                   const QModelIndex &index) const override
+    {
+        QSize s = QStyledItemDelegate::sizeHint(option, index);
+        return QSize(s.width(), std::max(s.height(), 22));
+    }
+};
+
 
 GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
     : QWidget(parent)
@@ -45,6 +118,7 @@ GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
     setObjectName("graphicsDesignPanel");
     setupUi();
     setupConnections();
+    refreshLayerList();
     updatePreview();
 }
 
@@ -83,19 +157,94 @@ void GraphicsDesignPanel::setupUi()
     m_toolCombo->setMinimumWidth(120);
     m_toolCombo->addItem("Select");
     m_toolCombo->addItem("Line");
+    m_toolCombo->addItem("Polyline");
     m_toolCombo->addItem("Rectangle");
     m_toolCombo->addItem("Circle");
     m_toolCombo->addItem("Arc");
     m_toolCombo->addItem("Text");
+    m_toolCombo->addItem("Dimension");
+    m_toolCombo->addItem("Angular Dimension");
+    m_toolCombo->addItem("Radius Dimension");
+    m_toolCombo->addItem("Trim");
+    m_toolCombo->addItem("Extend");
+    m_toolCombo->addItem("Chamfer");
+    m_toolCombo->addItem("Fillet");
+    m_toolCombo->addItem("Offset");
     toolBar->addWidget(m_toolCombo);
 
     m_snapBtn = new QToolButton();
     m_snapBtn->setText("Snap");
     m_snapBtn->setCheckable(true);
-    m_snapBtn->setChecked(false);
+    m_snapBtn->setChecked(true);
     m_snapBtn->setToolTip("Toggle grid/entity snap (S)");
     m_snapBtn->setMinimumWidth(50);
     toolBar->addWidget(m_snapBtn);
+
+    // Grid size spinbox
+    toolBar->addWidget(new QLabel("Grid:"));
+    m_gridSizeSpin = new QDoubleSpinBox();
+    m_gridSizeSpin->setRange(0.1, 100.0);
+    m_gridSizeSpin->setValue(10.0);
+    m_gridSizeSpin->setSingleStep(1.0);
+    m_gridSizeSpin->setDecimals(1);
+    m_gridSizeSpin->setSuffix(" mm");
+    m_gridSizeSpin->setToolTip("Grid size in mm");
+    m_gridSizeSpin->setMaximumWidth(90);
+    toolBar->addWidget(m_gridSizeSpin);
+
+    // Fillet radius (shown only when Fillet tool active)
+    m_filletRadiusLabel = new QLabel("Radius:");
+    toolBar->addWidget(m_filletRadiusLabel);
+    m_filletRadiusSpin = new QDoubleSpinBox();
+    m_filletRadiusSpin->setRange(0.1, 500.0);
+    m_filletRadiusSpin->setValue(5.0);
+    m_filletRadiusSpin->setSingleStep(1.0);
+    m_filletRadiusSpin->setDecimals(2);
+    m_filletRadiusSpin->setSuffix(" mm");
+    m_filletRadiusSpin->setToolTip("Fillet radius in mm");
+    m_filletRadiusSpin->setMaximumWidth(100);
+    toolBar->addWidget(m_filletRadiusSpin);
+    m_filletRadiusLabel->setVisible(false);
+    m_filletRadiusSpin->setVisible(false);
+
+    // Chamfer distance (shown only when Chamfer tool active)
+    m_chamferDistLabel = new QLabel("Dist:");
+    toolBar->addWidget(m_chamferDistLabel);
+    m_chamferDistSpin = new QDoubleSpinBox();
+    m_chamferDistSpin->setRange(0.1, 500.0);
+    m_chamferDistSpin->setValue(5.0);
+    m_chamferDistSpin->setSingleStep(1.0);
+    m_chamferDistSpin->setDecimals(2);
+    m_chamferDistSpin->setSuffix(" mm");
+    m_chamferDistSpin->setToolTip("Chamfer distance in mm");
+    m_chamferDistSpin->setMaximumWidth(100);
+    toolBar->addWidget(m_chamferDistSpin);
+    m_chamferDistLabel->setVisible(false);
+    m_chamferDistSpin->setVisible(false);
+
+    // Offset distance (shown only when Offset tool active)
+    m_offsetDistLabel = new QLabel("Dist:");
+    toolBar->addWidget(m_offsetDistLabel);
+    m_offsetDistSpin = new QDoubleSpinBox();
+    m_offsetDistSpin->setRange(0.001, 500.0);
+    m_offsetDistSpin->setValue(5.0);
+    m_offsetDistSpin->setSingleStep(1.0);
+    m_offsetDistSpin->setDecimals(3);
+    m_offsetDistSpin->setSuffix(" mm");
+    m_offsetDistSpin->setToolTip("Offset distance in mm");
+    m_offsetDistSpin->setMaximumWidth(100);
+    toolBar->addWidget(m_offsetDistSpin);
+    m_offsetDistLabel->setVisible(false);
+    m_offsetDistSpin->setVisible(false);
+
+    auto *gcodeOverlayBtn = new QToolButton();
+    gcodeOverlayBtn->setText("Path");
+    gcodeOverlayBtn->setCheckable(true);
+    gcodeOverlayBtn->setChecked(false);
+    gcodeOverlayBtn->setToolTip("Show G-code toolpath overlay");
+    gcodeOverlayBtn->setMinimumWidth(44);
+    connect(gcodeOverlayBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setGcodeOverlayVisible);
+    toolBar->addWidget(gcodeOverlayBtn);
 
     auto *fitBtn = new QToolButton();
     fitBtn->setText("Fit");
@@ -103,6 +252,25 @@ void GraphicsDesignPanel::setupUi()
     fitBtn->setMinimumWidth(40);
     connect(fitBtn, &QToolButton::clicked, m_canvas, &DesignCanvas::autoFit);
     toolBar->addWidget(fitBtn);
+
+    auto *fitSelBtn = new QToolButton();
+    fitSelBtn->setText("Fit Sel");
+    fitSelBtn->setToolTip("Fit view to selected entity");
+    fitSelBtn->setMinimumWidth(55);
+    connect(fitSelBtn, &QToolButton::clicked, m_canvas, &DesignCanvas::fitToSelection);
+    toolBar->addWidget(fitSelBtn);
+
+    auto *sepLabel = new QLabel("|");
+    sepLabel->setStyleSheet("color: #555; margin: 0 2px;");
+    toolBar->addWidget(sepLabel);
+
+    auto *exportToolBtn = new QToolButton();
+    exportToolBtn->setText("Export...");
+    exportToolBtn->setToolTip("Export G-code to file (Ctrl+E)");
+    exportToolBtn->setMinimumWidth(60);
+    exportToolBtn->setShortcut(QKeySequence("Ctrl+E"));
+    connect(exportToolBtn, &QToolButton::clicked, this, &GraphicsDesignPanel::onExportGcodeClicked);
+    toolBar->addWidget(exportToolBtn);
 
     toolBar->addStretch();
     rightLayout->addLayout(toolBar);
@@ -137,13 +305,20 @@ void GraphicsDesignPanel::setupUi()
     buildCirclePage();
     buildArcPage();
     buildTextPage();
-
-    // Entity list for selective G-code generation
+    buildPolylinePage();
+    buildDimensionPage();
+    buildAngularDimensionPage();
+    buildRadiusDimensionPage();
+    buildTransformSection();
+    rightLayout->addWidget(m_transformGroup);
     rightLayout->addWidget(new QLabel("Entities:"));
     m_entityList = new QListWidget();
     m_entityList->setMaximumHeight(120);
     m_entityList->setSelectionMode(QAbstractItemView::SingleSelection);
     rightLayout->addWidget(m_entityList);
+
+    buildLayerSection();
+    rightLayout->addWidget(m_layerGroup);
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
@@ -556,6 +731,417 @@ void GraphicsDesignPanel::buildTextPage()
     m_propertyStack->addWidget(page);
 }
 
+void GraphicsDesignPanel::buildPolylinePage()
+{
+    auto *page = new QWidget();
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+
+    m_polylinePointCountLabel = new QLabel("Points: 0");
+    layout->addWidget(m_polylinePointCountLabel);
+
+    m_polylineTable = new QTableWidget(0, 2);
+    m_polylineTable->setHorizontalHeaderLabels({"X", "Y"});
+    m_polylineTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_polylineTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked | QAbstractItemView::AnyKeyPressed);
+    layout->addWidget(m_polylineTable, 1);
+
+    auto *btnRow = new QHBoxLayout();
+    m_polylineInsertBtn = new QPushButton("Insert After");
+    m_polylineDeleteBtn = new QPushButton("Delete Point");
+    m_polylineDeleteBtn->setEnabled(false);
+    btnRow->addWidget(m_polylineInsertBtn);
+    btnRow->addWidget(m_polylineDeleteBtn);
+    layout->addLayout(btnRow);
+
+    m_propertyStack->addWidget(page);
+}
+
+void GraphicsDesignPanel::buildDimensionPage()
+{
+    auto *page = new QWidget();
+    auto *layout = new QGridLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+
+    auto makeSpinBox = [](double lo, double hi) {
+        auto *sb = new QDoubleSpinBox();
+        sb->setRange(lo, hi);
+        sb->setDecimals(3);
+        return sb;
+    };
+
+    layout->addWidget(new QLabel("P1 X:"), 0, 0);
+    m_dimP1X = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_dimP1X, 0, 1);
+
+    layout->addWidget(new QLabel("P1 Y:"), 1, 0);
+    m_dimP1Y = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_dimP1Y, 1, 1);
+
+    layout->addWidget(new QLabel("P2 X:"), 2, 0);
+    m_dimP2X = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_dimP2X, 2, 1);
+
+    layout->addWidget(new QLabel("P2 Y:"), 3, 0);
+    m_dimP2Y = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_dimP2Y, 3, 1);
+
+    layout->addWidget(new QLabel("Offset:"), 4, 0);
+    m_dimOffset = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_dimOffset, 4, 1);
+
+    auto *applyBtn = new QPushButton("Apply");
+    layout->addWidget(applyBtn, 5, 0, 1, 2);
+
+    connect(applyBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyDimensionProperties);
+
+    layout->setRowStretch(6, 1);
+    m_propertyStack->addWidget(page);
+}
+
+void GraphicsDesignPanel::applyDimensionProperties()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::LinearDimension) return;
+
+    Document *doc = m_canvas->document();
+    int idx = doc->indexOf(entity->id());
+    if (idx < 0) return;
+
+    auto newDim = std::make_unique<LinearDimensionEntity>(
+        QPointF(m_dimP1X->value(), m_dimP1Y->value()),
+        QPointF(m_dimP2X->value(), m_dimP2Y->value()),
+        m_dimOffset->value()
+    );
+    applyProperties(idx, std::move(newDim));
+}
+
+void GraphicsDesignPanel::buildAngularDimensionPage()
+{
+    auto *page = new QWidget();
+    auto *layout = new QGridLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+
+    auto makeSpinBox = [](double lo, double hi) {
+        auto *sb = new QDoubleSpinBox();
+        sb->setRange(lo, hi);
+        sb->setDecimals(3);
+        return sb;
+    };
+
+    layout->addWidget(new QLabel("Vertex X:"), 0, 0);
+    m_adimVertexX = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimVertexX, 0, 1);
+
+    layout->addWidget(new QLabel("Vertex Y:"), 1, 0);
+    m_adimVertexY = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimVertexY, 1, 1);
+
+    layout->addWidget(new QLabel("Ray 1 X:"), 2, 0);
+    m_adimP1X = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimP1X, 2, 1);
+
+    layout->addWidget(new QLabel("Ray 1 Y:"), 3, 0);
+    m_adimP1Y = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimP1Y, 3, 1);
+
+    layout->addWidget(new QLabel("Ray 2 X:"), 4, 0);
+    m_adimP2X = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimP2X, 4, 1);
+
+    layout->addWidget(new QLabel("Ray 2 Y:"), 5, 0);
+    m_adimP2Y = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_adimP2Y, 5, 1);
+
+    layout->addWidget(new QLabel("Arc Radius:"), 6, 0);
+    m_adimRadius = makeSpinBox(1.0, 100000);
+    layout->addWidget(m_adimRadius, 6, 1);
+
+    auto *applyBtn = new QPushButton("Apply");
+    layout->addWidget(applyBtn, 7, 0, 1, 2);
+
+    connect(applyBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAngularDimensionProperties);
+
+    layout->setRowStretch(8, 1);
+    m_propertyStack->addWidget(page);
+}
+
+void GraphicsDesignPanel::applyAngularDimensionProperties()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::AngularDimension) return;
+
+    Document *doc = m_canvas->document();
+    int idx = doc->indexOf(entity->id());
+    if (idx < 0) return;
+
+    auto newE = std::make_unique<AngularDimensionEntity>(
+        QPointF(m_adimVertexX->value(), m_adimVertexY->value()),
+        QPointF(m_adimP1X->value(),     m_adimP1Y->value()),
+        QPointF(m_adimP2X->value(),     m_adimP2Y->value()),
+        m_adimRadius->value()
+    );
+    applyProperties(idx, std::move(newE));
+}
+
+void GraphicsDesignPanel::buildRadiusDimensionPage()
+{
+    auto *page = new QWidget();
+    auto *layout = new QGridLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+
+    auto makeSpinBox = [](double lo, double hi) {
+        auto *sb = new QDoubleSpinBox();
+        sb->setRange(lo, hi);
+        sb->setDecimals(3);
+        return sb;
+    };
+
+    layout->addWidget(new QLabel("Center X:"), 0, 0);
+    m_rdimCX = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_rdimCX, 0, 1);
+
+    layout->addWidget(new QLabel("Center Y:"), 1, 0);
+    m_rdimCY = makeSpinBox(-100000, 100000);
+    layout->addWidget(m_rdimCY, 1, 1);
+
+    layout->addWidget(new QLabel("Radius:"), 2, 0);
+    m_rdimRadius = makeSpinBox(0.001, 100000);
+    layout->addWidget(m_rdimRadius, 2, 1);
+
+    layout->addWidget(new QLabel("Angle (°):"), 3, 0);
+    m_rdimAngle = makeSpinBox(-360, 360);
+    layout->addWidget(m_rdimAngle, 3, 1);
+
+    m_rdimDiameter = new QCheckBox("Diameter mode");
+    layout->addWidget(m_rdimDiameter, 4, 0, 1, 2);
+
+    auto *applyBtn = new QPushButton("Apply");
+    layout->addWidget(applyBtn, 5, 0, 1, 2);
+
+    connect(applyBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyRadiusDimensionProperties);
+
+    layout->setRowStretch(6, 1);
+    m_propertyStack->addWidget(page);
+}
+
+void GraphicsDesignPanel::applyRadiusDimensionProperties()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::RadiusDimension) return;
+
+    Document *doc = m_canvas->document();
+    int idx = doc->indexOf(entity->id());
+    if (idx < 0) return;
+
+    const auto *rdim = static_cast<const RadiusDimensionEntity*>(entity);
+    auto newE = std::make_unique<RadiusDimensionEntity>(
+        QPointF(m_rdimCX->value(), m_rdimCY->value()),
+        m_rdimRadius->value(),
+        m_rdimAngle->value(),
+        m_rdimDiameter->isChecked()
+    );
+    applyProperties(idx, std::move(newE));
+}
+
+void GraphicsDesignPanel::buildTransformSection()
+{
+    m_transformGroup = new QGroupBox("Transform");
+    auto *layout = new QGridLayout(m_transformGroup);
+    layout->setSpacing(4);
+    layout->setContentsMargins(6, 6, 6, 6);
+
+    layout->addWidget(new QLabel("Move By:"), 0, 0);
+    m_moveDx = new QDoubleSpinBox();
+    m_moveDx->setRange(-100000, 100000);
+    m_moveDx->setDecimals(3);
+    m_moveDx->setPrefix("dx ");
+    layout->addWidget(m_moveDx, 0, 1);
+
+    m_moveDy = new QDoubleSpinBox();
+    m_moveDy->setRange(-100000, 100000);
+    m_moveDy->setDecimals(3);
+    m_moveDy->setPrefix("dy ");
+    layout->addWidget(m_moveDy, 0, 2);
+
+    auto *moveBtn = new QPushButton("Apply");
+    connect(moveBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyMoveBy);
+    layout->addWidget(moveBtn, 0, 3);
+
+    layout->addWidget(new QLabel("Rotate:"), 1, 0);
+    m_rotateAngle = new QDoubleSpinBox();
+    m_rotateAngle->setRange(-36000, 36000);
+    m_rotateAngle->setDecimals(2);
+    m_rotateAngle->setSuffix(" °");
+    layout->addWidget(m_rotateAngle, 1, 1, 1, 2);
+
+    auto *rotateBtn = new QPushButton("Apply");
+    connect(rotateBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyRotateBy);
+    layout->addWidget(rotateBtn, 1, 3);
+
+    layout->addWidget(new QLabel("Mirror:"), 2, 0);
+    auto *flipHBtn = new QPushButton("Flip H");
+    flipHBtn->setToolTip("Mirror horizontally (about vertical axis)");
+    connect(flipHBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyFlipH);
+    layout->addWidget(flipHBtn, 2, 1);
+
+    auto *flipVBtn = new QPushButton("Flip V");
+    flipVBtn->setToolTip("Mirror vertically (about horizontal axis)");
+    connect(flipVBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyFlipV);
+    layout->addWidget(flipVBtn, 2, 2);
+
+    // Row 3: Rectangular array
+    layout->addWidget(new QLabel("Array:"), 3, 0);
+    m_arrayRows = new QSpinBox();
+    m_arrayRows->setRange(1, 100);
+    m_arrayRows->setValue(2);
+    m_arrayRows->setToolTip("Number of rows");
+    m_arrayRows->setPrefix("R:");
+    layout->addWidget(m_arrayRows, 3, 1);
+    m_arrayCols = new QSpinBox();
+    m_arrayCols->setRange(1, 100);
+    m_arrayCols->setValue(2);
+    m_arrayCols->setToolTip("Number of columns");
+    m_arrayCols->setPrefix("C:");
+    layout->addWidget(m_arrayCols, 3, 2);
+    auto *arrayBtn = new QPushButton("Apply");
+    connect(arrayBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyRectArray);
+    layout->addWidget(arrayBtn, 3, 3);
+
+    // Row 4: Array spacing
+    layout->addWidget(new QLabel("Spacing:"), 4, 0);
+    m_arraySpacingX = new QDoubleSpinBox();
+    m_arraySpacingX->setRange(-10000, 10000);
+    m_arraySpacingX->setValue(20.0);
+    m_arraySpacingX->setSuffix(" X");
+    m_arraySpacingX->setDecimals(2);
+    m_arraySpacingX->setToolTip("Column spacing (X) in mm");
+    layout->addWidget(m_arraySpacingX, 4, 1);
+    m_arraySpacingY = new QDoubleSpinBox();
+    m_arraySpacingY->setRange(-10000, 10000);
+    m_arraySpacingY->setValue(20.0);
+    m_arraySpacingY->setSuffix(" Y");
+    m_arraySpacingY->setDecimals(2);
+    m_arraySpacingY->setToolTip("Row spacing (Y) in mm");
+    layout->addWidget(m_arraySpacingY, 4, 2);
+
+    // Row 5: Scale
+    layout->addWidget(new QLabel("Scale:"), 5, 0);
+    m_scaleFactor = new QDoubleSpinBox();
+    m_scaleFactor->setRange(0.001, 1000.0);
+    m_scaleFactor->setValue(1.0);
+    m_scaleFactor->setDecimals(4);
+    m_scaleFactor->setSingleStep(0.1);
+    m_scaleFactor->setToolTip("Scale factor (1.0 = no change)");
+    layout->addWidget(m_scaleFactor, 5, 1, 1, 2);
+    auto *scaleBtn = new QPushButton("Apply");
+    connect(scaleBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyScaleBy);
+    layout->addWidget(scaleBtn, 5, 3);
+
+    // Row 6: Polar array
+    layout->addWidget(new QLabel("Polar:"), 6, 0);
+    m_polarCount = new QSpinBox();
+    m_polarCount->setRange(2, 360);
+    m_polarCount->setValue(6);
+    m_polarCount->setToolTip("Number of copies (including original)");
+    m_polarCount->setPrefix("N:");
+    layout->addWidget(m_polarCount, 6, 1);
+    m_polarSpan = new QDoubleSpinBox();
+    m_polarSpan->setRange(0.1, 360.0);
+    m_polarSpan->setValue(360.0);
+    m_polarSpan->setSuffix("°");
+    m_polarSpan->setDecimals(1);
+    m_polarSpan->setToolTip("Total arc span for the array (360 = full circle)");
+    layout->addWidget(m_polarSpan, 6, 2);
+    auto *polarBtn = new QPushButton("Apply");
+    connect(polarBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyPolarArray);
+    layout->addWidget(polarBtn, 6, 3);
+
+    // Row 7: Polar center
+    layout->addWidget(new QLabel("Center:"), 7, 0);
+    m_polarCenterX = new QDoubleSpinBox();
+    m_polarCenterX->setRange(-100000, 100000);
+    m_polarCenterX->setValue(0.0);
+    m_polarCenterX->setDecimals(2);
+    m_polarCenterX->setPrefix("X:");
+    m_polarCenterX->setToolTip("Polar array center X (0 = selection center)");
+    layout->addWidget(m_polarCenterX, 7, 1);
+    m_polarCenterY = new QDoubleSpinBox();
+    m_polarCenterY->setRange(-100000, 100000);
+    m_polarCenterY->setValue(0.0);
+    m_polarCenterY->setDecimals(2);
+    m_polarCenterY->setPrefix("Y:");
+    m_polarCenterY->setToolTip("Polar array center Y (0 = selection center)");
+    layout->addWidget(m_polarCenterY, 7, 2);
+
+    m_transformGroup->setVisible(false);
+}
+
+void GraphicsDesignPanel::buildLayerSection()
+{
+    m_layerGroup = new QGroupBox("Layers");
+    auto *vlay = new QVBoxLayout(m_layerGroup);
+    vlay->setContentsMargins(6, 6, 6, 6);
+    vlay->setSpacing(4);
+
+    m_layerList = new QListWidget();
+    m_layerList->setMaximumHeight(110);
+    m_layerList->setItemDelegate(new LayerListDelegate(m_layerList));
+    // Handle eye-icon clicks to toggle visibility
+    connect(m_layerList, &QListWidget::pressed, this, [this](const QModelIndex &idx) {
+        QPoint localPos = m_layerList->viewport()->mapFromGlobal(QCursor::pos());
+        int x = localPos.x();
+        QListWidgetItem *item = m_layerList->item(idx.row());
+        if (!item) return;
+        if (x < kEyeColW) {
+            // Toggle visibility
+            item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+        } else if (x < kIconsW) {
+            // Toggle lock
+            bool nowLocked = !item->data(Qt::UserRole + 1).toBool();
+            item->setData(Qt::UserRole + 1, nowLocked);
+            // Trigger onLayerItemChanged to propagate to Document
+            emit m_layerList->itemChanged(item);
+        } else if (x < kSwatchOff + kColorSwW) {
+            // Color swatch: open color dialog
+            QColor current = item->data(Qt::UserRole + 2).value<QColor>();
+            QColor chosen = QColorDialog::getColor(current, this, "Layer Color");
+            if (chosen.isValid()) {
+                item->setData(Qt::UserRole + 2, chosen);
+                // Sync to document
+                int row = idx.row();
+                Document *doc = m_canvas->document();
+                if (row >= 0 && row < doc->layerCount())
+                    doc->setLayerColor(row, chosen);
+                m_canvas->update();
+            }
+        }
+    });
+    vlay->addWidget(m_layerList);
+
+    auto *btnRow = new QHBoxLayout();
+    m_addLayerBtn = new QPushButton("Add");
+    m_deleteLayerBtn = new QPushButton("Delete");
+    m_deleteLayerBtn->setEnabled(false);
+    m_lockLayerBtn = new QPushButton("Lock");
+    m_lockLayerBtn->setEnabled(false);
+    m_moveToLayerBtn = new QPushButton("Move Sel.");
+    m_moveToLayerBtn->setToolTip("Move selected entity to this layer");
+    m_moveToLayerBtn->setEnabled(false);
+    btnRow->addWidget(m_addLayerBtn);
+    btnRow->addWidget(m_deleteLayerBtn);
+    btnRow->addWidget(m_lockLayerBtn);
+    btnRow->addWidget(m_moveToLayerBtn);
+    vlay->addLayout(btnRow);
+}
+
 void GraphicsDesignPanel::setupConnections()
 {
     // Tool selection
@@ -565,8 +1151,19 @@ void GraphicsDesignPanel::setupConnections()
     // Sync combo when canvas changes tool internally (e.g. auto-select after draw)
     connect(m_canvas, &DesignCanvas::toolChanged, this, &GraphicsDesignPanel::onCanvasToolChanged);
 
-    // Snap toggle
+    // Snap toggle (bidirectional: button ↔ canvas)
     connect(m_snapBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setSnapEnabled);
+    connect(m_canvas, &DesignCanvas::snapEnabledChanged, m_snapBtn, &QToolButton::setChecked);
+    connect(m_gridSizeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            m_canvas, &DesignCanvas::setGridSize);
+    connect(m_canvas, &DesignCanvas::gridSizeChanged, m_gridSizeSpin, &QDoubleSpinBox::setValue);
+    connect(m_filletRadiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            m_canvas, &DesignCanvas::setFilletRadius);
+    connect(m_chamferDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            m_canvas, &DesignCanvas::setChamferDistance);
+    connect(m_offsetDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            m_canvas, &DesignCanvas::setOffsetDistance);
+    connect(m_canvas, &DesignCanvas::exportGcodeRequested, this, &GraphicsDesignPanel::onExportGcodeClicked);
 
     // Undo/Redo buttons
     auto *undoBtn = findChild<QPushButton*>("undoBtn");
@@ -679,12 +1276,45 @@ void GraphicsDesignPanel::setupConnections()
             this, &GraphicsDesignPanel::applyTextProperties);
     connect(m_textSsMinSegLen, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphicsDesignPanel::applyTextProperties);
+
+    connect(m_polylineTable, &QTableWidget::cellChanged,
+            this, &GraphicsDesignPanel::applyPolylineProperties);
+
+    connect(m_polylineInsertBtn, &QPushButton::clicked,
+            this, &GraphicsDesignPanel::polylineInsertVertex);
+    connect(m_polylineDeleteBtn, &QPushButton::clicked,
+            this, &GraphicsDesignPanel::polylineDeleteVertex);
+
+    connect(m_polylineTable, &QTableWidget::itemSelectionChanged, this, [this]() {
+        bool hasSelection = !m_polylineTable->selectedItems().isEmpty();
+        bool canDelete = hasSelection && m_polylineTable->rowCount() > 2;
+        m_polylineDeleteBtn->setEnabled(canDelete);
+    });
+
+    // Layer management
+    connect(m_addLayerBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onAddLayerClicked);
+    connect(m_deleteLayerBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onDeleteLayerClicked);
+    connect(m_lockLayerBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onLockLayerClicked);
+    connect(m_moveToLayerBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onMoveEntityToLayerClicked);
+    connect(m_layerList, &QListWidget::itemChanged, this, &GraphicsDesignPanel::onLayerItemChanged);
+    connect(m_layerList, &QListWidget::currentRowChanged, this, &GraphicsDesignPanel::onLayerCurrentRowChanged);
+    connect(m_canvas->document(), &Document::layersChanged, this, &GraphicsDesignPanel::refreshLayerList);
 }
 
 void GraphicsDesignPanel::onToolChanged(int index)
 {
     DesignCanvas::ToolType tool = static_cast<DesignCanvas::ToolType>(index);
     m_canvas->setTool(tool);
+
+    bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
+    bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
+    bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
+    m_filletRadiusLabel->setVisible(isFillet);
+    m_filletRadiusSpin->setVisible(isFillet);
+    m_chamferDistLabel->setVisible(isChamfer);
+    m_chamferDistSpin->setVisible(isChamfer);
+    m_offsetDistLabel->setVisible(isOffset);
+    m_offsetDistSpin->setVisible(isOffset);
 }
 
 void GraphicsDesignPanel::onCanvasToolChanged()
@@ -708,6 +1338,7 @@ void GraphicsDesignPanel::onSelectionChanged()
         m_propertyStack->setCurrentIndex(0);
         m_emptyPageLabel->setText("No selection");
         m_deleteBtn->setEnabled(false);
+        m_transformGroup->setVisible(false);
         m_updatingUi = false;
         return;
     }
@@ -728,6 +1359,23 @@ void GraphicsDesignPanel::onSelectionChanged()
             m_lineAngle->setValue(line->angleDegrees());
         }
         m_propertyStack->setCurrentIndex(1);
+        break;
+    }
+    case Entity::Kind::Polygon: {
+        const auto *polyline = static_cast<const PolylineEntity*>(entity);
+        {
+            QSignalBlocker b(m_polylineTable);
+            const auto &pts = polyline->points();
+            m_polylineTable->setRowCount(pts.size());
+            for (int i = 0; i < pts.size(); ++i) {
+                auto *xItem = new QTableWidgetItem(QString::number(pts[i].x(), 'f', 3));
+                auto *yItem = new QTableWidgetItem(QString::number(pts[i].y(), 'f', 3));
+                m_polylineTable->setItem(i, 0, xItem);
+                m_polylineTable->setItem(i, 1, yItem);
+            }
+            m_polylinePointCountLabel->setText(QString("Points: %1").arg(pts.size()));
+        }
+        m_propertyStack->setCurrentIndex(6);
         break;
     }
     case Entity::Kind::Rectangle: {
@@ -841,11 +1489,65 @@ void GraphicsDesignPanel::onSelectionChanged()
         m_propertyStack->setCurrentIndex(5);
         break;
     }
+    case Entity::Kind::LinearDimension: {
+        const auto *dim = static_cast<const LinearDimensionEntity*>(entity);
+        {
+            QSignalBlocker b1(m_dimP1X); QSignalBlocker b2(m_dimP1Y);
+            QSignalBlocker b3(m_dimP2X); QSignalBlocker b4(m_dimP2Y);
+            QSignalBlocker b5(m_dimOffset);
+            m_dimP1X->setValue(dim->p1().x());
+            m_dimP1Y->setValue(dim->p1().y());
+            m_dimP2X->setValue(dim->p2().x());
+            m_dimP2Y->setValue(dim->p2().y());
+            m_dimOffset->setValue(dim->offsetDistance());
+        }
+        m_propertyStack->setCurrentIndex(7);
+        break;
+    }
+    case Entity::Kind::AngularDimension: {
+        const auto *adim = static_cast<const AngularDimensionEntity*>(entity);
+        {
+            QSignalBlocker b1(m_adimVertexX); QSignalBlocker b2(m_adimVertexY);
+            QSignalBlocker b3(m_adimP1X);     QSignalBlocker b4(m_adimP1Y);
+            QSignalBlocker b5(m_adimP2X);     QSignalBlocker b6(m_adimP2Y);
+            QSignalBlocker b7(m_adimRadius);
+            m_adimVertexX->setValue(adim->vertex().x());
+            m_adimVertexY->setValue(adim->vertex().y());
+            m_adimP1X->setValue(adim->p1().x());
+            m_adimP1Y->setValue(adim->p1().y());
+            m_adimP2X->setValue(adim->p2().x());
+            m_adimP2Y->setValue(adim->p2().y());
+            m_adimRadius->setValue(adim->radius());
+        }
+        m_propertyStack->setCurrentIndex(8);
+        break;
+    }
+    case Entity::Kind::RadiusDimension: {
+        const auto *rdim = static_cast<const RadiusDimensionEntity*>(entity);
+        {
+            QSignalBlocker b1(m_rdimCX);    QSignalBlocker b2(m_rdimCY);
+            QSignalBlocker b3(m_rdimRadius); QSignalBlocker b4(m_rdimAngle);
+            QSignalBlocker b5(m_rdimDiameter);
+            m_rdimCX->setValue(rdim->circleCenter().x());
+            m_rdimCY->setValue(rdim->circleCenter().y());
+            m_rdimRadius->setValue(rdim->circleRadius());
+            m_rdimAngle->setValue(rdim->angleDeg());
+            m_rdimDiameter->setChecked(rdim->isDiameter());
+        }
+        m_propertyStack->setCurrentIndex(9);
+        break;
+    }
     default:
         m_propertyStack->setCurrentIndex(0);
         m_emptyPageLabel->setText("Unknown entity type");
         break;
     }
+
+    // Show transform section and reset its inputs
+    m_transformGroup->setVisible(true);
+    m_moveDx->setValue(0.0);
+    m_moveDy->setValue(0.0);
+    m_rotateAngle->setValue(0.0);
 
     // Sync entity list selection
     if (entity) {
@@ -907,8 +1609,24 @@ void GraphicsDesignPanel::updatePreview()
         previewText += "\n... (more lines)";
     }
     m_gcodePreview->setPlainText(previewText);
-    m_lineCountLabel->setText(QString("%1 entities, %2 G-code lines")
+    int visibleLayers = 0;
+    int lockedLayers  = 0;
+    for (int i = 0; i < doc->layerCount(); ++i) {
+        if (doc->layerAt(i).visible) ++visibleLayers;
+        if (doc->layerAt(i).locked)  ++lockedLayers;
+    }
+    QString layerSummary = QString("%1 layer%2")
+        .arg(doc->layerCount())
+        .arg(doc->layerCount() == 1 ? "" : "s");
+    if (visibleLayers < doc->layerCount())
+        layerSummary += QString(" (%1 hidden)").arg(doc->layerCount() - visibleLayers);
+    if (lockedLayers > 0)
+        layerSummary += QString(" (%1 locked)").arg(lockedLayers);
+
+    m_lineCountLabel->setText(QString("%1 entit%2 · %3 · %4 G-code lines")
                               .arg(doc->entityCount())
+                              .arg(doc->entityCount() == 1 ? "y" : "ies")
+                              .arg(layerSummary)
                               .arg(m_generatedLines.size()));
 }
 
@@ -1343,4 +2061,598 @@ void GraphicsDesignPanel::applyTextProperties()
     }
 
     applyProperties(index, std::move(newText));
+}
+
+void GraphicsDesignPanel::applyPolylineProperties()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::Polygon) return;
+
+    Document *doc = m_canvas->document();
+    int index = doc->indexOf(entity->id());
+    if (index < 0) return;
+
+    QList<QPointF> points;
+    int rows = m_polylineTable->rowCount();
+    for (int i = 0; i < rows; ++i) {
+        QTableWidgetItem *xItem = m_polylineTable->item(i, 0);
+        QTableWidgetItem *yItem = m_polylineTable->item(i, 1);
+        if (!xItem || !yItem) continue;
+        bool xOk = false, yOk = false;
+        double x = xItem->text().toDouble(&xOk);
+        double y = yItem->text().toDouble(&yOk);
+        if (xOk && yOk)
+            points.append(QPointF(x, y));
+    }
+
+    if (points.size() < 2) return;
+
+    auto newPolyline = std::make_unique<PolylineEntity>(points);
+    applyProperties(index, std::move(newPolyline));
+}
+
+void GraphicsDesignPanel::polylineInsertVertex()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::Polygon) return;
+
+    Document *doc = m_canvas->document();
+    int index = doc->indexOf(entity->id());
+    if (index < 0) return;
+
+    const auto *poly = static_cast<const PolylineEntity*>(entity);
+    QList<QPointF> pts = poly->points();
+
+    int row = m_polylineTable->currentRow();
+    if (row < 0) row = pts.size() - 1;  // append after last if nothing selected
+
+    QPointF newPt;
+    if (row + 1 < pts.size())
+        newPt = (pts[row] + pts[row + 1]) / 2.0;  // midpoint between row and next
+    else
+        newPt = pts[row];  // duplicate last point (user can edit it)
+
+    pts.insert(row + 1, newPt);
+
+    auto newPolyline = std::make_unique<PolylineEntity>(pts);
+    applyProperties(index, std::move(newPolyline));
+}
+
+void GraphicsDesignPanel::polylineDeleteVertex()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::Polygon) return;
+
+    Document *doc = m_canvas->document();
+    int index = doc->indexOf(entity->id());
+    if (index < 0) return;
+
+    const auto *poly = static_cast<const PolylineEntity*>(entity);
+    QList<QPointF> pts = poly->points();
+    if (pts.size() <= 2) return;  // must keep at least 2 points
+
+    int row = m_polylineTable->currentRow();
+    if (row < 0 || row >= pts.size()) return;
+
+    pts.removeAt(row);
+
+    auto newPolyline = std::make_unique<PolylineEntity>(pts);
+    applyProperties(index, std::move(newPolyline));
+}
+
+// ---------------------------------------------------------------------------
+// Transform helpers
+// ---------------------------------------------------------------------------
+
+static QPointF rotatePoint(const QPointF &pt, const QPointF &pivot, double angleDeg)
+{
+    const double rad = qDegreesToRadians(angleDeg);
+    const double c = qCos(rad), s = qSin(rad);
+    const double dx = pt.x() - pivot.x(), dy = pt.y() - pivot.y();
+    return { pivot.x() + dx * c - dy * s, pivot.y() + dx * s + dy * c };
+}
+
+static std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, double angleDeg)
+{
+    const QPointF pivot = e->center();
+    switch (e->kind()) {
+    case Entity::Kind::Line: {
+        const auto *line = static_cast<const LineEntity*>(e);
+        return std::make_unique<LineEntity>(
+            rotatePoint(line->startPoint(), pivot, angleDeg),
+            rotatePoint(line->endPoint(), pivot, angleDeg));
+    }
+    case Entity::Kind::Rectangle: {
+        const auto *rect = static_cast<const RectangleEntity*>(e);
+        return std::make_unique<RectangleEntity>(
+            pivot, rect->width(), rect->height(), rect->angleDegrees() + angleDeg);
+    }
+    case Entity::Kind::Circle:
+        return e->clone();  // Circle is symmetric; rotation has no visible effect
+    case Entity::Kind::Arc: {
+        const auto *arc = static_cast<const ArcEntity*>(e);
+        return std::make_unique<ArcEntity>(
+            pivot, arc->radius(),
+            arc->startAngleDegrees() + angleDeg,
+            arc->sweepAngleDegrees());
+    }
+    case Entity::Kind::Polygon: {
+        const auto *poly = static_cast<const PolylineEntity*>(e);
+        QList<QPointF> pts;
+        pts.reserve(poly->points().size());
+        for (const QPointF &pt : poly->points())
+            pts.append(rotatePoint(pt, pivot, angleDeg));
+        return std::make_unique<PolylineEntity>(pts);
+    }
+    default:
+        return e->clone();
+    }
+}
+
+static std::unique_ptr<Entity> makeScaledEntity(const Entity *e, const QPointF &pivot, double factor)
+{
+    auto sp = [&](const QPointF &pt) -> QPointF {
+        return pivot + (pt - pivot) * factor;
+    };
+    switch (e->kind()) {
+    case Entity::Kind::Line: {
+        const auto *line = static_cast<const LineEntity*>(e);
+        return std::make_unique<LineEntity>(sp(line->startPoint()), sp(line->endPoint()));
+    }
+    case Entity::Kind::Circle: {
+        const auto *c = static_cast<const CircleEntity*>(e);
+        return std::make_unique<CircleEntity>(sp(c->center()), c->radius() * factor);
+    }
+    case Entity::Kind::Arc: {
+        const auto *arc = static_cast<const ArcEntity*>(e);
+        return std::make_unique<ArcEntity>(sp(arc->center()), arc->radius() * factor,
+                                           arc->startAngleDegrees(), arc->sweepAngleDegrees());
+    }
+    case Entity::Kind::Rectangle: {
+        const auto *rect = static_cast<const RectangleEntity*>(e);
+        return std::make_unique<RectangleEntity>(sp(rect->center()),
+                                                  rect->width()  * factor,
+                                                  rect->height() * factor,
+                                                  rect->angleDegrees());
+    }
+    case Entity::Kind::Polygon: {
+        const auto *poly = static_cast<const PolylineEntity*>(e);
+        QList<QPointF> pts;
+        pts.reserve(poly->points().size());
+        for (const QPointF &pt : poly->points())
+            pts.append(sp(pt));
+        return std::make_unique<PolylineEntity>(pts);
+    }
+    default:
+        return e->clone();
+    }
+}
+
+void GraphicsDesignPanel::applyMoveBy(){
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+
+    const QPointF delta(m_moveDx->value(), m_moveDy->value());
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        auto copy = e->clone();
+        copy->translate(delta);
+        applyProperties(idx, std::move(copy));
+    }
+
+    // Reset inputs after apply
+    m_moveDx->setValue(0.0);
+    m_moveDy->setValue(0.0);
+}
+
+void GraphicsDesignPanel::applyRotateBy()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+
+    // Compute selection bounding box center as pivot
+    QRectF bb;
+    for (const QUuid &id : doc->selectedIds()) {
+        int i = doc->indexOf(id);
+        if (i >= 0 && doc->entityAt(i)) bb = bb.united(doc->entityAt(i)->boundingRect());
+    }
+    const QPointF pivot = bb.center();
+    const double angle  = m_rotateAngle->value();
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        // Rotate entity around global selection center
+        // For single selection, pivot == entity center so existing makeRotatedEntity still works.
+        // For multi-select, we need to rotate around shared pivot.
+        // Rotate around the shared pivot
+        auto rotated = [&]() -> std::unique_ptr<Entity> {
+            auto rp = [&](const QPointF &pt) { return rotatePoint(pt, pivot, angle); };
+            switch (e->kind()) {
+            case Entity::Kind::Line: {
+                const auto *ln = static_cast<const LineEntity*>(e);
+                return std::make_unique<LineEntity>(rp(ln->startPoint()), rp(ln->endPoint()));
+            }
+            case Entity::Kind::Circle: {
+                const auto *c = static_cast<const CircleEntity*>(e);
+                return std::make_unique<CircleEntity>(rp(c->center()), c->radius());
+            }
+            case Entity::Kind::Arc: {
+                const auto *arc = static_cast<const ArcEntity*>(e);
+                return std::make_unique<ArcEntity>(rp(arc->center()), arc->radius(),
+                    arc->startAngleDegrees() + angle, arc->sweepAngleDegrees());
+            }
+            case Entity::Kind::Rectangle: {
+                const auto *rect = static_cast<const RectangleEntity*>(e);
+                return std::make_unique<RectangleEntity>(rp(rect->center()),
+                    rect->width(), rect->height(), rect->angleDegrees() + angle);
+            }
+            case Entity::Kind::Polygon: {
+                const auto *poly = static_cast<const PolylineEntity*>(e);
+                QList<QPointF> pts;
+                pts.reserve(poly->points().size());
+                for (const QPointF &pt : poly->points()) pts.append(rp(pt));
+                return std::make_unique<PolylineEntity>(pts);
+            }
+            default: return e->clone();
+            }
+        }();
+        applyProperties(idx, std::move(rotated));
+    }
+    m_rotateAngle->setValue(0.0);
+}
+
+// ---------------------------------------------------------------------------
+// Mirror / flip helpers
+// ---------------------------------------------------------------------------
+
+// Normalize angle to [0, 360)
+static double normAngle(double a) {
+    a = std::fmod(a, 360.0);
+    if (a < 0.0) a += 360.0;
+    return a;
+}
+
+static QPointF flipH(const QPointF &pt, const QPointF &pivot) {
+    return QPointF(2.0 * pivot.x() - pt.x(), pt.y());
+}
+static QPointF flipV(const QPointF &pt, const QPointF &pivot) {
+    return QPointF(pt.x(), 2.0 * pivot.y() - pt.y());
+}
+
+enum class FlipAxis { H, V };
+
+static std::unique_ptr<Entity> makeMirroredEntity(const Entity *e, const QPointF &pivot, FlipAxis axis)
+{
+    using F = FlipAxis;
+    auto fp = [&](const QPointF &pt) {
+        return axis == F::H ? flipH(pt, pivot) : flipV(pt, pivot);
+    };
+
+    switch (e->kind()) {
+    case Entity::Kind::Line: {
+        const auto *line = static_cast<const LineEntity*>(e);
+        return std::make_unique<LineEntity>(fp(line->startPoint()), fp(line->endPoint()));
+    }
+    case Entity::Kind::Circle: {
+        const auto *c = static_cast<const CircleEntity*>(e);
+        return std::make_unique<CircleEntity>(fp(c->center()), c->radius());
+    }
+    case Entity::Kind::Arc: {
+        const auto *arc = static_cast<const ArcEntity*>(e);
+        QPointF newC = fp(arc->center());
+        double start = arc->startAngleDegrees();
+        double sweep = arc->sweepAngleDegrees();
+        double newStart, newSweep = sweep;
+        if (axis == F::H) {
+            // Mirror about vertical axis: angle θ → 180° - θ
+            // Arc [start, start+sweep] maps to [180-(start+sweep), 180-start] CCW
+            newStart = normAngle(180.0 - (start + sweep));
+        } else {
+            // Mirror about horizontal axis: angle θ → -θ (= 360-θ)
+            // Arc [start, start+sweep] maps to [360-(start+sweep), 360-start] CCW
+            newStart = normAngle(360.0 - (start + sweep));
+        }
+        return std::make_unique<ArcEntity>(newC, arc->radius(), newStart, newSweep);
+    }
+    case Entity::Kind::Rectangle: {
+        const auto *rect = static_cast<const RectangleEntity*>(e);
+        QPointF newC = fp(rect->center());
+        double newAngle = axis == F::H ? (180.0 - rect->angleDegrees()) : (-rect->angleDegrees());
+        return std::make_unique<RectangleEntity>(newC, rect->width(), rect->height(), newAngle);
+    }
+    case Entity::Kind::Polygon: {
+        const auto *poly = static_cast<const PolylineEntity*>(e);
+        QList<QPointF> pts;
+        pts.reserve(poly->points().size());
+        for (const QPointF &pt : poly->points())
+            pts.append(fp(pt));
+        return std::make_unique<PolylineEntity>(pts);
+    }
+    default:
+        return e->clone();  // Text, dimensions: just flip center position
+    }
+}
+
+/// Compute combined bounding-box center of all selected entities.
+static QPointF selectionCenter(Document *doc)
+{
+    QRectF bb;
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            bb = bb.united(doc->entityAt(idx)->boundingRect());
+    }
+    return bb.center();
+}
+
+void GraphicsDesignPanel::applyFlipH()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+    const QPointF pivot = selectionCenter(doc);
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        applyProperties(idx, makeMirroredEntity(e, pivot, FlipAxis::H));
+    }
+}
+
+void GraphicsDesignPanel::applyFlipV()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+    const QPointF pivot = selectionCenter(doc);
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        applyProperties(idx, makeMirroredEntity(e, pivot, FlipAxis::V));
+    }
+}
+
+void GraphicsDesignPanel::applyRectArray()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+
+    int rows  = m_arrayRows->value();
+    int cols  = m_arrayCols->value();
+    double dx = m_arraySpacingX->value();
+    double dy = m_arraySpacingY->value();
+
+    // Collect originals first to avoid index drift as we add entities
+    std::vector<const Entity*> originals;
+    originals.reserve(doc->selectedIds().size());
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            originals.push_back(doc->entityAt(idx));
+    }
+    if (originals.empty()) return;
+
+    // (row=0, col=0) is the original — skip it; start at (r,c) != (0,0)
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            if (r == 0 && c == 0) continue;  // original position
+            QPointF offset(c * dx, r * dy);
+            for (const Entity *e : originals) {
+                auto copy = e->clone();
+                copy->translate(offset);
+                doc->commandStack()->execute(
+                    std::make_unique<AddEntityCommand>(std::move(copy)));
+            }
+        }
+    }
+}
+
+void GraphicsDesignPanel::applyScaleBy()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+    double factor = m_scaleFactor->value();
+    if (qFuzzyCompare(factor, 1.0)) return;
+
+    const QPointF pivot = selectionCenter(doc);
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        applyProperties(idx, makeScaledEntity(e, pivot, factor));
+    }
+    m_scaleFactor->setValue(1.0);
+}
+
+void GraphicsDesignPanel::applyPolarArray()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+
+    int    n    = m_polarCount->value();
+    double span = m_polarSpan->value();
+    if (n < 2) return;
+
+    // Determine center: if both are 0, use selection center
+    QPointF center(m_polarCenterX->value(), m_polarCenterY->value());
+    if (qFuzzyIsNull(center.x()) && qFuzzyIsNull(center.y()))
+        center = selectionCenter(doc);
+
+    // Collect originals
+    std::vector<const Entity*> originals;
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            originals.push_back(doc->entityAt(idx));
+    }
+    if (originals.empty()) return;
+
+    // Angle step: for full circle (360°) with N copies, step = 360/N
+    // For partial span, step = span / (N-1)
+    const bool fullCircle = qFuzzyCompare(span, 360.0);
+    double step = fullCircle ? (span / n) : (span / (n - 1));
+
+    // Start at step (skip 0 — that's the original)
+    for (int i = 1; i < n; ++i) {
+        double angle = step * i;
+        for (const Entity *e : originals) {
+            // Rotate each entity around shared center
+            auto rotated = [&]() -> std::unique_ptr<Entity> {
+                auto rp = [&](const QPointF &pt) { return rotatePoint(pt, center, angle); };
+                switch (e->kind()) {
+                case Entity::Kind::Line: {
+                    const auto *ln = static_cast<const LineEntity*>(e);
+                    return std::make_unique<LineEntity>(rp(ln->startPoint()), rp(ln->endPoint()));
+                }
+                case Entity::Kind::Circle: {
+                    const auto *c = static_cast<const CircleEntity*>(e);
+                    return std::make_unique<CircleEntity>(rp(c->center()), c->radius());
+                }
+                case Entity::Kind::Arc: {
+                    const auto *arc = static_cast<const ArcEntity*>(e);
+                    return std::make_unique<ArcEntity>(rp(arc->center()), arc->radius(),
+                        arc->startAngleDegrees() + angle, arc->sweepAngleDegrees());
+                }
+                case Entity::Kind::Rectangle: {
+                    const auto *rect = static_cast<const RectangleEntity*>(e);
+                    return std::make_unique<RectangleEntity>(rp(rect->center()),
+                        rect->width(), rect->height(), rect->angleDegrees() + angle);
+                }
+                case Entity::Kind::Polygon: {
+                    const auto *poly = static_cast<const PolylineEntity*>(e);
+                    QList<QPointF> pts;
+                    pts.reserve(poly->points().size());
+                    for (const QPointF &pt : poly->points()) pts.append(rp(pt));
+                    return std::make_unique<PolylineEntity>(pts);
+                }
+                default: return e->clone();
+                }
+            }();
+            doc->commandStack()->execute(std::make_unique<AddEntityCommand>(std::move(rotated)));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Layer management slots
+// ---------------------------------------------------------------------------
+
+void GraphicsDesignPanel::refreshLayerList()
+{
+    Document *doc = m_canvas->document();
+
+    m_layerList->blockSignals(true);
+    m_layerList->clear();
+
+    for (int i = 0; i < doc->layerCount(); ++i) {
+        const Layer &layer = doc->layerAt(i);
+        auto *item = new QListWidgetItem(layer.name);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEditable);
+        // Checkbox = visible
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+        item->setData(Qt::UserRole + 1, layer.locked);
+        item->setData(Qt::UserRole + 2, layer.color);
+        // Dim text if locked (keep as fallback for non-delegate views)
+        if (layer.locked)
+            item->setForeground(Qt::gray);
+        // Bold = active layer
+        if (layer.id == doc->activeLayerId()) {
+            QFont f = item->font();
+            f.setBold(true);
+            item->setFont(f);
+        }
+        m_layerList->addItem(item);
+    }
+
+    m_layerList->blockSignals(false);
+}
+
+void GraphicsDesignPanel::onLayerItemChanged(QListWidgetItem *item)
+{
+    int row = m_layerList->row(item);
+    Document *doc = m_canvas->document();
+    if (row < 0 || row >= doc->layerCount()) return;
+
+    // Visibility toggle (checkbox)
+    doc->setLayerVisible(row, item->checkState() == Qt::Checked);
+
+    // Lock toggle (UserRole + 1)
+    bool locked = item->data(Qt::UserRole + 1).toBool();
+    doc->setLayerLocked(row, locked);
+
+    // Name change (inline edit)
+    QString newName = item->text().trimmed();
+    if (!newName.isEmpty() && newName != doc->layerAt(row).name)
+        doc->setLayerName(row, newName);
+}
+
+void GraphicsDesignPanel::onLayerCurrentRowChanged(int row)
+{
+    Document *doc = m_canvas->document();
+    bool canDelete = (row > 0 && row < doc->layerCount());  // cannot delete layer 0
+    bool canAct    = (row >= 0 && row < doc->layerCount());
+    m_deleteLayerBtn->setEnabled(canDelete);
+    m_lockLayerBtn->setEnabled(canAct);
+    m_moveToLayerBtn->setEnabled(canAct && !m_canvas->document()->selectedIds().isEmpty());
+
+    if (canAct) {
+        doc->setActiveLayerId(doc->layerAt(row).id);
+        refreshLayerList();  // update bold marker
+    }
+}
+
+void GraphicsDesignPanel::onAddLayerClicked()
+{
+    Document *doc = m_canvas->document();
+    doc->addLayer(QString("Layer %1").arg(doc->layerCount()));
+    refreshLayerList();
+    m_layerList->setCurrentRow(m_layerList->count() - 1);
+}
+
+void GraphicsDesignPanel::onDeleteLayerClicked()
+{
+    int row = m_layerList->currentRow();
+    if (row <= 0) return;
+    m_canvas->document()->removeLayerAt(row);
+    refreshLayerList();
+}
+
+void GraphicsDesignPanel::onLockLayerClicked()
+{
+    int row = m_layerList->currentRow();
+    Document *doc = m_canvas->document();
+    if (row < 0 || row >= doc->layerCount()) return;
+    bool nowLocked = !doc->layerAt(row).locked;
+    doc->setLayerLocked(row, nowLocked);
+    m_lockLayerBtn->setText(nowLocked ? "Unlock" : "Lock");
+    refreshLayerList();
+}
+
+void GraphicsDesignPanel::onMoveEntityToLayerClicked()
+{
+    int row = m_layerList->currentRow();
+    Document *doc = m_canvas->document();
+    if (row < 0 || row >= doc->layerCount()) return;
+
+    const QUuid targetLayerId = doc->layerAt(row).id;
+    const QSet<QUuid> ids = doc->selectedIds();
+    for (const QUuid &id : ids) {
+        int entityIndex = doc->indexOf(id);
+        if (entityIndex < 0) continue;
+        const Entity *entity = doc->entityAt(entityIndex);
+        if (!entity) continue;
+        auto newEntity = entity->clone();
+        newEntity->setLayerId(targetLayerId);
+        applyProperties(entityIndex, std::move(newEntity));
+    }
 }

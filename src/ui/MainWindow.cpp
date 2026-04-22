@@ -399,6 +399,7 @@ void MainWindow::setupConnections()
     connect(m_core, &ApplicationCore::streamingFinished,
             this, [this]() {
                 m_controlPanel->setStreamingFinished();
+                m_toolpathPanel->setExecutingLine(-1);
                 m_core->serialManager()->setStatusPollInterval(250);
                 m_consolePanel->appendMessage("Streaming finished");
                 statusBar()->showMessage("Streaming complete");
@@ -538,9 +539,32 @@ void MainWindow::setupConnections()
                 QStringList lines = m_toolpathPanel->currentGcodeLines();
                 if (lines.isEmpty())
                     lines = m_core->fileManager()->lines();
+                if (lines.isEmpty()) return;
                 if (m_toolpathPanel->returnToOriginEnabled())
                     lines.append("G90 G0 X0 Y0 Z0");
-                m_core->startStreaming(lines);
+
+                int rangeStart = m_toolpathPanel->rangeStart();
+                int rangeEnd = m_toolpathPanel->rangeEnd();
+                int startLine = 0;
+                int endLine = -1;  // -1 means end of file
+
+                if (rangeStart >= 0 || rangeEnd >= 0) {
+                    if (rangeStart >= 0) startLine = rangeStart;
+                    if (rangeEnd >= 0) endLine = rangeEnd;
+                    QString rangeDesc = QString("lines %1 - %2 of %3")
+                        .arg(startLine + 1)
+                        .arg(endLine >= 0 ? endLine + 1 : lines.size())
+                        .arg(lines.size());
+                    auto result = QMessageBox::question(this, "Start Streaming",
+                        QString("Stream %1?").arg(rangeDesc),
+                        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+                    if (result == QMessageBox::Cancel) return;
+                    if (result == QMessageBox::No) {
+                        startLine = 0;
+                        endLine = -1;
+                    }
+                }
+                m_core->startStreaming(lines, startLine, endLine);
             });
     connect(m_controlPanel, &ControlPanel::pauseRequested,
             m_core, &ApplicationCore::pauseStreaming);
@@ -647,12 +671,16 @@ void MainWindow::setupConnections()
                 statusBar()->showMessage("G-code cleared");
             });
 
-    // --- ToolpathPanel transform 鈫?keep FileManager in sync ---
+    // --- ToolpathPanel transform → keep FileManager in sync ---
     connect(m_toolpathPanel, &ToolpathPanel::gcodeTransformed,
             this, [this](const QStringList &lines) {
                 m_core->fileManager()->loadLines(m_core->fileManager()->fileName(), lines);
                 m_controlPanel->setFileLoaded(m_core->fileManager()->fileName(), lines.size());
             });
+
+    // --- ToolpathPanel range → update canvas visualization ---
+    connect(m_toolpathPanel, &ToolpathPanel::rangeChanged,
+            m_toolpathPanel, &ToolpathPanel::setStreamRange);
 
     // --- GraphicsDesignPanel (tab) 鈫?G-code generation ---
     connect(m_graphicsDesignPanel, &GraphicsDesignPanel::gcodeGenerated,
