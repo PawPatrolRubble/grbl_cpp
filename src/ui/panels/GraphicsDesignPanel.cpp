@@ -75,13 +75,16 @@ public:
         QStyleOptionViewItem opt = option;
         initStyleOption(&opt, index);
         opt.decorationSize = QSize(0, 0);   // hide normal decoration
-
-        // Temporarily remove checkbox flag from display to avoid default checkbox
         opt.features &= ~QStyleOptionViewItem::HasCheckIndicator;
+
+        // Inset the text rect so it starts after our custom icons
+        // kSwatchOff + kColorSwW = left edge of text starts here
+        int textLeftMargin = kSwatchOff + kColorSwW + 4;
+        opt.rect = opt.rect.adjusted(textLeftMargin, 0, 0, 0);
 
         QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &opt, p);
 
-        // Draw eye icon text on the left
+        // Draw icons on the LEFT side of the ORIGINAL rectangle (not inset)
         bool visible = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
         bool locked  = index.data(Qt::UserRole + 1).toBool();
         QColor layerColor = index.data(Qt::UserRole + 2).value<QColor>();
@@ -356,7 +359,7 @@ void GraphicsDesignPanel::setupUi()
     floatingLayout->addWidget(m_propertyStack);
 
     // Position at top-left of canvas (sizing happens after pages are built)
-    m_floatingPropertyPanel->setFixedWidth(220);
+    m_floatingPropertyPanel->setFixedWidth(350);
 
     buildEmptyPage();
     buildLinePage();
@@ -1355,17 +1358,21 @@ void GraphicsDesignPanel::buildLayerSection()
 
     auto *btnRow = new QHBoxLayout();
     m_addLayerBtn = new QPushButton("Add");
+    m_addLayerBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_deleteLayerBtn = new QPushButton("Delete");
+    m_deleteLayerBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_deleteLayerBtn->setEnabled(false);
     m_lockLayerBtn = new QPushButton("Lock");
+    m_lockLayerBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_lockLayerBtn->setEnabled(false);
     m_moveToLayerBtn = new QPushButton("Move Sel.");
+    m_moveToLayerBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_moveToLayerBtn->setToolTip("Move selected entity to this layer");
     m_moveToLayerBtn->setEnabled(false);
-    btnRow->addWidget(m_addLayerBtn);
-    btnRow->addWidget(m_deleteLayerBtn);
-    btnRow->addWidget(m_lockLayerBtn);
-    btnRow->addWidget(m_moveToLayerBtn);
+    btnRow->addWidget(m_addLayerBtn, 1);
+    btnRow->addWidget(m_deleteLayerBtn, 1);
+    btnRow->addWidget(m_lockLayerBtn, 1);
+    btnRow->addWidget(m_moveToLayerBtn, 1);
     vlay->addLayout(btnRow);
 }
 
