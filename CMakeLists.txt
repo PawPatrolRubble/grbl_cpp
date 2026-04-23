@@ -163,6 +163,9 @@ set(UI_SOURCES
     src/ui/panels/ConsolePanel.cpp
     src/ui/panels/SettingsPanel.cpp
     src/ui/panels/GraphicsDesignPanel.cpp
+    src/ui/panels/TransformPanel.cpp
+    src/ui/panels/LayerPanel.cpp
+    src/ui/panels/ToolBarWidget.cpp
     src/ui/DesignCanvas.cpp
     src/ui/canvas/ToolManager.cpp
     src/ui/canvas/CanvasDrawing.cpp
@@ -170,6 +173,17 @@ set(UI_SOURCES
     src/ui/canvas/EntityClipboard.cpp
     src/ui/GraphicsDesignDialog.cpp
     src/ui/LineNumberPlainTextEdit.cpp
+    src/ui/panels/PropertyPages/PropertyPage.cpp
+    src/ui/panels/PropertyPages/LinePage.cpp
+    src/ui/panels/PropertyPages/RectanglePage.cpp
+    src/ui/panels/PropertyPages/CirclePage.cpp
+    src/ui/panels/PropertyPages/ArcPage.cpp
+    src/ui/panels/PropertyPages/DimensionPage.cpp
+    src/ui/panels/PropertyPages/AngularDimensionPage.cpp
+    src/ui/panels/PropertyPages/RadiusDimensionPage.cpp
+    src/ui/panels/PropertyPages/SplinePage.cpp
+    src/ui/panels/PropertyPages/PolylinePage.cpp
+    src/ui/panels/PropertyPages/EmptyPage.cpp
 )
 
 set(UI_FILES
@@ -197,6 +211,9 @@ set(UI_HEADERS
     src/ui/panels/ConsolePanel.h
     src/ui/panels/SettingsPanel.h
     src/ui/panels/GraphicsDesignPanel.h
+    src/ui/panels/TransformPanel.h
+    src/ui/panels/LayerPanel.h
+    src/ui/panels/ToolBarWidget.h
     src/ui/DesignCanvas.h
     src/ui/canvas/ToolManager.h
     src/ui/canvas/CoordinateTransform.h
@@ -205,6 +222,17 @@ set(UI_HEADERS
     src/ui/canvas/EntityClipboard.h
     src/ui/GraphicsDesignDialog.h
     src/ui/LineNumberPlainTextEdit.h
+    src/ui/panels/PropertyPages/PropertyPage.h
+    src/ui/panels/PropertyPages/LinePage.h
+    src/ui/panels/PropertyPages/RectanglePage.h
+    src/ui/panels/PropertyPages/CirclePage.h
+    src/ui/panels/PropertyPages/ArcPage.h
+    src/ui/panels/PropertyPages/DimensionPage.h
+    src/ui/panels/PropertyPages/AngularDimensionPage.h
+    src/ui/panels/PropertyPages/RadiusDimensionPage.h
+    src/ui/panels/PropertyPages/SplinePage.h
+    src/ui/panels/PropertyPages/PolylinePage.h
+    src/ui/panels/PropertyPages/EmptyPage.h
 )
 
 set(RESOURCES

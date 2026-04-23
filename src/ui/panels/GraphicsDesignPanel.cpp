@@ -1,4 +1,5 @@
 #include "GraphicsDesignPanel.h"
+#include "ToolBarWidget.h"
 #include "../DesignCanvas.h"
 #include "../LineNumberPlainTextEdit.h"
 #include "../../grbl/GraphicsDesign/Document.h"
@@ -52,6 +53,7 @@
 #include <QApplication>
 #include <QCursor>
 #include <QColorDialog>
+#include <QMouseEvent>
 
 // ---------------------------------------------------------------------------
 // LayerListDelegate — renders an eye icon in the decoration column to toggle
@@ -146,8 +148,8 @@ void GraphicsDesignPanel::setupUi()
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(0);
 
-    // Vertical tool toolbar
-    m_toolBar = createToolToolBar();
+    // Vertical tool toolbar (ToolBarWidget extracted component)
+    m_toolBar = new ToolBarWidget();
     leftLayout->addWidget(m_toolBar);
 
     m_canvas = new DesignCanvas();
@@ -498,84 +500,6 @@ void GraphicsDesignPanel::setupUi()
     splitter->setStretchFactor(1, 1);  // Panel gets 1x stretch
 
     outerLayout->addWidget(splitter);
-}
-
-QWidget* GraphicsDesignPanel::createToolToolBar()
-{
-    auto *toolbar = new QWidget();
-    toolbar->setObjectName("sketchToolBar");
-    toolbar->setFixedWidth(44);
-    
-    auto *layout = new QVBoxLayout(toolbar);
-    layout->setContentsMargins(4, 4, 4, 4);
-    layout->setSpacing(2);
-    
-    // Tool definitions: icon text, tooltip
-    struct ToolDef {
-        const char *icon;
-        const char *tooltip;
-        const char *shortcut;
-    };
-    
-    static const ToolDef tools[] = {
-        {"↖", "Select entities (Esc)", "Esc"},
-        {"∕", "Line tool (L)", "L"},
-        {"⌇", "Polyline tool (P)", "P"},
-        {"▭", "Rectangle tool (R)", "R"},
-        {"○", "Circle tool (C)", "C"},
-        {"◠", "Arc tool (A)", "A"},
-        {"T", "Text tool (T)", "Ctrl+T"},
-        {"↔", "Linear dimension (D)", "D"},
-        {"∠", "Angular dimension", "Ctrl+D"},
-        {"⦿", "Radius dimension", "Ctrl+R"},
-        {"✂", "Trim tool (X)", "X"},
-        {"⌁", "Extend tool (E)", "E"},
-        {"∟", "Chamfer tool (H)", "H"},
-        {"⌒", "Fillet tool (F)", "F"},
-        {"∥", "Offset tool (O)", "O"},
-        {"⌖", "Measure distance/angle (M)", "M"},
-        {"⌣", "Spline tool (B)", "B"},
-    };
-    
-    for (int i = 0; i < 17; ++i) {
-        auto *btn = new QToolButton();
-        btn->setText(tools[i].icon);
-        btn->setToolTip(QString("%1\n%2").arg(tools[i].tooltip, tools[i].shortcut));
-        btn->setCheckable(true);
-        btn->setAutoRaise(true);
-        btn->setFixedSize(36, 36);
-        btn->setStyleSheet(
-            "QToolButton {"
-            "  background: #ffffff;"
-            "  border: 1px solid #d0d0d0;"
-            "  border-radius: 4px;"
-            "  font-size: 18px;"
-            "}"
-            "QToolButton:hover {"
-            "  background: #e8f0f8;"
-            "  border-color: #a0c4e0;"
-            "}"
-            "QToolButton:checked {"
-            "  background: #dce8f4;"
-            "  border: 2px solid #5090c0;"
-            "  color: #205080;"
-            "}"
-        );
-        
-        connect(btn, &QToolButton::clicked, this, [this, i]() {
-            onToolButtonClicked(i);
-        });
-        
-        m_toolButtons[i] = btn;
-        layout->addWidget(btn);
-    }
-    
-    layout->addStretch();
-    
-    // Set first button (Select) as checked by default
-    m_toolButtons[0]->setChecked(true);
-    
-    return toolbar;
 }
 
 void GraphicsDesignPanel::buildEmptyPage()
@@ -1324,36 +1248,9 @@ void GraphicsDesignPanel::buildLayerSection()
     m_layerList = new QListWidget();
     m_layerList->setMaximumHeight(110);
     m_layerList->setItemDelegate(new LayerListDelegate(m_layerList));
-    // Handle eye-icon clicks to toggle visibility
-    connect(m_layerList, &QListWidget::pressed, this, [this](const QModelIndex &idx) {
-        QPoint localPos = m_layerList->viewport()->mapFromGlobal(QCursor::pos());
-        int x = localPos.x();
-        QListWidgetItem *item = m_layerList->item(idx.row());
-        if (!item) return;
-        if (x < kEyeColW) {
-            // Toggle visibility
-            item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
-        } else if (x < kIconsW) {
-            // Toggle lock
-            bool nowLocked = !item->data(Qt::UserRole + 1).toBool();
-            item->setData(Qt::UserRole + 1, nowLocked);
-            // Trigger onLayerItemChanged to propagate to Document
-            emit m_layerList->itemChanged(item);
-        } else if (x < kSwatchOff + kColorSwW) {
-            // Color swatch: open color dialog
-            QColor current = item->data(Qt::UserRole + 2).value<QColor>();
-            QColor chosen = QColorDialog::getColor(current, this, "Layer Color");
-            if (chosen.isValid()) {
-                item->setData(Qt::UserRole + 2, chosen);
-                // Sync to document
-                int row = idx.row();
-                Document *doc = m_canvas->document();
-                if (row >= 0 && row < doc->layerCount())
-                    doc->setLayerColor(row, chosen);
-                m_canvas->update();
-            }
-        }
-    });
+    // Use an event filter on the viewport so we get the exact QMouseEvent position.
+    // QCursor::pos() in a signal handler can be stale/wrong on some platforms.
+    m_layerList->viewport()->installEventFilter(this);
     vlay->addWidget(m_layerList);
 
     auto *btnRow = new QHBoxLayout();
@@ -1378,6 +1275,9 @@ void GraphicsDesignPanel::buildLayerSection()
 
 void GraphicsDesignPanel::setupConnections()
 {
+    // Toolbar tool selection (ToolBarWidget extracted component)
+    connect(m_toolBar, &ToolBarWidget::toolSelected, this, &GraphicsDesignPanel::onToolChanged);
+
     // Sync toolbar buttons when canvas changes tool internally (e.g. auto-select after draw)
     connect(m_canvas, &DesignCanvas::toolChanged, this, &GraphicsDesignPanel::onCanvasToolChanged);
 
@@ -1551,26 +1451,13 @@ void GraphicsDesignPanel::onToolChanged(int index)
     m_measureGroup->setVisible(isMeasure);
 }
 
-void GraphicsDesignPanel::onToolButtonClicked(int toolIndex)
-{
-    // Update all button checked states
-    for (int i = 0; i < 16; ++i) {
-        m_toolButtons[i]->setChecked(i == toolIndex);
-    }
-    
-    // Call the core tool change logic
-    onToolChanged(toolIndex);
-}
-
 void GraphicsDesignPanel::onCanvasToolChanged()
 {
     // Sync toolbar buttons when canvas changes tool internally (e.g. auto-select after drawing)
     int index = static_cast<int>(m_canvas->currentToolType());
     
-    // Update button checked state
-    for (int i = 0; i < 16; ++i) {
-        m_toolButtons[i]->setChecked(i == index);
-    }
+    // Update button checked state (ToolBarWidget handles this internally)
+    m_toolBar->setToolChecked(index);
     
     // Update tool-specific parameter widgets
     DesignCanvas::ToolType tool = static_cast<DesignCanvas::ToolType>(index);
@@ -3090,23 +2977,67 @@ void GraphicsDesignPanel::refreshLayerList()
     m_layerList->blockSignals(false);
 }
 
+bool GraphicsDesignPanel::eventFilter(QObject *obj, QEvent *event)
+{
+    // Intercept mouse presses on the layer list viewport so we get the exact
+    // QMouseEvent position rather than relying on the potentially-stale QCursor::pos().
+    if (obj == m_layerList->viewport() && event->type() == QEvent::MouseButtonPress) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() != Qt::LeftButton)
+            return QWidget::eventFilter(obj, event);
+
+        int x   = static_cast<int>(me->position().x());
+        int row = m_layerList->indexAt(me->pos()).row();
+        Document *doc = m_canvas->document();
+        if (row < 0 || row >= doc->layerCount())
+            return QWidget::eventFilter(obj, event);
+
+        QListWidgetItem *item = m_layerList->item(row);
+        if (!item) return QWidget::eventFilter(obj, event);
+
+        if (x < kEyeColW) {
+            // Toggle visibility — update document directly; layersChanged→refreshLayerList rebuilds item.
+            doc->setLayerVisible(row, !doc->layerAt(row).visible);
+            m_canvas->update();
+            return true;   // consume: no selection change needed
+        } else if (x < kIconsW) {
+            // Toggle lock.
+            doc->setLayerLocked(row, !doc->layerAt(row).locked);
+            m_canvas->update();
+            return true;
+        } else if (x < kSwatchOff + kColorSwW) {
+            // Color swatch — open blocking dialog AFTER reading row (item may be gone after doc->set*).
+            QColor current = item->data(Qt::UserRole + 2).value<QColor>();
+            QColor chosen  = QColorDialog::getColor(current, this, "Layer Color");
+            if (chosen.isValid()) {
+                doc->setLayerColor(row, chosen);
+                m_canvas->update();
+            }
+            return true;
+        }
+        // Fall through for clicks on the text/name area — let Qt handle selection.
+    }
+    return QWidget::eventFilter(obj, event);
+}
+
 void GraphicsDesignPanel::onLayerItemChanged(QListWidgetItem *item)
 {
+    // Eye / lock / color are handled directly in the pressed lambda via doc->set*().
+    // This handler is only reached for user inline-edits (layer rename) or external
+    // setCheckState calls (e.g. Space key).  Read data upfront before any doc mutation
+    // because doc->set*() emits layersChanged -> refreshLayerList -> clear() -> item deleted.
     int row = m_layerList->row(item);
     Document *doc = m_canvas->document();
     if (row < 0 || row >= doc->layerCount()) return;
 
-    // Visibility toggle (checkbox)
-    doc->setLayerVisible(row, item->checkState() == Qt::Checked);
+    const bool    visible = (item->checkState() == Qt::Checked);
+    const QString name    = item->text().trimmed();
+    // Do NOT access `item` after this point.
 
-    // Lock toggle (UserRole + 1)
-    bool locked = item->data(Qt::UserRole + 1).toBool();
-    doc->setLayerLocked(row, locked);
-
-    // Name change (inline edit)
-    QString newName = item->text().trimmed();
-    if (!newName.isEmpty() && newName != doc->layerAt(row).name)
-        doc->setLayerName(row, newName);
+    doc->setLayerVisible(row, visible);
+    if (!name.isEmpty() && name != doc->layerAt(row).name)
+        doc->setLayerName(row, name);
+    m_canvas->update();
 }
 
 void GraphicsDesignPanel::onLayerCurrentRowChanged(int row)

@@ -23,6 +23,7 @@ class QTableWidget;
 class QGroupBox;
 class LineNumberPlainTextEdit;
 class Entity;
+class ToolBarWidget;
 
 class GraphicsDesignPanel : public QWidget
 {
@@ -94,19 +95,19 @@ private slots:
     void onLockLayerClicked();
     void onLayerCurrentRowChanged(int row);
     void onMoveEntityToLayerClicked();
-    void onToolButtonClicked(int toolIndex);
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
     QStringList m_generatedLines;
 
     DesignCanvas *m_canvas;
-    QWidget *m_toolBar;                    // vertical icon toolbar
-    QToolButton *m_toolButtons[17];        // one per tool type
+    ToolBarWidget *m_toolBar;                // vertical icon toolbar (extracted component)
     QWidget *m_floatingPropertyPanel = nullptr;  // floating property panel overlay on canvas
     QSlider *m_opacitySlider = nullptr;    // opacity control for property panel
     QComboBox *m_toolModeCombo;
 
-    QWidget* createToolToolBar();
     QPushButton *m_deleteBtn;
     QPushButton *m_clearBtn;
     QPushButton *m_saveBtn;
