@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-23T04:38:49Z | Files: 213 | Described: 0/213
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-23T04:38:49Z","fingerprint":"e47257ab28770ffd2ce8a7081f4daaddaf0fa0c0","fileCount":213,"truncated":false} -->
+Generated: 2026-04-23T10:33:57Z | Files: 221 | Described: 0/221
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-23T10:33:57Z","fingerprint":"aac2ce9cffb8e8904050d7cacdf1aa11984746fc","fileCount":221,"truncated":false} -->
 
 ### (root)/
 - `.gitignore`
@@ -96,10 +96,10 @@ Generated: 2026-04-23T04:38:49Z | Files: 213 | Described: 0/213
 - `src/grbl/types.h`
 
 ### src/grbl/GraphicsDesign/
-- *(39 files: 20 .h, 19 .cpp)*
+- *(41 files: 21 .h, 20 .cpp)*
 
 ### src/grbl/GraphicsDesign/Tools/
-- *(29 files: 15 .h, 14 .cpp)*
+- *(35 files: 18 .h, 17 .cpp)*
 
 ### src/grbl/TextToGcode/
 - `src/grbl/TextToGcode/HersheyFontParser.cpp`
