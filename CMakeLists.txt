@@ -163,6 +163,8 @@ set(UI_SOURCES
     src/ui/panels/ConsolePanel.cpp
     src/ui/panels/SettingsPanel.cpp
     src/ui/panels/GraphicsDesignPanel.cpp
+    src/ui/panels/LayerListDelegate.cpp
+    src/ui/panels/EntityTransform.cpp
     src/ui/panels/TransformPanel.cpp
     src/ui/panels/LayerPanel.cpp
     src/ui/panels/ToolBarWidget.cpp

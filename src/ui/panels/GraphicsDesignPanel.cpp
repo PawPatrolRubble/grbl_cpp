@@ -1,5 +1,7 @@
 #include "GraphicsDesignPanel.h"
 #include "ToolBarWidget.h"
+#include "LayerListDelegate.h"
+#include "EntityTransform.h"
 #include "../DesignCanvas.h"
 #include "../LineNumberPlainTextEdit.h"
 #include "../../grbl/GraphicsDesign/Document.h"
@@ -20,6 +22,13 @@
 #include "../../grbl/DxfParser.h"
 
 #include <cmath>
+
+// Layer list viewport constants (shared with LayerListDelegate)
+static const int kEyeColW   = 22;   // pixels reserved on the left for the eye icon
+static const int kLockColW  = 22;   // pixels for the lock icon next to eye
+static const int kColorSwW  = 16;   // pixels for the color swatch
+static const int kIconsW    = kEyeColW + kLockColW;  // total icon cols before text
+static const int kSwatchOff = kIconsW + 2;           // swatch left edge offset
 
 #include <QComboBox>
 #include <QFontComboBox>
@@ -54,69 +63,6 @@
 #include <QCursor>
 #include <QColorDialog>
 #include <QMouseEvent>
-
-// ---------------------------------------------------------------------------
-// LayerListDelegate — renders an eye icon in the decoration column to toggle
-// layer visibility, replacing the built-in checkbox rendering.
-// ---------------------------------------------------------------------------
-static const int kEyeColW   = 22;   // pixels reserved on the left for the eye icon
-static const int kLockColW  = 22;   // pixels for the lock icon next to eye
-static const int kColorSwW  = 16;   // pixels for the color swatch
-static const int kIconsW    = kEyeColW + kLockColW;  // total icon cols before text
-static const int kSwatchOff = kIconsW + 2;           // swatch left edge offset
-
-class LayerListDelegate : public QStyledItemDelegate
-{
-public:
-    using QStyledItemDelegate::QStyledItemDelegate;
-
-    void paint(QPainter *p, const QStyleOptionViewItem &option,
-               const QModelIndex &index) const override
-    {
-        // Draw default selection background
-        QStyleOptionViewItem opt = option;
-        initStyleOption(&opt, index);
-        opt.decorationSize = QSize(0, 0);   // hide normal decoration
-        opt.features &= ~QStyleOptionViewItem::HasCheckIndicator;
-
-        // Inset the text rect so it starts after our custom icons
-        // kSwatchOff + kColorSwW = left edge of text starts here
-        int textLeftMargin = kSwatchOff + kColorSwW + 4;
-        opt.rect = opt.rect.adjusted(textLeftMargin, 0, 0, 0);
-
-        QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &opt, p);
-
-        // Draw icons on the LEFT side of the ORIGINAL rectangle (not inset)
-        bool visible = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
-        bool locked  = index.data(Qt::UserRole + 1).toBool();
-        QColor layerColor = index.data(Qt::UserRole + 2).value<QColor>();
-        if (!layerColor.isValid()) layerColor = QColor("#374151");
-        QRect eyeRect( option.rect.left(),          option.rect.top(), kEyeColW,  option.rect.height());
-        QRect lockRect(option.rect.left()+kEyeColW, option.rect.top(), kLockColW, option.rect.height());
-        p->save();
-        p->setFont(QFont("Segoe UI Emoji", 11));
-        p->setPen(visible ? QColor("#374151") : QColor("#6b7280"));
-        p->drawText(eyeRect, Qt::AlignCenter, visible ? "\U0001F441" : "\u2298");
-        p->setPen(locked ? QColor("#dc2626") : QColor("#6b7280"));
-        p->drawText(lockRect, Qt::AlignCenter, locked ? "\U0001F512" : "\U0001F513");
-        // Color swatch
-        QRect swRect(option.rect.left() + kSwatchOff,
-                     option.rect.top() + (option.rect.height() - kColorSwW) / 2,
-                     kColorSwW, kColorSwW);
-        p->setPen(QColor("#6b7280"));
-        p->setBrush(layerColor);
-        p->drawRect(swRect);
-        p->restore();
-    }
-
-    QSize sizeHint(const QStyleOptionViewItem &option,
-                   const QModelIndex &index) const override
-    {
-        QSize s = QStyledItemDelegate::sizeHint(option, index);
-        return QSize(s.width(), std::max(s.height(), 22));
-    }
-};
-
 
 GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
     : QWidget(parent)
@@ -2299,94 +2245,6 @@ void GraphicsDesignPanel::polylineDeleteVertex()
     applyProperties(index, std::move(newPolyline));
 }
 
-// ---------------------------------------------------------------------------
-// Transform helpers
-// ---------------------------------------------------------------------------
-
-static QPointF rotatePoint(const QPointF &pt, const QPointF &pivot, double angleDeg)
-{
-    const double rad = qDegreesToRadians(angleDeg);
-    const double c = qCos(rad), s = qSin(rad);
-    const double dx = pt.x() - pivot.x(), dy = pt.y() - pivot.y();
-    return { pivot.x() + dx * c - dy * s, pivot.y() + dx * s + dy * c };
-}
-
-static std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, double angleDeg)
-{
-    const QPointF pivot = e->center();
-    switch (e->kind()) {
-    case Entity::Kind::Line: {
-        const auto *line = static_cast<const LineEntity*>(e);
-        return std::make_unique<LineEntity>(
-            rotatePoint(line->startPoint(), pivot, angleDeg),
-            rotatePoint(line->endPoint(), pivot, angleDeg));
-    }
-    case Entity::Kind::Rectangle: {
-        const auto *rect = static_cast<const RectangleEntity*>(e);
-        return std::make_unique<RectangleEntity>(
-            pivot, rect->width(), rect->height(), rect->angleDegrees() + angleDeg);
-    }
-    case Entity::Kind::Circle:
-        return e->clone();  // Circle is symmetric; rotation has no visible effect
-    case Entity::Kind::Arc: {
-        const auto *arc = static_cast<const ArcEntity*>(e);
-        return std::make_unique<ArcEntity>(
-            pivot, arc->radius(),
-            arc->startAngleDegrees() + angleDeg,
-            arc->sweepAngleDegrees());
-    }
-    case Entity::Kind::Polygon: {
-        const auto *poly = static_cast<const PolylineEntity*>(e);
-        QList<QPointF> pts;
-        pts.reserve(poly->points().size());
-        for (const QPointF &pt : poly->points())
-            pts.append(rotatePoint(pt, pivot, angleDeg));
-        return std::make_unique<PolylineEntity>(pts);
-    }
-    default:
-        return e->clone();
-    }
-}
-
-static std::unique_ptr<Entity> makeScaledEntity(const Entity *e, const QPointF &pivot, double factor)
-{
-    auto sp = [&](const QPointF &pt) -> QPointF {
-        return pivot + (pt - pivot) * factor;
-    };
-    switch (e->kind()) {
-    case Entity::Kind::Line: {
-        const auto *line = static_cast<const LineEntity*>(e);
-        return std::make_unique<LineEntity>(sp(line->startPoint()), sp(line->endPoint()));
-    }
-    case Entity::Kind::Circle: {
-        const auto *c = static_cast<const CircleEntity*>(e);
-        return std::make_unique<CircleEntity>(sp(c->center()), c->radius() * factor);
-    }
-    case Entity::Kind::Arc: {
-        const auto *arc = static_cast<const ArcEntity*>(e);
-        return std::make_unique<ArcEntity>(sp(arc->center()), arc->radius() * factor,
-                                           arc->startAngleDegrees(), arc->sweepAngleDegrees());
-    }
-    case Entity::Kind::Rectangle: {
-        const auto *rect = static_cast<const RectangleEntity*>(e);
-        return std::make_unique<RectangleEntity>(sp(rect->center()),
-                                                  rect->width()  * factor,
-                                                  rect->height() * factor,
-                                                  rect->angleDegrees());
-    }
-    case Entity::Kind::Polygon: {
-        const auto *poly = static_cast<const PolylineEntity*>(e);
-        QList<QPointF> pts;
-        pts.reserve(poly->points().size());
-        for (const QPointF &pt : poly->points())
-            pts.append(sp(pt));
-        return std::make_unique<PolylineEntity>(pts);
-    }
-    default:
-        return e->clone();
-    }
-}
-
 void GraphicsDesignPanel::applyMoveBy(){
     Document *doc = m_canvas->document();
     if (doc->selectedIds().isEmpty()) return;
@@ -2430,7 +2288,7 @@ void GraphicsDesignPanel::applyRotateBy()
         // For multi-select, we need to rotate around shared pivot.
         // Rotate around the shared pivot
         auto rotated = [&]() -> std::unique_ptr<Entity> {
-            auto rp = [&](const QPointF &pt) { return rotatePoint(pt, pivot, angle); };
+            auto rp = [&](const QPointF &pt) { return EntityTransform::rotatePoint(pt, pivot, angle); };
             switch (e->kind()) {
             case Entity::Kind::Line: {
                 const auto *ln = static_cast<const LineEntity*>(e);
@@ -2465,101 +2323,17 @@ void GraphicsDesignPanel::applyRotateBy()
     m_rotateAngle->setValue(0.0);
 }
 
-// ---------------------------------------------------------------------------
-// Mirror / flip helpers
-// ---------------------------------------------------------------------------
-
-// Normalize angle to [0, 360)
-static double normAngle(double a) {
-    a = std::fmod(a, 360.0);
-    if (a < 0.0) a += 360.0;
-    return a;
-}
-
-static QPointF flipH(const QPointF &pt, const QPointF &pivot) {
-    return QPointF(2.0 * pivot.x() - pt.x(), pt.y());
-}
-static QPointF flipV(const QPointF &pt, const QPointF &pivot) {
-    return QPointF(pt.x(), 2.0 * pivot.y() - pt.y());
-}
-
-enum class FlipAxis { H, V };
-
-static std::unique_ptr<Entity> makeMirroredEntity(const Entity *e, const QPointF &pivot, FlipAxis axis)
-{
-    using F = FlipAxis;
-    auto fp = [&](const QPointF &pt) {
-        return axis == F::H ? flipH(pt, pivot) : flipV(pt, pivot);
-    };
-
-    switch (e->kind()) {
-    case Entity::Kind::Line: {
-        const auto *line = static_cast<const LineEntity*>(e);
-        return std::make_unique<LineEntity>(fp(line->startPoint()), fp(line->endPoint()));
-    }
-    case Entity::Kind::Circle: {
-        const auto *c = static_cast<const CircleEntity*>(e);
-        return std::make_unique<CircleEntity>(fp(c->center()), c->radius());
-    }
-    case Entity::Kind::Arc: {
-        const auto *arc = static_cast<const ArcEntity*>(e);
-        QPointF newC = fp(arc->center());
-        double start = arc->startAngleDegrees();
-        double sweep = arc->sweepAngleDegrees();
-        double newStart, newSweep = sweep;
-        if (axis == F::H) {
-            // Mirror about vertical axis: angle θ → 180° - θ
-            // Arc [start, start+sweep] maps to [180-(start+sweep), 180-start] CCW
-            newStart = normAngle(180.0 - (start + sweep));
-        } else {
-            // Mirror about horizontal axis: angle θ → -θ (= 360-θ)
-            // Arc [start, start+sweep] maps to [360-(start+sweep), 360-start] CCW
-            newStart = normAngle(360.0 - (start + sweep));
-        }
-        return std::make_unique<ArcEntity>(newC, arc->radius(), newStart, newSweep);
-    }
-    case Entity::Kind::Rectangle: {
-        const auto *rect = static_cast<const RectangleEntity*>(e);
-        QPointF newC = fp(rect->center());
-        double newAngle = axis == F::H ? (180.0 - rect->angleDegrees()) : (-rect->angleDegrees());
-        return std::make_unique<RectangleEntity>(newC, rect->width(), rect->height(), newAngle);
-    }
-    case Entity::Kind::Polygon: {
-        const auto *poly = static_cast<const PolylineEntity*>(e);
-        QList<QPointF> pts;
-        pts.reserve(poly->points().size());
-        for (const QPointF &pt : poly->points())
-            pts.append(fp(pt));
-        return std::make_unique<PolylineEntity>(pts);
-    }
-    default:
-        return e->clone();  // Text, dimensions: just flip center position
-    }
-}
-
-/// Compute combined bounding-box center of all selected entities.
-static QPointF selectionCenter(Document *doc)
-{
-    QRectF bb;
-    for (const QUuid &id : doc->selectedIds()) {
-        int idx = doc->indexOf(id);
-        if (idx >= 0 && doc->entityAt(idx))
-            bb = bb.united(doc->entityAt(idx)->boundingRect());
-    }
-    return bb.center();
-}
-
 void GraphicsDesignPanel::applyFlipH()
 {
     Document *doc = m_canvas->document();
     if (doc->selectedIds().isEmpty()) return;
-    const QPointF pivot = selectionCenter(doc);
+    const QPointF pivot = EntityTransform::selectionCenter(doc);
     for (const QUuid &id : doc->selectedIds()) {
         int idx = doc->indexOf(id);
         if (idx < 0) continue;
         const Entity *e = doc->entityAt(idx);
         if (!e) continue;
-        applyProperties(idx, makeMirroredEntity(e, pivot, FlipAxis::H));
+        applyProperties(idx, EntityTransform::makeMirroredEntity(e, pivot, EntityTransform::FlipAxis::H));
     }
 }
 
@@ -2567,13 +2341,13 @@ void GraphicsDesignPanel::applyFlipV()
 {
     Document *doc = m_canvas->document();
     if (doc->selectedIds().isEmpty()) return;
-    const QPointF pivot = selectionCenter(doc);
+    const QPointF pivot = EntityTransform::selectionCenter(doc);
     for (const QUuid &id : doc->selectedIds()) {
         int idx = doc->indexOf(id);
         if (idx < 0) continue;
         const Entity *e = doc->entityAt(idx);
         if (!e) continue;
-        applyProperties(idx, makeMirroredEntity(e, pivot, FlipAxis::V));
+        applyProperties(idx, EntityTransform::makeMirroredEntity(e, pivot, EntityTransform::FlipAxis::V));
     }
 }
 
@@ -2619,13 +2393,13 @@ void GraphicsDesignPanel::applyScaleBy()
     double factor = m_scaleFactor->value();
     if (qFuzzyCompare(factor, 1.0)) return;
 
-    const QPointF pivot = selectionCenter(doc);
+    const QPointF pivot = EntityTransform::selectionCenter(doc);
     for (const QUuid &id : doc->selectedIds()) {
         int idx = doc->indexOf(id);
         if (idx < 0) continue;
         const Entity *e = doc->entityAt(idx);
         if (!e) continue;
-        applyProperties(idx, makeScaledEntity(e, pivot, factor));
+        applyProperties(idx, EntityTransform::makeScaledEntity(e, pivot, factor));
     }
     m_scaleFactor->setValue(1.0);
 }
@@ -2642,7 +2416,7 @@ void GraphicsDesignPanel::applyPolarArray()
     // Determine center: if both are 0, use selection center
     QPointF center(m_polarCenterX->value(), m_polarCenterY->value());
     if (qFuzzyIsNull(center.x()) && qFuzzyIsNull(center.y()))
-        center = selectionCenter(doc);
+        center = EntityTransform::selectionCenter(doc);
 
     // Collect originals
     std::vector<const Entity*> originals;
@@ -2664,7 +2438,7 @@ void GraphicsDesignPanel::applyPolarArray()
         for (const Entity *e : originals) {
             // Rotate each entity around shared center
             auto rotated = [&]() -> std::unique_ptr<Entity> {
-                auto rp = [&](const QPointF &pt) { return rotatePoint(pt, center, angle); };
+                auto rp = [&](const QPointF &pt) { return EntityTransform::rotatePoint(pt, center, angle); };
                 switch (e->kind()) {
                 case Entity::Kind::Line: {
                     const auto *ln = static_cast<const LineEntity*>(e);
@@ -2714,7 +2488,7 @@ void GraphicsDesignPanel::applyMirrorByAngle()
     // Reflect point P around a line through 'pivot' at angle 'axisRad'
     // Using reflection formula: P' = 2*(P·n)n - P  relative to pivot,
     // where n = (cos(axisRad), sin(axisRad)) is the axis direction unit vector.
-    const QPointF pivot = selectionCenter(doc);
+    const QPointF pivot = EntityTransform::selectionCenter(doc);
 
     auto reflectPt = [&](const QPointF &pt) -> QPointF {
         double dx = pt.x() - pivot.x();
@@ -2727,7 +2501,7 @@ void GraphicsDesignPanel::applyMirrorByAngle()
 
     // Reflect arc start angle: angle → 2*axisAngle − angle
     auto reflectAngle = [&](double angleDeg) -> double {
-        return normAngle(2.0 * axisDeg - angleDeg);
+        return EntityTransform::normAngle(2.0 * axisDeg - angleDeg);
     };
 
     for (const QUuid &id : doc->selectedIds()) {
@@ -2759,7 +2533,7 @@ void GraphicsDesignPanel::applyMirrorByAngle()
         }
         case Entity::Kind::Rectangle: {
             const auto *rect = static_cast<const RectangleEntity*>(e);
-            double newAngle = normAngle(2.0 * axisDeg - rect->angleDegrees());
+            double newAngle = EntityTransform::normAngle(2.0 * axisDeg - rect->angleDegrees());
             reflected = std::make_unique<RectangleEntity>(reflectPt(rect->center()),
                                                           rect->width(), rect->height(), newAngle);
             break;
@@ -2815,7 +2589,7 @@ void GraphicsDesignPanel::applyAlignCenterH()
     const auto &ids = doc->selectedIds();
     if (ids.size() < 2) return;
 
-    double cx = selectionCenter(doc).x();
+    double cx = EntityTransform::selectionCenter(doc).x();
     for (const QUuid &id : ids) {
         int idx = doc->indexOf(id);
         if (idx < 0) continue;
@@ -2885,7 +2659,7 @@ void GraphicsDesignPanel::applyAlignCenterV()
     const auto &ids = doc->selectedIds();
     if (ids.size() < 2) return;
 
-    double cy = selectionCenter(doc).y();
+    double cy = EntityTransform::selectionCenter(doc).y();
     for (const QUuid &id : ids) {
         int idx = doc->indexOf(id);
         if (idx < 0) continue;
