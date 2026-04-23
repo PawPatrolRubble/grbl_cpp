@@ -1,0 +1,32 @@
+{
+  "template": "bugfix",
+  "templateName": "Bug Fix",
+  "description": "the resizing of selected entity by dragging the resize handle didnt work any more, they used to work",
+  "branch": "gsd/bugfix/the-resizing-of-selected-entity-by-dragg",
+  "phases": [
+    {
+      "name": "triage",
+      "index": 0,
+      "status": "active"
+    },
+    {
+      "name": "fix",
+      "index": 1,
+      "status": "pending"
+    },
+    {
+      "name": "verify",
+      "index": 2,
+      "status": "pending"
+    },
+    {
+      "name": "ship",
+      "index": 3,
+      "status": "pending"
+    }
+  ],
+  "currentPhase": 0,
+  "startedAt": "2026-04-22T21:24:44.069Z",
+  "updatedAt": "2026-04-22T21:24:44.069Z",
+  "artifactDir": "D:\\projects\\github\\grbl_cpp\\.gsd\\workflows\\bugfixes\\260423-1-the-resizing-of-selected-entity-by-dragg"
+}

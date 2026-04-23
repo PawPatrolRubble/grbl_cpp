@@ -27,7 +27,7 @@ public:
     enum class ToolType {
         Select, Line, Polyline, Rectangle, Circle, Arc, Text,
         Dimension, AngularDimension, RadiusDimension,
-        Trim, Extend, Chamfer, Fillet, Offset
+        Trim, Extend, Chamfer, Fillet, Offset, Measure, Spline
     };
 
     /// Snap result (forwarded from CanvasSnap).
@@ -69,6 +69,12 @@ public:
     void setChamferDistance(double d);
     double offsetDistance() const;
     void setOffsetDistance(double d);
+    // Measure tool accessors (valid when Measure tool is active)
+    bool   hasMeasurement()   const;
+    double measureDistance()  const;
+    double measureDeltaX()    const;
+    double measureDeltaY()    const;
+    double measureAngle()     const;
     bool gcodeOverlayVisible() const { return m_showGcodeOverlay; }
     void setGcodeOverlayVisible(bool visible);
 
@@ -89,6 +95,7 @@ signals:
     void snapEnabledChanged(bool enabled);
     void gridSizeChanged(double size);
     void exportGcodeRequested();
+    void measurementChanged();  ///< Emitted on every mouse move when Measure tool is active.
 
 protected:
     void paintEvent(QPaintEvent *event) override;

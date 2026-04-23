@@ -51,6 +51,10 @@ public:
                      const QString& hoverHandleId,
                      const std::vector<Entity::EditHandle>& handles) const;
     void drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, bool snapActive) const;
+    void drawEntitySnapMarkers(QPainter& painter, const QPointF& mouseWorldPos,
+                                const QString& activeSnapLabel,
+                                const QPointF& activeSnapPos,
+                                bool snapActive) const;
     void drawCrosshair(QPainter& painter, const QPointF& mouseScreenPos,
                        bool mouseInWidget, const QSize& widgetSize) const;
 

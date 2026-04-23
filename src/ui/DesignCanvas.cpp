@@ -8,6 +8,8 @@
 
 #include "../grbl/GraphicsDesign/Tools/ChamferTool.h"
 #include "../grbl/GraphicsDesign/Tools/FilletTool.h"
+#include "../grbl/GraphicsDesign/Tools/MeasureTool.h"
+#include "../grbl/GraphicsDesign/Tools/SplineTool.h"
 #include "../grbl/GraphicsDesign/Tools/OffsetTool.h"
 #include "../grbl/GraphicsDesign/Tools/PolylineTool.h"
 #include "../grbl/GraphicsDesign/Tools/SelectTool.h"
@@ -111,6 +113,8 @@ ToolManager::Type DesignCanvas::toToolManagerType(ToolType t)
         case ToolType::Chamfer:   return ToolManager::Type::Chamfer;
         case ToolType::Fillet:    return ToolManager::Type::Fillet;
         case ToolType::Offset:    return ToolManager::Type::Offset;
+        case ToolType::Measure:   return ToolManager::Type::Measure;
+        case ToolType::Spline:    return ToolManager::Type::Spline;
     }
     return ToolManager::Type::Select;
 }
@@ -133,6 +137,9 @@ DesignCanvas::ToolType DesignCanvas::fromToolManagerType(ToolManager::Type t)
         case ToolManager::Type::Chamfer:   return ToolType::Chamfer;
         case ToolManager::Type::Fillet:    return ToolType::Fillet;
         case ToolManager::Type::Offset:    return ToolType::Offset;
+        case ToolManager::Type::Measure:   return ToolType::Measure;
+        case ToolManager::Type::Spline:    return ToolType::Spline;
+        case ToolManager::Type::Count:     break;
     }
     return ToolType::Select;
 }
@@ -298,6 +305,34 @@ void DesignCanvas::setOffsetDistance(double d)
         t->setOffsetDistance(d);
 }
 
+// --- Measure tool accessors ---
+
+bool DesignCanvas::hasMeasurement() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t && t->hasMeasurement();
+}
+double DesignCanvas::measureDistance() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t ? t->distance() : 0.0;
+}
+double DesignCanvas::measureDeltaX() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t ? t->deltaX() : 0.0;
+}
+double DesignCanvas::measureDeltaY() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t ? t->deltaY() : 0.0;
+}
+double DesignCanvas::measureAngle() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t ? t->angle() : 0.0;
+}
+
 void DesignCanvas::setGcodeOverlayVisible(bool visible)
 {
     if (m_showGcodeOverlay == visible) return;
@@ -427,6 +462,13 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     activeTool().paintPreview(painter);
 
     m_drawing.drawSnapIndicator(painter, m_snapResult.worldPos, m_snapResult.active);
+    
+    // Draw entity snap markers (AutoSnap preview)
+    const QPointF mouseWorldPos = toWorld(m_mouseScreenPos);
+    m_drawing.drawEntitySnapMarkers(painter, mouseWorldPos, 
+                                     m_snapResult.label, m_snapResult.worldPos, 
+                                     m_snapResult.active);
+    
     painter.restore();
 
     m_drawing.drawCrosshair(painter, m_mouseScreenPos, m_mouseInWidget, size());
@@ -512,6 +554,9 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
     }
     const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
     activeTool().mouseMove(snappedPos);
+
+    if (m_toolManagerActiveType == ToolManager::Type::Measure)
+        emit measurementChanged();
 
     emitToolStatus();
     scheduleUpdate();
@@ -636,6 +681,29 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
         }
     }
 
+    if (m_toolManagerActiveType == ToolManager::Type::Spline) {
+        auto* splineTool = m_toolManager.toolAs<SplineTool>(ToolManager::Type::Spline);
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            const int entityCountBefore = m_document.entityCount();
+            if (splineTool && splineTool->finish() && m_document.entityCount() > entityCountBefore) {
+                m_document.clearSelection();
+                if (Entity* created = m_document.entityAt(entityCountBefore))
+                    m_document.select(created->id());
+                setTool(ToolType::Select);
+            }
+            emitToolStatus();
+            scheduleUpdate();
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Backspace && splineTool && splineTool->removeLastPoint()) {
+            emitToolStatus();
+            scheduleUpdate();
+            event->accept();
+            return;
+        }
+    }
+
     if (event->matches(QKeySequence::Copy)) {
         m_clipboard.copy();
         event->accept();
@@ -693,6 +761,18 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
     }
     if (event->key() == Qt::Key_E && event->modifiers() == Qt::ControlModifier) {
         emit exportGcodeRequested();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_M && event->modifiers() == Qt::NoModifier) {
+        setTool(ToolType::Measure);
+        emitToolStatus();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_B && event->modifiers() == Qt::NoModifier) {
+        setTool(ToolType::Spline);
+        emitToolStatus();
         event->accept();
         return;
     }

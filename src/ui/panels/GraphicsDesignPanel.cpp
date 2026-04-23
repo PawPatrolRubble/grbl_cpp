@@ -15,6 +15,7 @@
 #include "../../grbl/GraphicsDesign/LinearDimensionEntity.h"
 #include "../../grbl/GraphicsDesign/AngularDimensionEntity.h"
 #include "../../grbl/GraphicsDesign/RadiusDimensionEntity.h"
+#include "../../grbl/GraphicsDesign/SplineEntity.h"
 #include "../../grbl/DxfParser.h"
 
 #include <cmath>
@@ -230,6 +231,28 @@ void GraphicsDesignPanel::setupUi()
     m_offsetDistLabel->setVisible(false);
     m_offsetDistSpin->setVisible(false);
 
+    // Measure readout group (shown only when Measure tool active)
+    m_measureGroup = new QGroupBox("Measurement");
+    m_measureGroup->setObjectName("measureGroup");
+    auto *mgLay = new QGridLayout(m_measureGroup);
+    mgLay->setContentsMargins(6, 4, 6, 4);
+    mgLay->setSpacing(3);
+    mgLay->addWidget(new QLabel("Dist:"),  0, 0);
+    m_measureDistLabel = new QLabel("—");
+    m_measureDistLabel->setStyleSheet("font-weight: bold; color: #ffc832;");
+    mgLay->addWidget(m_measureDistLabel, 0, 1);
+    mgLay->addWidget(new QLabel("Δx:"),   0, 2);
+    m_measureDxLabel = new QLabel("—");
+    mgLay->addWidget(m_measureDxLabel,   0, 3);
+    mgLay->addWidget(new QLabel("Δy:"),   1, 0);
+    m_measureDyLabel = new QLabel("—");
+    mgLay->addWidget(m_measureDyLabel,   1, 1);
+    mgLay->addWidget(new QLabel("Angle:"), 1, 2);
+    m_measureAngleLabel = new QLabel("—");
+    mgLay->addWidget(m_measureAngleLabel, 1, 3);
+    m_measureGroup->setVisible(false);
+    ctrlBar->addWidget(m_measureGroup);
+
     auto *gcodeOverlayBtn = new QToolButton();
     gcodeOverlayBtn->setText("Path");
     gcodeOverlayBtn->setCheckable(true);
@@ -289,8 +312,51 @@ void GraphicsDesignPanel::setupUi()
     actionRow->addWidget(m_clearBtn);
     rightLayout->addLayout(actionRow);
 
+    // ---- Floating Property Panel (overlay on canvas) ----
+    m_floatingPropertyPanel = new QWidget(m_canvas);
+    m_floatingPropertyPanel->setObjectName("floatingPropertyPanel");
+    m_floatingPropertyPanel->setStyleSheet(
+        "#floatingPropertyPanel {"
+        "  background: rgba(255, 255, 255, 230);"
+        "  border: 1px solid #c0c0c0;"
+        "  border-radius: 6px;"
+        "}"
+    );
+    auto *floatingLayout = new QVBoxLayout(m_floatingPropertyPanel);
+    floatingLayout->setContentsMargins(8, 8, 8, 8);
+    floatingLayout->setSpacing(6);
+
+    // Opacity control header
+    auto *opacityHeader = new QHBoxLayout();
+    auto *opacityLabel = new QLabel("Opacity:");
+    opacityLabel->setStyleSheet("font-size: 10px; color: #666;");
+    opacityHeader->addWidget(opacityLabel);
+    m_opacitySlider = new QSlider(Qt::Horizontal);
+    m_opacitySlider->setRange(30, 100);
+    m_opacitySlider->setValue(90);
+    m_opacitySlider->setMaximumWidth(80);
+    m_opacitySlider->setToolTip("Adjust property panel transparency");
+    connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int value) {
+        // Update opacity via stylesheet background alpha
+        int alpha = static_cast<int>(value * 2.55);  // Convert 0-100 to 0-255
+        m_floatingPropertyPanel->setStyleSheet(
+            QString("#floatingPropertyPanel {"
+                    "  background: rgba(255, 255, 255, %1);"
+                    "  border: 1px solid #c0c0c0;"
+                    "  border-radius: 6px;"
+                    "}").arg(alpha)
+        );
+    });
+    opacityHeader->addWidget(m_opacitySlider);
+    floatingLayout->addLayout(opacityHeader);
+
+    // Property stack (moved from right panel)
     m_propertyStack = new QStackedWidget();
-    rightLayout->addWidget(m_propertyStack);
+    m_propertyStack->setMaximumHeight(280);  // Allow more height for floating panel
+    floatingLayout->addWidget(m_propertyStack);
+
+    // Position at top-left of canvas (sizing happens after pages are built)
+    m_floatingPropertyPanel->setFixedWidth(220);
 
     buildEmptyPage();
     buildLinePage();
@@ -302,6 +368,7 @@ void GraphicsDesignPanel::setupUi()
     buildDimensionPage();
     buildAngularDimensionPage();
     buildRadiusDimensionPage();
+    buildSplinePage();
     buildTransformSection();
     rightLayout->addWidget(m_transformGroup);
     rightLayout->addWidget(new QLabel("Entities:"));
@@ -311,7 +378,12 @@ void GraphicsDesignPanel::setupUi()
     rightLayout->addWidget(m_entityList);
 
     buildLayerSection();
-    rightLayout->addWidget(m_layerGroup);
+    m_floatingPropertyPanel->layout()->addWidget(m_layerGroup);  // Add layers to floating panel
+
+    // Now size and position the floating panel after all content is added
+    m_floatingPropertyPanel->adjustSize();
+    m_floatingPropertyPanel->move(10, 10);  // Position at top-left with margin
+    m_floatingPropertyPanel->show();
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
@@ -458,9 +530,11 @@ QWidget* GraphicsDesignPanel::createToolToolBar()
         {"∟", "Chamfer tool (H)", "H"},
         {"⌒", "Fillet tool (F)", "F"},
         {"∥", "Offset tool (O)", "O"},
+        {"⌖", "Measure distance/angle (M)", "M"},
+        {"⌣", "Spline tool (B)", "B"},
     };
     
-    for (int i = 0; i < 15; ++i) {
+    for (int i = 0; i < 17; ++i) {
         auto *btn = new QToolButton();
         btn->setText(tools[i].icon);
         btn->setToolTip(QString("%1\n%2").arg(tools[i].tooltip, tools[i].shortcut));
@@ -1020,6 +1094,47 @@ void GraphicsDesignPanel::applyRadiusDimensionProperties()
     applyProperties(idx, std::move(newE));
 }
 
+void GraphicsDesignPanel::buildSplinePage()
+{
+    auto *page = new QWidget();
+    auto *layout = new QGridLayout(page);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+
+    m_splinePointCountLabel = new QLabel("Points: 0");
+    layout->addWidget(m_splinePointCountLabel, 0, 0, 1, 2);
+
+    layout->addWidget(new QLabel("Steps/segment:"), 1, 0);
+    m_splineStepsSpin = new QSpinBox();
+    m_splineStepsSpin->setRange(4, 100);
+    m_splineStepsSpin->setValue(20);
+    layout->addWidget(m_splineStepsSpin, 1, 1);
+
+    auto *applyBtn = new QPushButton("Apply");
+    layout->addWidget(applyBtn, 2, 0, 1, 2);
+
+    connect(applyBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applySplineProperties);
+
+    layout->setRowStretch(3, 1);
+    m_propertyStack->addWidget(page);
+}
+
+void GraphicsDesignPanel::applySplineProperties()
+{
+    if (m_updatingUi) return;
+    const Entity *entity = m_canvas->selectedEntity();
+    if (!entity || entity->kind() != Entity::Kind::Spline) return;
+
+    Document *doc = m_canvas->document();
+    int idx = doc->indexOf(entity->id());
+    if (idx < 0) return;
+
+    const auto *spline = static_cast<const SplineEntity*>(entity);
+    auto newE = spline->clone();
+    static_cast<SplineEntity*>(newE.get())->setStepsPerSegment(m_splineStepsSpin->value());
+    applyProperties(idx, std::move(newE));
+}
+
 void GraphicsDesignPanel::buildTransformSection()
 {
     m_transformGroup = new QGroupBox("Transform");
@@ -1150,6 +1265,49 @@ void GraphicsDesignPanel::buildTransformSection()
     m_polarCenterY->setToolTip("Polar array center Y (0 = selection center)");
     layout->addWidget(m_polarCenterY, 7, 2);
 
+    // Row 8: Mirror by axis angle
+    layout->addWidget(new QLabel("Mirror°:"), 8, 0);
+    m_mirrorAxisAngle = new QDoubleSpinBox();
+    m_mirrorAxisAngle->setRange(0.0, 179.9);
+    m_mirrorAxisAngle->setValue(0.0);
+    m_mirrorAxisAngle->setDecimals(1);
+    m_mirrorAxisAngle->setSuffix("°");
+    m_mirrorAxisAngle->setToolTip("Mirror axis angle (0°=horizontal, 90°=vertical)");
+    layout->addWidget(m_mirrorAxisAngle, 8, 1, 1, 2);
+    auto *mirrorAxisBtn = new QPushButton("Apply");
+    connect(mirrorAxisBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyMirrorByAngle);
+    layout->addWidget(mirrorAxisBtn, 8, 3);
+
+    // Row 9: Align H
+    layout->addWidget(new QLabel("Align H:"), 9, 0);
+    auto *alignLBtn = new QPushButton("⊣ Left");
+    alignLBtn->setToolTip("Align left edges");
+    connect(alignLBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignLeft);
+    layout->addWidget(alignLBtn, 9, 1);
+    auto *alignCHBtn = new QPushButton("⊥ Ctr");
+    alignCHBtn->setToolTip("Center horizontally");
+    connect(alignCHBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignCenterH);
+    layout->addWidget(alignCHBtn, 9, 2);
+    auto *alignRBtn = new QPushButton("⊢ Right");
+    alignRBtn->setToolTip("Align right edges");
+    connect(alignRBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignRight);
+    layout->addWidget(alignRBtn, 9, 3);
+
+    // Row 10: Align V
+    layout->addWidget(new QLabel("Align V:"), 10, 0);
+    auto *alignTBtn = new QPushButton("⊤ Top");
+    alignTBtn->setToolTip("Align top edges");
+    connect(alignTBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignTop);
+    layout->addWidget(alignTBtn, 10, 1);
+    auto *alignCVBtn = new QPushButton("⊠ Mid");
+    alignCVBtn->setToolTip("Center vertically");
+    connect(alignCVBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignCenterV);
+    layout->addWidget(alignCVBtn, 10, 2);
+    auto *alignBBtn = new QPushButton("⊥ Bot");
+    alignBBtn->setToolTip("Align bottom edges");
+    connect(alignBBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::applyAlignBottom);
+    layout->addWidget(alignBBtn, 10, 3);
+
     m_transformGroup->setVisible(false);
 }
 
@@ -1228,6 +1386,8 @@ void GraphicsDesignPanel::setupConnections()
             m_canvas, &DesignCanvas::setChamferDistance);
     connect(m_offsetDistSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             m_canvas, &DesignCanvas::setOffsetDistance);
+    connect(m_canvas, &DesignCanvas::measurementChanged,
+            this, &GraphicsDesignPanel::onMeasurementChanged);
     connect(m_canvas, &DesignCanvas::exportGcodeRequested, this, &GraphicsDesignPanel::onExportGcodeClicked);
 
     // Undo/Redo buttons
@@ -1374,18 +1534,20 @@ void GraphicsDesignPanel::onToolChanged(int index)
     bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
     bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
     bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
+    bool isMeasure = (tool == DesignCanvas::ToolType::Measure);
     m_filletRadiusLabel->setVisible(isFillet);
     m_filletRadiusSpin->setVisible(isFillet);
     m_chamferDistLabel->setVisible(isChamfer);
     m_chamferDistSpin->setVisible(isChamfer);
     m_offsetDistLabel->setVisible(isOffset);
     m_offsetDistSpin->setVisible(isOffset);
+    m_measureGroup->setVisible(isMeasure);
 }
 
 void GraphicsDesignPanel::onToolButtonClicked(int toolIndex)
 {
     // Update all button checked states
-    for (int i = 0; i < 15; ++i) {
+    for (int i = 0; i < 16; ++i) {
         m_toolButtons[i]->setChecked(i == toolIndex);
     }
     
@@ -1399,7 +1561,7 @@ void GraphicsDesignPanel::onCanvasToolChanged()
     int index = static_cast<int>(m_canvas->currentToolType());
     
     // Update button checked state
-    for (int i = 0; i < 15; ++i) {
+    for (int i = 0; i < 16; ++i) {
         m_toolButtons[i]->setChecked(i == index);
     }
     
@@ -1408,12 +1570,14 @@ void GraphicsDesignPanel::onCanvasToolChanged()
     bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
     bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
     bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
+    bool isMeasure = (tool == DesignCanvas::ToolType::Measure);
     m_filletRadiusLabel->setVisible(isFillet);
     m_filletRadiusSpin->setVisible(isFillet);
     m_chamferDistLabel->setVisible(isChamfer);
     m_chamferDistSpin->setVisible(isChamfer);
     m_offsetDistLabel->setVisible(isOffset);
     m_offsetDistSpin->setVisible(isOffset);
+    m_measureGroup->setVisible(isMeasure);
 }
 
 void GraphicsDesignPanel::onSelectionChanged()
@@ -1623,6 +1787,16 @@ void GraphicsDesignPanel::onSelectionChanged()
             m_rdimDiameter->setChecked(rdim->isDiameter());
         }
         m_propertyStack->setCurrentIndex(9);
+        break;
+    }
+    case Entity::Kind::Spline: {
+        const auto *spline = static_cast<const SplineEntity*>(entity);
+        {
+            QSignalBlocker b1(m_splineStepsSpin);
+            m_splinePointCountLabel->setText(QString("Points: %1").arg(spline->controlPoints().size()));
+            m_splineStepsSpin->setValue(spline->stepsPerSegment());
+        }
+        m_propertyStack->setCurrentIndex(10);
         break;
     }
     default:
@@ -2629,6 +2803,250 @@ void GraphicsDesignPanel::applyPolarArray()
             doc->commandStack()->execute(std::make_unique<AddEntityCommand>(std::move(rotated)));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mirror by axis angle
+// ---------------------------------------------------------------------------
+
+void GraphicsDesignPanel::applyMirrorByAngle()
+{
+    Document *doc = m_canvas->document();
+    if (doc->selectedIds().isEmpty()) return;
+
+    double axisDeg = m_mirrorAxisAngle->value();  // axis angle from horizontal
+    double axisRad = axisDeg * M_PI / 180.0;
+
+    // Reflect point P around a line through 'pivot' at angle 'axisRad'
+    // Using reflection formula: P' = 2*(P·n)n - P  relative to pivot,
+    // where n = (cos(axisRad), sin(axisRad)) is the axis direction unit vector.
+    const QPointF pivot = selectionCenter(doc);
+
+    auto reflectPt = [&](const QPointF &pt) -> QPointF {
+        double dx = pt.x() - pivot.x();
+        double dy = pt.y() - pivot.y();
+        double ca = std::cos(axisRad), sa = std::sin(axisRad);
+        double dot = dx * ca + dy * sa;
+        return QPointF(pivot.x() + 2.0 * dot * ca - dx,
+                       pivot.y() + 2.0 * dot * sa - dy);
+    };
+
+    // Reflect arc start angle: angle → 2*axisAngle − angle
+    auto reflectAngle = [&](double angleDeg) -> double {
+        return normAngle(2.0 * axisDeg - angleDeg);
+    };
+
+    for (const QUuid &id : doc->selectedIds()) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+
+        std::unique_ptr<Entity> reflected;
+        switch (e->kind()) {
+        case Entity::Kind::Line: {
+            const auto *ln = static_cast<const LineEntity*>(e);
+            reflected = std::make_unique<LineEntity>(reflectPt(ln->startPoint()),
+                                                     reflectPt(ln->endPoint()));
+            break;
+        }
+        case Entity::Kind::Circle: {
+            const auto *c = static_cast<const CircleEntity*>(e);
+            reflected = std::make_unique<CircleEntity>(reflectPt(c->center()), c->radius());
+            break;
+        }
+        case Entity::Kind::Arc: {
+            const auto *arc = static_cast<const ArcEntity*>(e);
+            QPointF newC = reflectPt(arc->center());
+            double newStart = reflectAngle(arc->startAngleDegrees() + arc->sweepAngleDegrees());
+            reflected = std::make_unique<ArcEntity>(newC, arc->radius(),
+                                                    newStart, arc->sweepAngleDegrees());
+            break;
+        }
+        case Entity::Kind::Rectangle: {
+            const auto *rect = static_cast<const RectangleEntity*>(e);
+            double newAngle = normAngle(2.0 * axisDeg - rect->angleDegrees());
+            reflected = std::make_unique<RectangleEntity>(reflectPt(rect->center()),
+                                                          rect->width(), rect->height(), newAngle);
+            break;
+        }
+        case Entity::Kind::Polygon: {
+            const auto *poly = static_cast<const PolylineEntity*>(e);
+            QList<QPointF> pts;
+            pts.reserve(poly->points().size());
+            for (const QPointF &pt : poly->points()) pts.append(reflectPt(pt));
+            reflected = std::make_unique<PolylineEntity>(pts);
+            break;
+        }
+        default:
+            reflected = e->clone();
+            break;
+        }
+        applyProperties(idx, std::move(reflected));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Align entities
+// ---------------------------------------------------------------------------
+
+void GraphicsDesignPanel::applyAlignLeft()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double target = std::numeric_limits<double>::max();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            target = std::min(target, doc->entityAt(idx)->boundingRect().left());
+    }
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = target - e->boundingRect().left();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(shift, 0.0));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+void GraphicsDesignPanel::applyAlignCenterH()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double cx = selectionCenter(doc).x();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = cx - e->boundingRect().center().x();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(shift, 0.0));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+void GraphicsDesignPanel::applyAlignRight()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double target = -std::numeric_limits<double>::max();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            target = std::max(target, doc->entityAt(idx)->boundingRect().right());
+    }
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = target - e->boundingRect().right();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(shift, 0.0));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+void GraphicsDesignPanel::applyAlignTop()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double target = -std::numeric_limits<double>::max();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            target = std::max(target, doc->entityAt(idx)->boundingRect().top());
+    }
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = target - e->boundingRect().top();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(0.0, shift));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+void GraphicsDesignPanel::applyAlignCenterV()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double cy = selectionCenter(doc).y();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = cy - e->boundingRect().center().y();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(0.0, shift));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+void GraphicsDesignPanel::applyAlignBottom()
+{
+    Document *doc = m_canvas->document();
+    const auto &ids = doc->selectedIds();
+    if (ids.size() < 2) return;
+
+    double target = std::numeric_limits<double>::max();
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx >= 0 && doc->entityAt(idx))
+            target = std::min(target, doc->entityAt(idx)->boundingRect().bottom());
+    }
+    for (const QUuid &id : ids) {
+        int idx = doc->indexOf(id);
+        if (idx < 0) continue;
+        const Entity *e = doc->entityAt(idx);
+        if (!e) continue;
+        double shift = target - e->boundingRect().bottom();
+        if (qFuzzyIsNull(shift)) continue;
+        auto copy = e->clone();
+        copy->translate(QPointF(0.0, shift));
+        applyProperties(idx, std::move(copy));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Measure tool readout
+// ---------------------------------------------------------------------------
+
+void GraphicsDesignPanel::onMeasurementChanged()
+{
+    if (!m_canvas->hasMeasurement()) {
+        m_measureDistLabel->setText("—");
+        m_measureDxLabel->setText("—");
+        m_measureDyLabel->setText("—");
+        m_measureAngleLabel->setText("—");
+        return;
+    }
+    m_measureDistLabel->setText(QString::number(m_canvas->measureDistance(), 'f', 3) + " mm");
+    m_measureDxLabel->setText(QString::number(m_canvas->measureDeltaX(), 'f', 3));
+    m_measureDyLabel->setText(QString::number(m_canvas->measureDeltaY(), 'f', 3));
+    m_measureAngleLabel->setText(QString::number(m_canvas->measureAngle(), 'f', 2) + "°");
 }
 
 // ---------------------------------------------------------------------------

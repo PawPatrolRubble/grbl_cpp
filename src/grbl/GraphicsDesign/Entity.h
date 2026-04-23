@@ -25,7 +25,8 @@ public:
         Text,
         LinearDimension,
         AngularDimension,
-        RadiusDimension
+        RadiusDimension,
+        Spline
     };
 
     enum class HandleRole {

@@ -10,9 +10,12 @@
 #include "../../grbl/GraphicsDesign/Tools/AngularDimensionTool.h"
 #include "../../grbl/GraphicsDesign/Tools/RadiusDimensionTool.h"
 #include "../../grbl/GraphicsDesign/Tools/TrimExtendTool.h"
+#include "../../grbl/GraphicsDesign/Tools/TrimTool.h"
 #include "../../grbl/GraphicsDesign/Tools/ChamferTool.h"
 #include "../../grbl/GraphicsDesign/Tools/FilletTool.h"
 #include "../../grbl/GraphicsDesign/Tools/OffsetTool.h"
+#include "../../grbl/GraphicsDesign/Tools/MeasureTool.h"
+#include "../../grbl/GraphicsDesign/Tools/SplineTool.h"
 
 #include <stdexcept>
 
@@ -29,11 +32,13 @@ ToolManager::ToolManager(Document& document, CommandStack& commandStack)
     m_tools[static_cast<int>(Type::Dimension)] = std::make_unique<DimensionTool>(document, commandStack);
     m_tools[static_cast<int>(Type::AngularDimension)] = std::make_unique<AngularDimensionTool>(document, commandStack);
     m_tools[static_cast<int>(Type::RadiusDimension)] = std::make_unique<RadiusDimensionTool>(document, commandStack);
-    m_tools[static_cast<int>(Type::Trim)] = std::make_unique<TrimExtendTool>(document, commandStack, TrimExtendTool::Mode::Trim);
+    m_tools[static_cast<int>(Type::Trim)] = std::make_unique<TrimTool>(document, commandStack);
     m_tools[static_cast<int>(Type::Extend)] = std::make_unique<TrimExtendTool>(document, commandStack, TrimExtendTool::Mode::Extend);
     m_tools[static_cast<int>(Type::Chamfer)] = std::make_unique<ChamferTool>(document, commandStack);
     m_tools[static_cast<int>(Type::Fillet)] = std::make_unique<FilletTool>(document, commandStack);
-    m_tools[static_cast<int>(Type::Offset)] = std::make_unique<OffsetTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Offset)]  = std::make_unique<OffsetTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Measure)] = std::make_unique<MeasureTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Spline)]  = std::make_unique<SplineTool>(document, commandStack);
 }
 
 void ToolManager::registerTool(Type type, std::unique_ptr<Tool> tool)

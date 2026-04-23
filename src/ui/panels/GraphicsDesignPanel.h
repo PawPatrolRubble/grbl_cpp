@@ -13,6 +13,7 @@ class QToolButton;
 class QLabel;
 class QDoubleSpinBox;
 class QSpinBox;
+class QSlider;
 class QStackedWidget;
 class QLineEdit;
 class QListWidget;
@@ -69,6 +70,7 @@ private slots:
     void applyDimensionProperties();
     void applyAngularDimensionProperties();
     void applyRadiusDimensionProperties();
+    void applySplineProperties();
     void applyMoveBy();
     void applyRotateBy();
     void applyFlipH();
@@ -76,6 +78,14 @@ private slots:
     void applyRectArray();
     void applyScaleBy();
     void applyPolarArray();
+    void applyMirrorByAngle();
+    void applyAlignLeft();
+    void applyAlignCenterH();
+    void applyAlignRight();
+    void applyAlignTop();
+    void applyAlignCenterV();
+    void applyAlignBottom();
+    void onMeasurementChanged();
     void buildLayerSection();
     void refreshLayerList();
     void onLayerItemChanged(QListWidgetItem *item);
@@ -91,7 +101,9 @@ private:
 
     DesignCanvas *m_canvas;
     QWidget *m_toolBar;                    // vertical icon toolbar
-    QToolButton *m_toolButtons[15];        // one per tool type
+    QToolButton *m_toolButtons[17];        // one per tool type
+    QWidget *m_floatingPropertyPanel = nullptr;  // floating property panel overlay on canvas
+    QSlider *m_opacitySlider = nullptr;    // opacity control for property panel
     QComboBox *m_toolModeCombo;
 
     QWidget* createToolToolBar();
@@ -109,6 +121,12 @@ private:
     QDoubleSpinBox *m_chamferDistSpin    = nullptr;
     QLabel         *m_offsetDistLabel    = nullptr;
     QDoubleSpinBox *m_offsetDistSpin     = nullptr;
+    // Measure tool readout
+    QGroupBox      *m_measureGroup       = nullptr;
+    QLabel         *m_measureDistLabel   = nullptr;
+    QLabel         *m_measureDxLabel     = nullptr;
+    QLabel         *m_measureDyLabel     = nullptr;
+    QLabel         *m_measureAngleLabel  = nullptr;
     QLabel *m_lineCountLabel;
     QLabel *m_statusLabel;
     QDoubleSpinBox *m_feedSpeedSpinBox;
@@ -192,6 +210,10 @@ private:
     QDoubleSpinBox *m_rdimAngle = nullptr;
     QCheckBox     *m_rdimDiameter = nullptr;
 
+    // Spline property widgets
+    QLabel         *m_splinePointCountLabel = nullptr;
+    QSpinBox       *m_splineStepsSpin       = nullptr;
+
     // Transform section (move / rotate, always visible when entity is selected)
     QGroupBox *m_transformGroup = nullptr;
     QDoubleSpinBox *m_moveDx = nullptr;
@@ -207,6 +229,8 @@ private:
     QDoubleSpinBox *m_polarCenterY  = nullptr;
     QSpinBox       *m_polarCount    = nullptr;
     QDoubleSpinBox *m_polarSpan     = nullptr;
+    // Mirror by axis angle
+    QDoubleSpinBox *m_mirrorAxisAngle = nullptr;
 
     // Layer management
     QGroupBox *m_layerGroup = nullptr;
@@ -228,6 +252,7 @@ private:
     void buildDimensionPage();
     void buildAngularDimensionPage();
     void buildRadiusDimensionPage();
+    void buildSplinePage();
     void buildTransformSection();
     void refreshEntityList();
     void onEntityItemChanged(QListWidgetItem *item);

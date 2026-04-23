@@ -20,7 +20,7 @@ public:
     enum class Type {
         Select, Line, Polyline, Rectangle, Circle, Arc, Text,
         Dimension, AngularDimension, RadiusDimension,
-        Trim, Extend, Chamfer, Fillet, Offset, Count
+        Trim, Extend, Chamfer, Fillet, Offset, Measure, Spline, Count
     };
 
     explicit ToolManager(Document& document, CommandStack& commandStack);

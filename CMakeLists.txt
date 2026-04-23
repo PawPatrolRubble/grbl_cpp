@@ -60,6 +60,7 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/ShapeModel.cpp
     src/grbl/GraphicsDesign/LineEntity.cpp
     src/grbl/GraphicsDesign/PolylineEntity.cpp
+    src/grbl/GraphicsDesign/SplineEntity.cpp
     src/grbl/GraphicsDesign/LinearDimensionEntity.cpp
     src/grbl/GraphicsDesign/AngularDimensionEntity.cpp
     src/grbl/GraphicsDesign/RadiusDimensionEntity.cpp
@@ -78,9 +79,12 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/Tools/AngularDimensionTool.cpp
     src/grbl/GraphicsDesign/Tools/RadiusDimensionTool.cpp
     src/grbl/GraphicsDesign/Tools/TrimExtendTool.cpp
+    src/grbl/GraphicsDesign/Tools/TrimTool.cpp
     src/grbl/GraphicsDesign/Tools/ChamferTool.cpp
     src/grbl/GraphicsDesign/Tools/FilletTool.cpp
     src/grbl/GraphicsDesign/Tools/OffsetTool.cpp
+    src/grbl/GraphicsDesign/Tools/MeasureTool.cpp
+    src/grbl/GraphicsDesign/Tools/SplineTool.cpp
     src/grbl/GraphicsDesign/Tools/RectangleTool.cpp
     src/grbl/GraphicsDesign/Tools/CircleTool.cpp
     src/grbl/GraphicsDesign/Tools/ArcTool.cpp

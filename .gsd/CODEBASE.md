@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-22T21:12:42Z | Files: 204 | Described: 0/204
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-22T21:12:42Z","fingerprint":"8ec1642790ea6b1320d0aaca438c6654da5acf18","fileCount":204,"truncated":false} -->
+Generated: 2026-04-23T04:38:49Z | Files: 213 | Described: 0/213
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-23T04:38:49Z","fingerprint":"e47257ab28770ffd2ce8a7081f4daaddaf0fa0c0","fileCount":213,"truncated":false} -->
 
 ### (root)/
 - `.gitignore`
@@ -122,6 +122,17 @@ Generated: 2026-04-22T21:12:42Z | Files: 204 | Described: 0/204
 
 ### src/ui/
 - *(27 files: 12 .cpp, 12 .h, 3 .ui)*
+
+### src/ui/canvas/
+- `src/ui/canvas/CanvasDrawing.cpp`
+- `src/ui/canvas/CanvasDrawing.h`
+- `src/ui/canvas/CanvasSnap.cpp`
+- `src/ui/canvas/CanvasSnap.h`
+- `src/ui/canvas/CoordinateTransform.h`
+- `src/ui/canvas/EntityClipboard.cpp`
+- `src/ui/canvas/EntityClipboard.h`
+- `src/ui/canvas/ToolManager.cpp`
+- `src/ui/canvas/ToolManager.h`
 
 ### src/ui/pages/
 - `src/ui/pages/GraphicsDesignPage.cpp`

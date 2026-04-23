@@ -465,6 +465,86 @@ void CanvasDrawing::drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, b
 }
 
 // ============================================================================
+// Entity Snap Markers (AutoSnap preview)
+// ============================================================================
+
+void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mouseWorldPos,
+                                           const QString& activeSnapLabel,
+                                           const QPointF& activeSnapPos,
+                                           bool snapActive) const
+{
+    // Threshold in screen pixels converted to world units
+    const double screenThreshold = 50.0;  // pixels - how close mouse must be to entity to show markers
+    const double worldThreshold = screenThreshold / m_transforms.zoom();
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    for (int i = 0; i < m_document.entityCount(); ++i) {
+        Entity* entity = m_document.entityAt(i);
+        if (!entity || !entity->isEnabled()) continue;
+
+        // Check if mouse is near entity's bounding rect (dilated by threshold)
+        QRectF bounds = entity->boundingRect();
+        QRectF dilatedBounds(bounds.x() - worldThreshold, bounds.y() - worldThreshold,
+                             bounds.width() + 2 * worldThreshold,
+                             bounds.height() + 2 * worldThreshold);
+
+        if (!dilatedBounds.contains(mouseWorldPos)) continue;
+
+        // Mouse is near this entity - draw markers at its snap points
+        const auto snapPoints = entity->snapPoints();
+        const auto kind = entity->kind();
+
+        for (std::size_t idx = 0; idx < snapPoints.size(); ++idx) {
+            const QPointF& pt = snapPoints[idx];
+            
+            // Determine snap type label for this point
+            QString label;
+            if (kind == Entity::Kind::Line) {
+                label = idx < 2 ? "Endpoint" : "Midpoint";
+            } else if (kind == Entity::Kind::Rectangle) {
+                label = idx < 4 ? "Corner" : "Center";
+            } else if (kind == Entity::Kind::Circle) {
+                label = idx == 0 ? "Center" : "Quadrant";
+            } else if (kind == Entity::Kind::Arc) {
+                label = idx == 0 ? "Center" : (idx == 1 ? "Start" : "End");
+            } else {
+                label = "Point";
+            }
+
+            // Determine if this is the active snap point
+            const bool isActive = snapActive && 
+                                  (pt == activeSnapPos || 
+                                   (activeSnapLabel == label && QLineF(pt, activeSnapPos).length() < 0.01));
+
+            // Marker size based on type and active state
+            const double markerSize = isActive ? (6.0 / m_transforms.zoom()) : (4.0 / m_transforms.zoom());
+
+            // Draw marker
+            if (isActive) {
+                // Active snap point - highlighted (blue)
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(59, 130, 246));  // Blue
+                painter.drawEllipse(pt, markerSize, markerSize);
+
+                // Draw a ring around active marker
+                painter.setPen(QPen(QColor(59, 130, 246, 180), 1.5 / m_transforms.zoom()));
+                painter.setBrush(Qt::NoBrush);
+                painter.drawEllipse(pt, markerSize + 2.0 / m_transforms.zoom(), markerSize + 2.0 / m_transforms.zoom());
+            } else {
+                // Candidate snap point - gray
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(120, 120, 120, 180));  // Gray semi-transparent
+                painter.drawEllipse(pt, markerSize, markerSize);
+            }
+        }
+    }
+
+    painter.restore();
+}
+
+// ============================================================================
 // Crosshair
 // ============================================================================
 
