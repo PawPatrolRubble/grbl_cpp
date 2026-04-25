@@ -124,7 +124,10 @@ std::unique_ptr<Entity> ArcEntity::withDraggedHandle(const QString& handleId, co
 
 std::vector<QPointF> ArcEntity::snapPoints() const
 {
-    return {m_center, startPoint(), endPoint()};
+    // Center + start + end + midpoint on arc
+    const double midAngle = m_startAngleDegrees + m_sweepAngleDegrees * 0.5;
+    const QPointF midPoint = pointOnCircle(m_center, m_radius, midAngle);
+    return {m_center, startPoint(), endPoint(), midPoint};
 }
 
 QList<GcodeMove> ArcEntity::toGcodeMoves(double zSafe, double zCut, double feedRate) const

@@ -72,11 +72,24 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
             if (kind == Entity::Kind::Line) {
                 label = pointIndex < 2 ? "Endpoint" : "Midpoint";
             } else if (kind == Entity::Kind::Rectangle) {
-                label = pointIndex < 4 ? "Corner" : "Center";
+                // Indices: 0-3 corners, 4 center, 5-8 edge midpoints
+                if (pointIndex < 4) label = "Corner";
+                else if (pointIndex == 4) label = "Center";
+                else label = "Midpoint";
             } else if (kind == Entity::Kind::Circle) {
                 label = pointIndex == 0 ? "Center" : "Quadrant";
             } else if (kind == Entity::Kind::Arc) {
-                label = pointIndex == 0 ? "Center" : (pointIndex == 1 ? "Start" : "End");
+                // Indices: 0 center, 1 start, 2 end, 3 midpoint
+                if (pointIndex == 0) label = "Center";
+                else if (pointIndex == 1) label = "Start";
+                else if (pointIndex == 2) label = "End";
+                else label = "Midpoint";
+            } else if (kind == Entity::Kind::Polygon) {
+                // Polyline: vertices first, then segment midpoints
+                // Total size S = vertices V + (V-1) = 2V - 1, so V = (S+1)/2
+                const std::size_t total = points.size();
+                const std::size_t vertexCount = (total + 1) / 2;
+                label = pointIndex < vertexCount ? "Endpoint" : "Midpoint";
             }
             tryCandidate(points[pointIndex], label);
         }

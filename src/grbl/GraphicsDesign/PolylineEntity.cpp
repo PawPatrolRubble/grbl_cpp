@@ -214,8 +214,13 @@ std::unique_ptr<Entity> PolylineEntity::withDraggedHandle(const QString& handleI
 std::vector<QPointF> PolylineEntity::snapPoints() const
 {
     std::vector<QPointF> snaps;
+    // Add all vertices
     for (const auto& pt : m_points)
         snaps.push_back(pt);
+    // Add segment midpoints
+    for (int i = 0; i + 1 < m_points.size(); ++i) {
+        snaps.push_back((m_points[i] + m_points[i + 1]) * 0.5);
+    }
     return snaps;
 }
 

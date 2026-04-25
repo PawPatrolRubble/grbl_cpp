@@ -155,7 +155,12 @@ std::unique_ptr<Entity> RectangleEntity::withDraggedHandle(const QString& handle
 std::vector<QPointF> RectangleEntity::snapPoints() const
 {
     const auto c = corners();
-    return {c[0], c[1], c[2], c[3], m_center};
+    // 4 corners + center + 4 edge midpoints
+    const QPointF topMid    = (c[0] + c[1]) * 0.5;
+    const QPointF rightMid  = (c[1] + c[2]) * 0.5;
+    const QPointF bottomMid = (c[2] + c[3]) * 0.5;
+    const QPointF leftMid   = (c[3] + c[0]) * 0.5;
+    return {c[0], c[1], c[2], c[3], m_center, topMid, rightMid, bottomMid, leftMid};
 }
 
 QList<GcodeMove> RectangleEntity::toGcodeMoves(double zSafe, double zCut, double feedRate) const
