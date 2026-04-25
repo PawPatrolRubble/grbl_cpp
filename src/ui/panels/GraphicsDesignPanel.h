@@ -19,11 +19,13 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPlainTextEdit;
-class QTableWidget;
 class QGroupBox;
 class LineNumberPlainTextEdit;
 class Entity;
 class ToolBarWidget;
+class TransformPanel;
+class PolylinePage;
+class PropertyPage;
 
 class GraphicsDesignPanel : public QWidget
 {
@@ -60,26 +62,9 @@ private slots:
     void onExportGcodeClicked();
     void onImportImageClicked();
     void onImportDxfClicked();
-    void applyLineProperties();
-    void applyRectProperties();
-    void applyCircleProperties();
-    void applyArcProperties();
     void applyTextProperties();
-    void applyPolylineProperties();
-    void polylineInsertVertex();
-    void polylineDeleteVertex();
-    void applyDimensionProperties();
-    void applyAngularDimensionProperties();
-    void applyRadiusDimensionProperties();
-    void applySplineProperties();
-    void applyMoveBy();
-    void applyRotateBy();
     void applyFlipH();
     void applyFlipV();
-    void applyRectArray();
-    void applyScaleBy();
-    void applyPolarArray();
-    void applyMirrorByAngle();
     void applyAlignLeft();
     void applyAlignCenterH();
     void applyAlignRight();
@@ -103,9 +88,9 @@ private:
     QStringList m_generatedLines;
 
     DesignCanvas *m_canvas;
-    ToolBarWidget *m_toolBar;                // vertical icon toolbar (extracted component)
-    QWidget *m_floatingPropertyPanel = nullptr;  // floating property panel overlay on canvas
-    QSlider *m_opacitySlider = nullptr;    // opacity control for property panel
+    ToolBarWidget *m_toolBar;
+    QWidget *m_floatingPropertyPanel = nullptr;
+    QSlider *m_opacitySlider = nullptr;
     QComboBox *m_toolModeCombo;
 
     QPushButton *m_deleteBtn;
@@ -122,7 +107,6 @@ private:
     QDoubleSpinBox *m_chamferDistSpin    = nullptr;
     QLabel         *m_offsetDistLabel    = nullptr;
     QDoubleSpinBox *m_offsetDistSpin     = nullptr;
-    // Measure tool readout
     QGroupBox      *m_measureGroup       = nullptr;
     QLabel         *m_measureDistLabel   = nullptr;
     QLabel         *m_measureDxLabel     = nullptr;
@@ -140,29 +124,7 @@ private:
     QStackedWidget *m_propertyStack;
     bool m_updatingUi = false;
 
-    QLabel *m_emptyPageLabel;
-
-    QDoubleSpinBox *m_lineCenterX;
-    QDoubleSpinBox *m_lineCenterY;
-    QDoubleSpinBox *m_lineLength;
-    QDoubleSpinBox *m_lineAngle;
-
-    QDoubleSpinBox *m_rectCenterX;
-    QDoubleSpinBox *m_rectCenterY;
-    QDoubleSpinBox *m_rectWidth;
-    QDoubleSpinBox *m_rectHeight;
-    QDoubleSpinBox *m_rectAngle;
-
-    QDoubleSpinBox *m_circleCenterX;
-    QDoubleSpinBox *m_circleCenterY;
-    QDoubleSpinBox *m_circleRadius;
-
-    QDoubleSpinBox *m_arcCenterX;
-    QDoubleSpinBox *m_arcCenterY;
-    QDoubleSpinBox *m_arcRadius;
-    QDoubleSpinBox *m_arcStartAngle;
-    QDoubleSpinBox *m_arcSweepAngle;
-
+    // Text property widgets (no TextPage extracted yet â€?kept inline)
     QDoubleSpinBox *m_textPosX;
     QDoubleSpinBox *m_textPosY;
     QPlainTextEdit *m_textEdit;
@@ -183,55 +145,11 @@ private:
     QDoubleSpinBox *m_textSsMergeGap;
     QDoubleSpinBox *m_textSsMinSegLen;
 
-    QLabel *m_polylinePointCountLabel = nullptr;
-    QTableWidget *m_polylineTable = nullptr;
-    QPushButton *m_polylineInsertBtn = nullptr;
-    QPushButton *m_polylineDeleteBtn = nullptr;
+    // Extracted property pages
+    PolylinePage *m_polylinePage = nullptr;  ///< needed for currentRow() in insert/delete ops
 
-    // Dimension property widgets
-    QDoubleSpinBox *m_dimP1X = nullptr;
-    QDoubleSpinBox *m_dimP1Y = nullptr;
-    QDoubleSpinBox *m_dimP2X = nullptr;
-    QDoubleSpinBox *m_dimP2Y = nullptr;
-    QDoubleSpinBox *m_dimOffset = nullptr;
-
-    // Angular dimension property widgets
-    QDoubleSpinBox *m_adimVertexX = nullptr;
-    QDoubleSpinBox *m_adimVertexY = nullptr;
-    QDoubleSpinBox *m_adimP1X = nullptr;
-    QDoubleSpinBox *m_adimP1Y = nullptr;
-    QDoubleSpinBox *m_adimP2X = nullptr;
-    QDoubleSpinBox *m_adimP2Y = nullptr;
-    QDoubleSpinBox *m_adimRadius = nullptr;
-
-    // Radius dimension property widgets
-    QDoubleSpinBox *m_rdimCX = nullptr;
-    QDoubleSpinBox *m_rdimCY = nullptr;
-    QDoubleSpinBox *m_rdimRadius = nullptr;
-    QDoubleSpinBox *m_rdimAngle = nullptr;
-    QCheckBox     *m_rdimDiameter = nullptr;
-
-    // Spline property widgets
-    QLabel         *m_splinePointCountLabel = nullptr;
-    QSpinBox       *m_splineStepsSpin       = nullptr;
-
-    // Transform section (move / rotate, always visible when entity is selected)
-    QGroupBox *m_transformGroup = nullptr;
-    QDoubleSpinBox *m_moveDx = nullptr;
-    QDoubleSpinBox *m_moveDy = nullptr;
-    QDoubleSpinBox *m_rotateAngle = nullptr;
-    QSpinBox       *m_arrayRows   = nullptr;
-    QSpinBox       *m_arrayCols   = nullptr;
-    QDoubleSpinBox *m_arraySpacingX = nullptr;
-    QDoubleSpinBox *m_arraySpacingY = nullptr;
-    QDoubleSpinBox *m_scaleFactor   = nullptr;
-    // Polar array
-    QDoubleSpinBox *m_polarCenterX  = nullptr;
-    QDoubleSpinBox *m_polarCenterY  = nullptr;
-    QSpinBox       *m_polarCount    = nullptr;
-    QDoubleSpinBox *m_polarSpan     = nullptr;
-    // Mirror by axis angle
-    QDoubleSpinBox *m_mirrorAxisAngle = nullptr;
+    // Transform panel (extracted component)
+    TransformPanel *m_transformPanel = nullptr;
 
     // Layer management
     QGroupBox *m_layerGroup = nullptr;
@@ -243,19 +161,16 @@ private:
 
     void setupUi();
     void setupConnections();
-    void buildEmptyPage();
-    void buildLinePage();
-    void buildRectPage();
-    void buildCirclePage();
-    void buildArcPage();
-    void buildTextPage();
-    void buildPolylinePage();
-    void buildDimensionPage();
-    void buildAngularDimensionPage();
-    void buildRadiusDimensionPage();
-    void buildSplinePage();
-    void buildTransformSection();
+    void buildTextPage();          ///< Text entity page (inline â€?no PropertyPage subclass yet)
     void refreshEntityList();
     void onEntityItemChanged(QListWidgetItem *item);
     void applyProperties(int index, std::unique_ptr<Entity> newEntity);
+
+    // Transform helpers (called from TransformPanel signal lambdas)
+    void applyMoveBy(double dx, double dy);
+    void applyRotateBy(double angle);
+    void applyRectArray(int rows, int cols, double spacingX, double spacingY);
+    void applyScaleBy(double factor);
+    void applyPolarArray(int count, double spanDeg, double cx, double cy);
+    void applyMirrorByAngle(double axisAngle);
 };

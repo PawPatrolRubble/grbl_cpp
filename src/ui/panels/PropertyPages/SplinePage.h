@@ -20,4 +20,5 @@ public:
 private:
     QLabel *m_pointCountLabel;
     QSpinBox *m_stepsSpin;
+    const SplineEntity *m_original = nullptr;  ///< last-bound entity; used by apply() to clone+modify
 };

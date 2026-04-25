@@ -67,9 +67,7 @@ void RadiusDimensionEntity::translate(const QPointF& delta)
 std::unique_ptr<Entity> RadiusDimensionEntity::clone() const
 {
     auto e = std::make_unique<RadiusDimensionEntity>(m_center, m_radius, m_angleDeg, m_diameter);
-    e->setId(id());
-    e->setLayerId(layerId());
-    e->setEnabled(isEnabled());
+    copyBaseFieldsTo(e.get());
     return e;
 }
 

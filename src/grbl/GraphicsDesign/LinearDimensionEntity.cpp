@@ -82,9 +82,7 @@ void LinearDimensionEntity::translate(const QPointF& delta)
 std::unique_ptr<Entity> LinearDimensionEntity::clone() const
 {
     auto e = std::make_unique<LinearDimensionEntity>(m_p1, m_p2, m_offsetDistance);
-    e->setId(id());
-    e->setLayerId(layerId());
-    e->setEnabled(isEnabled());
+    copyBaseFieldsTo(e.get());
     return e;
 }
 

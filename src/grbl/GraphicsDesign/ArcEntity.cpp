@@ -68,8 +68,10 @@ void ArcEntity::translate(const QPointF& delta)
 
 std::unique_ptr<Entity> ArcEntity::clone() const
 {
-    return std::make_unique<ArcEntity>(m_center, m_radius,
-                                        m_startAngleDegrees, m_sweepAngleDegrees);
+    auto e = std::make_unique<ArcEntity>(m_center, m_radius,
+                                         m_startAngleDegrees, m_sweepAngleDegrees);
+    copyBaseFieldsTo(e.get());
+    return e;
 }
 
 std::vector<Entity::EditHandle> ArcEntity::editHandles() const

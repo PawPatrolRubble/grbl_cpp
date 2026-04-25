@@ -131,8 +131,7 @@ void SplineEntity::translate(const QPointF& delta)
 std::unique_ptr<Entity> SplineEntity::clone() const
 {
     auto copy = std::make_unique<SplineEntity>(m_points);
-    copy->setId(QUuid::createUuid());
-    copy->setLayerId(layerId());
+    copyBaseFieldsTo(copy.get());
     copy->m_steps = m_steps;
     return copy;
 }

@@ -67,7 +67,9 @@ void LineEntity::translate(const QPointF& delta)
 
 std::unique_ptr<Entity> LineEntity::clone() const
 {
-    return std::make_unique<LineEntity>(m_line.p1(), m_line.p2());
+    auto e = std::make_unique<LineEntity>(m_line.p1(), m_line.p2());
+    copyBaseFieldsTo(e.get());
+    return e;
 }
 
 std::vector<Entity::EditHandle> LineEntity::editHandles() const

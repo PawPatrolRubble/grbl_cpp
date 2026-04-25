@@ -180,8 +180,7 @@ void PolylineEntity::translate(const QPointF& delta)
 std::unique_ptr<Entity> PolylineEntity::clone() const
 {
     auto c = std::make_unique<PolylineEntity>(m_points);
-    c->setId(id());
-    c->setRotation(rotation());
+    copyBaseFieldsTo(c.get());
     return c;
 }
 

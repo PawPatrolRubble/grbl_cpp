@@ -37,6 +37,8 @@ void SplinePage::bind(const Entity *entity)
 
     const auto *spline = static_cast<const SplineEntity*>(entity);
 
+    m_original = spline;
+
     m_updating = true;
     QSignalBlocker b(m_stepsSpin);
 
@@ -48,12 +50,10 @@ void SplinePage::bind(const Entity *entity)
 
 std::unique_ptr<Entity> SplinePage::apply() const
 {
-    // Spline modify requires the original to clone, then set steps
-    // Note: This needs access to the original entity - we can't create from scratch
-    // The panel will need to handle this differently (clone + modify)
-    // For now, return nullptr - panel should use clone approach
-    // TODO: This pattern needs adjustment for Spline
-    return nullptr;
+    if (!m_original) return nullptr;
+    auto clone = m_original->clone();
+    static_cast<SplineEntity*>(clone.get())->setStepsPerSegment(m_stepsSpin->value());
+    return clone;
 }
 
 int SplinePage::entityType() const

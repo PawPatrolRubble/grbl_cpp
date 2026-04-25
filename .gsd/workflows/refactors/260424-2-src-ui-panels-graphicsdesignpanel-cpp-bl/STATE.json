@@ -1,0 +1,32 @@
+{
+  "template": "refactor",
+  "templateName": "Refactor / Migration",
+  "description": "@src/ui/panels/GraphicsDesignPanel.cpp 重构这个文件，这个文件太bloated了",
+  "branch": "gsd/refactor/src-ui-panels-graphicsdesignpanel-cpp-bl",
+  "phases": [
+    {
+      "name": "inventory",
+      "index": 0,
+      "status": "active"
+    },
+    {
+      "name": "plan",
+      "index": 1,
+      "status": "pending"
+    },
+    {
+      "name": "migrate",
+      "index": 2,
+      "status": "pending"
+    },
+    {
+      "name": "verify",
+      "index": 3,
+      "status": "pending"
+    }
+  ],
+  "currentPhase": 0,
+  "startedAt": "2026-04-23T23:08:45.588Z",
+  "updatedAt": "2026-04-23T23:08:45.588Z",
+  "artifactDir": "D:\\projects\\github\\grbl_cpp\\.gsd\\workflows\\refactors\\260424-2-src-ui-panels-graphicsdesignpanel-cpp-bl"
+}

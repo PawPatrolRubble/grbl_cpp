@@ -44,7 +44,8 @@
       "Bash(qmake6 --version)",
       "Bash(cmd //c \"where python\")",
       "Read(//c/Program Files/**)",
-      "Bash(C:/Users/ginch/AppData/Local/Programs/Python/Python313/python.exe:*)"
+      "Bash(C:/Users/ginch/AppData/Local/Programs/Python/Python313/python.exe:*)",
+      "mcp__plugin_oh-my-claudecode_t__project_memory_write"
     ]
   }
 }

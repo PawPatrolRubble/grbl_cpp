@@ -100,7 +100,9 @@ void RectangleEntity::translate(const QPointF& delta)
 
 std::unique_ptr<Entity> RectangleEntity::clone() const
 {
-    return std::make_unique<RectangleEntity>(m_center, m_width, m_height, m_angleDegrees);
+    auto e = std::make_unique<RectangleEntity>(m_center, m_width, m_height, m_angleDegrees);
+    copyBaseFieldsTo(e.get());
+    return e;
 }
 
 std::vector<Entity::EditHandle> RectangleEntity::editHandles() const

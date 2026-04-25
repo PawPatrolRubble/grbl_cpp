@@ -161,7 +161,7 @@ QString TextEntity::displayName() const
 std::unique_ptr<Entity> TextEntity::clone() const
 {
     auto copy = std::make_unique<TextEntity>(m_position, m_text, m_fontSize);
-    copy->setRotation(rotation());
+    copyBaseFieldsTo(copy.get());
     copy->m_fontMode = m_fontMode;
     copy->m_fontFamily = m_fontFamily;
     copy->m_vectorFontPath = m_vectorFontPath;

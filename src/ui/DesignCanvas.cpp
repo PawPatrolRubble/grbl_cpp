@@ -16,6 +16,7 @@
 
 #include <QMenu>
 #include <QContextMenuEvent>
+#include <QApplication>
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -486,7 +487,12 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
     const QPointF rawWorldPos = toWorld(event->position());
 
     if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+        // Right-click on an entity → select it (so context menu can act on it)
+        if (event->button() == Qt::RightButton && m_document.selectedIds().isEmpty()) {
+            m_document.selectNearest(rawWorldPos, 15.0);
+        }
         m_panning = true;
+        m_rightClickPanned = false;
         m_lastPanScreenPos = event->position().toPoint();
         setCursor(Qt::ClosedHandCursor);
         return;
@@ -534,6 +540,8 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
 
     if (m_panning) {
         const QPoint delta = event->position().toPoint() - m_lastPanScreenPos;
+        if (delta.manhattanLength() > 3)
+            m_rightClickPanned = true;
         m_transforms.panBy(QPointF(delta.x(), delta.y()));
         m_lastPanScreenPos = event->position().toPoint();
         m_zoomSettleTimer.start();
@@ -571,6 +579,14 @@ void DesignCanvas::mouseReleaseEvent(QMouseEvent *event)
             m_panning = false;
             unsetCursor();
             event->accept();
+            // Right-click without drag → explicitly show context menu
+            if (event->button() == Qt::RightButton && !m_rightClickPanned) {
+                QContextMenuEvent ctxEvent(QContextMenuEvent::Mouse,
+                                           event->position().toPoint(),
+                                           event->globalPosition().toPoint(),
+                                           event->modifiers());
+                QApplication::sendEvent(this, &ctxEvent);
+            }
             return;
         }
     }
@@ -822,6 +838,15 @@ void DesignCanvas::contextMenuEvent(QContextMenuEvent *event)
 
     // Move to Layer submenu
     if (m_document.layerCount() > 0) {
+        // Determine current layer of the (single) selected entity, if any
+        QUuid currentLayerId;
+        if (m_document.selectedIds().size() == 1) {
+            const QUuid id = *m_document.selectedIds().begin();
+            int idx = m_document.indexOf(id);
+            if (idx >= 0 && m_document.entityAt(idx))
+                currentLayerId = m_document.entityAt(idx)->layerId();
+        }
+
         QMenu *moveMenu = menu.addMenu("Move to Layer");
         for (int i = 0; i < m_document.layerCount(); ++i) {
             const Layer &layer = m_document.layerAt(i);
@@ -829,6 +854,8 @@ void DesignCanvas::contextMenuEvent(QContextMenuEvent *event)
             QPixmap px(12, 12);
             px.fill(layer.color);
             act->setIcon(QIcon(px));
+            act->setCheckable(true);
+            act->setChecked(layer.id == currentLayerId);
             const QUuid targetId = layer.id;
             connect(act, &QAction::triggered, this, [this, targetId]() {
                 const QSet<QUuid> ids = m_document.selectedIds();

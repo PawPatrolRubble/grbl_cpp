@@ -57,7 +57,9 @@ void CircleEntity::translate(const QPointF& delta)
 
 std::unique_ptr<Entity> CircleEntity::clone() const
 {
-    return std::make_unique<CircleEntity>(m_center, m_radius);
+    auto e = std::make_unique<CircleEntity>(m_center, m_radius);
+    copyBaseFieldsTo(e.get());
+    return e;
 }
 
 std::vector<Entity::EditHandle> CircleEntity::editHandles() const

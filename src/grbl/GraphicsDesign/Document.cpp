@@ -43,9 +43,11 @@ void Document::insertEntity(int index, std::unique_ptr<Entity> entity)
 void Document::replaceEntity(int index, std::unique_ptr<Entity> entity)
 {
     if (index >= 0 && index < entityCount()) {
-        // Preserve entity ID so selection stays valid, and preserve layer assignment
+        // Preserve entity ID so selection stays valid.
+        // Preserve layer only if the replacement doesn't carry an explicit assignment.
         entity->setId(m_entities[index]->id());
-        entity->setLayerId(m_entities[index]->layerId());
+        if (entity->layerId().isNull())
+            entity->setLayerId(m_entities[index]->layerId());
         m_entities[index] = std::move(entity);
         emit changed();
     }

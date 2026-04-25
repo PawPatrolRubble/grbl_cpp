@@ -98,4 +98,13 @@ protected:
     QUuid m_layerId;   // null UUID = default / not assigned
     double m_rotation = 0.0;
     bool m_enabled = true;
+
+    /// Copy base-class fields (id, layerId, rotation, enabled) to \p dest.
+    /// Call from each subclass clone() to avoid losing state.
+    void copyBaseFieldsTo(Entity* dest) const {
+        dest->m_id       = m_id;
+        dest->m_layerId  = m_layerId;
+        dest->m_rotation  = m_rotation;
+        dest->m_enabled   = m_enabled;
+    }
 };

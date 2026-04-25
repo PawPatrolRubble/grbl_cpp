@@ -148,6 +148,7 @@ private:
     double m_gridSize = 10.0;
     bool m_showGcodeOverlay = false;
     bool m_panning = false;
+    bool m_rightClickPanned = false;  ///< true if right-button was dragged (pan); suppresses context menu
     QPoint m_lastPanScreenPos;
     bool m_initialFitDone = false;
     bool m_mouseInWidget = false;

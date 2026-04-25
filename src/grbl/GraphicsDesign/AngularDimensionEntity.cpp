@@ -96,9 +96,7 @@ void AngularDimensionEntity::translate(const QPointF& delta)
 std::unique_ptr<Entity> AngularDimensionEntity::clone() const
 {
     auto e = std::make_unique<AngularDimensionEntity>(m_vertex, m_p1, m_p2, m_radius);
-    e->setId(id());
-    e->setLayerId(layerId());
-    e->setEnabled(isEnabled());
+    copyBaseFieldsTo(e.get());
     return e;
 }
 
