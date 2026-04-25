@@ -504,11 +504,23 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
             if (kind == Entity::Kind::Line) {
                 label = idx < 2 ? "Endpoint" : "Midpoint";
             } else if (kind == Entity::Kind::Rectangle) {
-                label = idx < 4 ? "Corner" : "Center";
+                // Indices: 0-3 corners, 4 center, 5-8 edge midpoints
+                if (idx < 4) label = "Corner";
+                else if (idx == 4) label = "Center";
+                else label = "Midpoint";
             } else if (kind == Entity::Kind::Circle) {
                 label = idx == 0 ? "Center" : "Quadrant";
             } else if (kind == Entity::Kind::Arc) {
-                label = idx == 0 ? "Center" : (idx == 1 ? "Start" : "End");
+                // Indices: 0 center, 1 start, 2 end, 3 midpoint
+                if (idx == 0) label = "Center";
+                else if (idx == 1) label = "Start";
+                else if (idx == 2) label = "End";
+                else label = "Midpoint";
+            } else if (kind == Entity::Kind::Polygon) {
+                // Polyline: vertices first, then segment midpoints
+                const std::size_t total = snapPoints.size();
+                const std::size_t vertexCount = (total + 1) / 2;
+                label = idx < vertexCount ? "Endpoint" : "Midpoint";
             } else {
                 label = "Point";
             }
