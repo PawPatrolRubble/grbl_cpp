@@ -26,7 +26,8 @@ public:
                double gridSize = 10.0, double snapDistancePx = 14.0);
 
     // --- Snap computation ---
-    SnapResult computeSnap(const QPointF& rawWorldPos, bool includeSelection) const;
+    SnapResult computeSnap(const QPointF& rawWorldPos, bool includeSelection,
+                           std::optional<QPointF> tangentRef = std::nullopt) const;
 
     // --- Handle hit-testing ---
     std::optional<Entity::EditHandle> hitHandle(

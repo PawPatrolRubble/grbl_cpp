@@ -198,6 +198,41 @@ bool isPointOnArc(const QPointF& p, const QPointF& center, double radius,
     
     return withinArc;
 }
+
+/// Tangent points from a point to a circle.
+/// Returns up to 2 tangent points where a line from point P touches the circle.
+std::vector<QPointF> tangentPointsFromPoint(const QPointF& p, const QPointF& center, double radius) {
+    std::vector<QPointF> results;
+    
+    const QPointF delta = center - p;
+    const double d = std::hypot(delta.x(), delta.y());
+    
+    // Point is inside circle or at center - no tangent points
+    if (d <= radius || d < 1e-10) return results;
+    
+    // Using power of a point: tangent length squared = d^2 - R^2
+    const double tangentLength = std::sqrt(d * d - radius * radius);
+    
+    // Half-angle to tangent point (from point P)
+    const double halfAngle = std::atan(radius / tangentLength);
+    
+    // Angle from point P to center
+    const double angleToCenter = std::atan2(delta.y(), delta.x());
+    
+    // Tangent angles (perpendicular ± half-angle)
+    const double tangentAngle1 = angleToCenter + halfAngle;
+    const double tangentAngle2 = angleToCenter - halfAngle;
+    
+    // Tangent points on circle (in world coordinates)
+    // From center, the tangent points are at angles perpendicular to the tangent lines
+    const double perpAngle1 = angleToCenter + (kPi / 2.0 - halfAngle);
+    const double perpAngle2 = angleToCenter - (kPi / 2.0 - halfAngle);
+    
+    results.push_back(center + radius * QPointF(std::cos(perpAngle1), std::sin(perpAngle1)));
+    results.push_back(center + radius * QPointF(std::cos(perpAngle2), std::sin(perpAngle2)));
+    
+    return results;
+}
 }
 
 CanvasSnap::CanvasSnap(const Document& document, const CoordinateTransform& transforms,
@@ -221,7 +256,8 @@ QPointF CanvasSnap::toScreen(const QPointF& worldPos) const
 // Snap computation
 // ============================================================================
 
-CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool includeSelection) const
+CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool includeSelection,
+                                               std::optional<QPointF> tangentRef) const
 {
     SnapResult best;
     double bestScreenDistance = m_snapDistancePx;
@@ -497,6 +533,37 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
                     auto inter = lineLineIntersection(line->startPoint(), line->endPoint(),
                                                       pts[seg], pts[seg + 1]);
                     if (inter) tryCandidate(*inter, "Intersection");
+                }
+            }
+        }
+    }
+
+    // Tangent snap points (from reference point to circles/arcs)
+    if (tangentRef) {
+        for (int i = 0; i < m_document.entityCount(); ++i) {
+            Entity* entity = m_document.entityAt(i);
+            if (!includeSelection && selected && entity->id() == selected->id()) {
+                continue;
+            }
+
+            const auto kind = entity->kind();
+
+            // Circle: tangent points from reference
+            if (kind == Entity::Kind::Circle) {
+                auto* circle = static_cast<CircleEntity*>(entity);
+                auto tangents = tangentPointsFromPoint(*tangentRef, circle->center(), circle->radius());
+                for (const auto& pt : tangents) tryCandidate(pt, "Tangent");
+            }
+
+            // Arc: tangent points from reference (if on arc segment)
+            if (kind == Entity::Kind::Arc) {
+                auto* arc = static_cast<ArcEntity*>(entity);
+                auto tangents = tangentPointsFromPoint(*tangentRef, arc->center(), arc->radius());
+                for (const auto& pt : tangents) {
+                    if (isPointOnArc(pt, arc->center(), arc->radius(),
+                                     arc->startAngleDegrees(), arc->sweepAngleDegrees())) {
+                        tryCandidate(pt, "Tangent");
+                    }
                 }
             }
         }

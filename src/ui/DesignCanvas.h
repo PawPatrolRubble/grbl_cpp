@@ -157,6 +157,7 @@ private:
     // --- Snap state ---
     CanvasSnap::SnapResult m_snapResult;
     QString m_hoverHandleId;
+    std::optional<QPointF> m_tangentReference;  ///< Reference point for tangent snap (last clicked point)
 
     // --- Timers ---
     QTimer m_repaintTimer;

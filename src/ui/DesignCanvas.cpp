@@ -197,6 +197,7 @@ void DesignCanvas::setTool(ToolType toolType)
     m_toolManagerActiveType = mt;
     m_snapResult = {};
     m_hoverHandleId.clear();
+    m_tangentReference = std::nullopt;
     unsetCursor();
     emitToolStatus();
     scheduleUpdate();
@@ -403,6 +404,7 @@ void DesignCanvas::cancelActiveToolInternal()
 {
     m_hoverHandleId.clear();
     m_snapResult = {};
+    m_tangentReference = std::nullopt;
     activeTool().cancel();
     unsetCursor();
     emitToolStatus();
@@ -500,7 +502,7 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
 
     if (event->button() == Qt::LeftButton) {
         if (m_snapEnabled) {
-            m_snapResult = m_snap.computeSnap(rawWorldPos, true);
+            m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
         } else {
             m_snapResult = {};
         }
@@ -516,13 +518,21 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
             }
         }
 
+        const bool wasActiveBefore = activeTool().isActive();
         const int entityCountBefore = m_document.entityCount();
         activeTool().mousePress(snappedPos);
         const int entityCountAfter = m_document.entityCount();
+        const bool isNowActive = activeTool().isActive();
 
-        // Auto-switch to Select tool after creation
+        // If tool transitioned from inactive to active, set tangent reference for tangent snap
+        if (!wasActiveBefore && isNowActive) {
+            m_tangentReference = snappedPos;
+        }
+
+        // Auto-switch to Select tool after creation (clear tangent reference)
         if (entityCountAfter > entityCountBefore) {
             m_document.select(m_document.entityAt(entityCountAfter - 1)->id());
+            m_tangentReference = std::nullopt;
             setTool(ToolType::Select);
         }
 
@@ -556,7 +566,7 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
     }
 
     if (m_snapEnabled && !isDragging) {
-        m_snapResult = m_snap.computeSnap(rawWorldPos, true);
+        m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
     } else {
         m_snapResult = {};
     }
@@ -593,7 +603,7 @@ void DesignCanvas::mouseReleaseEvent(QMouseEvent *event)
 
     if (event->button() == Qt::LeftButton) {
         if (m_snapEnabled) {
-            m_snapResult = m_snap.computeSnap(rawWorldPos, true);
+            m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
         } else {
             m_snapResult = {};
         }
@@ -613,7 +623,7 @@ void DesignCanvas::mouseDoubleClickEvent(QMouseEvent *event)
 
     const int entityCountBefore = m_document.entityCount();
     if (m_snapEnabled) {
-        m_snapResult = m_snap.computeSnap(toWorld(event->position()), true);
+        m_snapResult = m_snap.computeSnap(toWorld(event->position()), true, m_tangentReference);
     } else {
         m_snapResult = {};
     }
