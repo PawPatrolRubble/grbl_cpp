@@ -1,6 +1,11 @@
 #include "CanvasSnap.h"
 #include "CoordinateTransform.h"
 #include "../../grbl/GraphicsDesign/Entity.h"
+#include "../../grbl/GraphicsDesign/LineEntity.h"
+#include "../../grbl/GraphicsDesign/ArcEntity.h"
+#include "../../grbl/GraphicsDesign/CircleEntity.h"
+#include "../../grbl/GraphicsDesign/RectangleEntity.h"
+#include "../../grbl/GraphicsDesign/PolylineEntity.h"
 
 #include <QLineF>
 #include <QRectF>
@@ -9,8 +14,73 @@
 #include <cmath>
 
 namespace {
+constexpr double kPi = 3.14159265358979323846;
+
 bool isRotateRole(Entity::HandleRole role) {
     return role == Entity::HandleRole::Rotate;
+}
+
+/// Project point onto line segment, return perpendicular point if within segment.
+/// Returns nullopt if the perpendicular falls outside the segment bounds.
+std::optional<QPointF> perpendicularPointOnLine(const QPointF& p, const QPointF& a, const QPointF& b) {
+    const QPointF ab = b - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    if (len2 < 1e-10) return std::nullopt; // Degenerate line
+    
+    const QPointF ap = p - a;
+    const double t = (ap.x() * ab.x() + ap.y() * ab.y()) / len2;
+    
+    // Only snap if perpendicular falls within segment (not beyond endpoints)
+    if (t > 0.05 && t < 0.95) {
+        return a + t * ab;
+    }
+    return std::nullopt;
+}
+
+/// Nearest point on circle from given point (along line from center to point).
+std::optional<QPointF> nearestPointOnCircle(const QPointF& p, const QPointF& center, double radius) {
+    const QPointF delta = p - center;
+    const double dist = std::hypot(delta.x(), delta.y());
+    if (dist < 1e-10) return std::nullopt; // Point at center
+    
+    return center + radius * (delta / dist);
+}
+
+/// Nearest point on arc from given point, if point lies within arc sweep.
+std::optional<QPointF> nearestPointOnArc(const QPointF& p, const QPointF& center, double radius,
+                                          double startAngle, double sweepAngle) {
+    // First compute nearest point on full circle
+    const QPointF delta = p - center;
+    const double dist = std::hypot(delta.x(), delta.y());
+    if (dist < 1e-10) return std::nullopt;
+    
+    const double angle = std::atan2(delta.y(), delta.x()) * 180.0 / kPi;
+    
+    // Normalize angle to [0, 360)
+    double normalizedAngle = angle;
+    while (normalizedAngle < 0) normalizedAngle += 360.0;
+    while (normalizedAngle >= 360.0) normalizedAngle -= 360.0;
+    
+    // Normalize start angle
+    double normalizedStart = startAngle;
+    while (normalizedStart < 0) normalizedStart += 360.0;
+    while (normalizedStart >= 360.0) normalizedStart -= 360.0;
+    
+    // Compute end angle
+    double normalizedEnd = normalizedStart + sweepAngle;
+    
+    // Check if angle is within arc sweep
+    bool withinArc = false;
+    if (sweepAngle >= 0) {
+        withinArc = (normalizedAngle >= normalizedStart - 0.5 && normalizedAngle <= normalizedEnd + 0.5);
+    } else {
+        withinArc = (normalizedAngle >= normalizedEnd - 0.5 && normalizedAngle <= normalizedStart + 0.5);
+    }
+    
+    if (withinArc) {
+        return center + radius * (delta / dist);
+    }
+    return std::nullopt;
 }
 }
 
@@ -92,6 +162,63 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
                 label = pointIndex < vertexCount ? "Endpoint" : "Midpoint";
             }
             tryCandidate(points[pointIndex], label);
+        }
+    }
+
+    // Perpendicular/nearest snap points
+    for (int i = 0; i < m_document.entityCount(); ++i) {
+        Entity* entity = m_document.entityAt(i);
+        if (!includeSelection && selected && entity->id() == selected->id()) {
+            continue;
+        }
+
+        const auto kind = entity->kind();
+
+        // LineEntity: perpendicular to line segment
+        if (kind == Entity::Kind::Line) {
+            auto* line = static_cast<LineEntity*>(entity);
+            auto perp = perpendicularPointOnLine(rawWorldPos, line->startPoint(), line->endPoint());
+            if (perp) tryCandidate(*perp, "Perpendicular");
+        }
+
+        // ArcEntity: nearest point on arc (if within arc sweep)
+        if (kind == Entity::Kind::Arc) {
+            auto* arc = static_cast<ArcEntity*>(entity);
+            auto nearest = nearestPointOnArc(rawWorldPos, arc->center(), arc->radius(),
+                                             arc->startAngleDegrees(), arc->sweepAngleDegrees());
+            if (nearest) tryCandidate(*nearest, "Nearest");
+        }
+
+        // CircleEntity: nearest point on circle
+        if (kind == Entity::Kind::Circle) {
+            auto* circle = static_cast<CircleEntity*>(entity);
+            auto nearest = nearestPointOnCircle(rawWorldPos, circle->center(), circle->radius());
+            if (nearest) tryCandidate(*nearest, "Nearest");
+        }
+
+        // RectangleEntity: perpendicular to each edge
+        if (kind == Entity::Kind::Rectangle) {
+            auto* rect = static_cast<RectangleEntity*>(entity);
+            const auto c = rect->corners();
+            // Edges: c[0]-c[1], c[1]-c[2], c[2]-c[3], c[3]-c[0]
+            auto perp0 = perpendicularPointOnLine(rawWorldPos, c[0], c[1]);
+            if (perp0) tryCandidate(*perp0, "Perpendicular");
+            auto perp1 = perpendicularPointOnLine(rawWorldPos, c[1], c[2]);
+            if (perp1) tryCandidate(*perp1, "Perpendicular");
+            auto perp2 = perpendicularPointOnLine(rawWorldPos, c[2], c[3]);
+            if (perp2) tryCandidate(*perp2, "Perpendicular");
+            auto perp3 = perpendicularPointOnLine(rawWorldPos, c[3], c[0]);
+            if (perp3) tryCandidate(*perp3, "Perpendicular");
+        }
+
+        // PolylineEntity: perpendicular to each segment
+        if (kind == Entity::Kind::Polygon) {
+            auto* poly = static_cast<PolylineEntity*>(entity);
+            const auto& pts = poly->points();
+            for (int seg = 0; seg + 1 < pts.size(); ++seg) {
+                auto perp = perpendicularPointOnLine(rawWorldPos, pts[seg], pts[seg + 1]);
+                if (perp) tryCandidate(*perp, "Perpendicular");
+            }
         }
     }
 

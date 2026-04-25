@@ -30,11 +30,11 @@ public:
     double width() const;
     double height() const;
     double angleDegrees() const;
+    std::array<QPointF, 4> corners() const;
     void setGeometry(const QPointF& center, double width, double height, double angleDegrees);
 
 private:
     QPointF toLocal(const QPointF& worldPoint) const;
-    std::array<QPointF, 4> corners() const;
 
     QPointF m_center;
     double m_width = 0.0;
