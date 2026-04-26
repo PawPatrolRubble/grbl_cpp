@@ -243,6 +243,7 @@ void DesignCanvas::setWorktableSize(const QSizeF &size)
 {
     m_worktableSize = size;
     m_document.setWorktableWidth(size.width());
+    m_drawing.setWorktableSize(size);
     autoFit();
 }
 
@@ -260,6 +261,22 @@ void DesignCanvas::setSnapEnabled(bool enabled)
     emit snapEnabledChanged(enabled);
     scheduleUpdate();
 }
+
+void DesignCanvas::setGridSnapEnabled(bool on)         { m_snap.setGridSnapEnabled(on);         scheduleUpdate(); }
+void DesignCanvas::setEndpointSnapEnabled(bool on)     { m_snap.setEndpointSnapEnabled(on);     scheduleUpdate(); }
+void DesignCanvas::setMidpointSnapEnabled(bool on)     { m_snap.setMidpointSnapEnabled(on);     scheduleUpdate(); }
+void DesignCanvas::setCenterSnapEnabled(bool on)       { m_snap.setCenterSnapEnabled(on);       scheduleUpdate(); }
+void DesignCanvas::setIntersectionSnapEnabled(bool on) { m_snap.setIntersectionSnapEnabled(on); scheduleUpdate(); }
+void DesignCanvas::setPerpendicularSnapEnabled(bool on){ m_snap.setPerpendicularSnapEnabled(on);scheduleUpdate(); }
+void DesignCanvas::setNearestSnapEnabled(bool on)      { m_snap.setNearestSnapEnabled(on);      scheduleUpdate(); }
+
+bool DesignCanvas::gridSnapEnabled()          const { return m_snap.gridSnapEnabled(); }
+bool DesignCanvas::endpointSnapEnabled()      const { return m_snap.endpointSnapEnabled(); }
+bool DesignCanvas::midpointSnapEnabled()      const { return m_snap.midpointSnapEnabled(); }
+bool DesignCanvas::centerSnapEnabled()        const { return m_snap.centerSnapEnabled(); }
+bool DesignCanvas::intersectionSnapEnabled()  const { return m_snap.intersectionSnapEnabled(); }
+bool DesignCanvas::perpendicularSnapEnabled() const { return m_snap.perpendicularSnapEnabled(); }
+bool DesignCanvas::nearestSnapEnabled()       const { return m_snap.nearestSnapEnabled(); }
 
 void DesignCanvas::setGridSize(double size)
 {
