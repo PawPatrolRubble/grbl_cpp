@@ -1,8 +1,12 @@
 #include "CanvasDrawing.h"
+#include "../../grbl/GraphicsDesign/LineEntity.h"
+#include "../../grbl/GraphicsDesign/RectangleEntity.h"
+#include "../../grbl/GraphicsDesign/PolylineEntity.h"
 
 #include <QFontMetrics>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -31,6 +35,23 @@ QPen createPreviewPen() {
 
 bool isRotateRole(Entity::HandleRole role) {
     return role == Entity::HandleRole::Rotate;
+}
+
+/// Project point onto line segment, return perpendicular point if within segment.
+/// Returns nullopt if the perpendicular falls outside the segment bounds.
+std::optional<QPointF> perpendicularPointOnLine(const QPointF& p, const QPointF& a, const QPointF& b) {
+    const QPointF ab = b - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    if (len2 < 1e-10) return std::nullopt; // Degenerate line
+    
+    const QPointF ap = p - a;
+    const double t = (ap.x() * ab.x() + ap.y() * ab.y()) / len2;
+    
+    // Only snap if perpendicular falls within segment (not beyond endpoints)
+    if (t > 0.05 && t < 0.95) {
+        return a + t * ab;
+    }
+    return std::nullopt;
 }
 } // namespace
 
@@ -549,6 +570,55 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
                 painter.setPen(Qt::NoPen);
                 painter.setBrush(QColor(120, 120, 120, 180));  // Gray semi-transparent
                 painter.drawEllipse(pt, markerSize, markerSize);
+            }
+        }
+        
+        // --- Perpendicular snap points (computed dynamically based on cursor position) ---
+        // Helper lambda to draw a perpendicular marker
+        auto drawPerpMarker = [&](const QPointF& perpPt) {
+            const double distToActiveSnap = QLineF(perpPt, activeSnapPos).length();
+            const bool isActive = snapActive && distToActiveSnap < 0.1 && activeSnapLabel == "Perpendicular";
+            const double markerSize = isActive ? (6.0 / m_transforms.zoom()) : (4.0 / m_transforms.zoom());
+            
+            if (isActive) {
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(59, 130, 246));  // Blue
+                painter.drawEllipse(perpPt, markerSize, markerSize);
+                painter.setPen(QPen(QColor(59, 130, 246, 180), 1.5 / m_transforms.zoom()));
+                painter.setBrush(Qt::NoBrush);
+                painter.drawEllipse(perpPt, markerSize + 2.0 / m_transforms.zoom(), markerSize + 2.0 / m_transforms.zoom());
+            } else {
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(180, 90, 90, 180));  // Orange-ish for perpendicular preview
+                painter.drawEllipse(perpPt, markerSize, markerSize);
+            }
+        };
+        
+        // LineEntity: perpendicular to line segment
+        if (kind == Entity::Kind::Line) {
+            auto* line = static_cast<LineEntity*>(entity);
+            auto perp = perpendicularPointOnLine(mouseWorldPos, line->startPoint(), line->endPoint());
+            if (perp) drawPerpMarker(*perp);
+        }
+        
+        // RectangleEntity: perpendicular to each edge
+        if (kind == Entity::Kind::Rectangle) {
+            auto* rect = static_cast<RectangleEntity*>(entity);
+            const auto c = rect->corners();
+            // Edges: c[0]-c[1], c[1]-c[2], c[2]-c[3], c[3]-c[0]
+            for (int edge = 0; edge < 4; ++edge) {
+                auto perp = perpendicularPointOnLine(mouseWorldPos, c[edge], c[(edge + 1) % 4]);
+                if (perp) drawPerpMarker(*perp);
+            }
+        }
+        
+        // PolylineEntity: perpendicular to each segment
+        if (kind == Entity::Kind::Polygon) {
+            auto* poly = static_cast<PolylineEntity*>(entity);
+            const auto& pts = poly->points();
+            for (int seg = 0; seg + 1 < pts.size(); ++seg) {
+                auto perp = perpendicularPointOnLine(mouseWorldPos, pts[seg], pts[seg + 1]);
+                if (perp) drawPerpMarker(*perp);
             }
         }
     }
