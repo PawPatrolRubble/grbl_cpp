@@ -28,6 +28,10 @@ public:
     QString displayName() const override;
     static std::unique_ptr<PolylineEntity> fromJson(const QJsonObject& json);
 
+    // Trim support - polyline trimming is not directly supported
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry
     const QList<QPointF>& points() const { return m_points; }
     void setPoints(const QList<QPointF>& points) { m_points = points; }

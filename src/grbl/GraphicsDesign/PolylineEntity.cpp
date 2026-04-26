@@ -306,3 +306,15 @@ std::unique_ptr<PolylineEntity> PolylineEntity::fromJson(const QJsonObject& json
     entity->setRotation(json["rotation"].toDouble());
     return entity;
 }
+
+TrimEnd PolylineEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Polylines are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF PolylineEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    if (m_points.isEmpty()) return QPointF();
+    return (end == TrimEnd::Start) ? m_points.first() : m_points.last();
+}

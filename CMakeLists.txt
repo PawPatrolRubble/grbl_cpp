@@ -68,6 +68,8 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/CircleEntity.cpp
     src/grbl/GraphicsDesign/ArcEntity.cpp
     src/grbl/GraphicsDesign/TextEntity.cpp
+    src/grbl/GraphicsDesign/GeometryUtils.cpp
+    src/grbl/GraphicsDesign/TrimModification.cpp
     src/grbl/GraphicsDesign/LineShape.cpp
     src/grbl/GraphicsDesign/RectShape.cpp
     src/grbl/GraphicsDesign/CircleShape.cpp
@@ -127,6 +129,8 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/CircleEntity.h
     src/grbl/GraphicsDesign/ArcEntity.h
     src/grbl/GraphicsDesign/TextEntity.h
+    src/grbl/GraphicsDesign/GeometryUtils.h
+    src/grbl/GraphicsDesign/TrimModification.h
     src/grbl/GraphicsDesign/LineShape.h
     src/grbl/GraphicsDesign/RectShape.h
     src/grbl/GraphicsDesign/CircleShape.h

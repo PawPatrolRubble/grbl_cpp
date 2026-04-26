@@ -211,3 +211,33 @@ void LineEntity::setCenterLengthAngle(const QPointF& centerPoint, double lineLen
                             std::sin(radians) * lineLength * 0.5);
     setStartEnd(centerPoint - halfDelta, centerPoint + halfDelta);
 }
+
+TrimEnd LineEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Vector from intersection to click position
+    QPointF toClick = clickPos - intersection;
+
+    // Vector from intersection toward start point
+    QPointF toStart = startPoint() - intersection;
+
+    // Vector from intersection toward end point
+    QPointF toEnd = endPoint() - intersection;
+
+    // Compute dot products to determine which side the click is on
+    // Positive dot product means vectors point in similar direction
+    double dotStart = toClick.x() * toStart.x() + toClick.y() * toStart.y();
+    double dotEnd = toClick.x() * toEnd.x() + toClick.y() * toEnd.y();
+
+    // If click aligns more with start direction, trim the start side
+    // (keep the end portion from intersection to end)
+    if (dotStart > dotEnd) {
+        return TrimEnd::Start;
+    } else {
+        return TrimEnd::End;
+    }
+}
+
+QPointF LineEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return (end == TrimEnd::Start) ? startPoint() : endPoint();
+}

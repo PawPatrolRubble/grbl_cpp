@@ -403,6 +403,17 @@ std::unique_ptr<TextEntity> TextEntity::fromJson(const QJsonObject& json)
     return entity;
 }
 
+TrimEnd TextEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Text is not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF TextEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return m_position;
+}
+
 void TextEntity::setVectorFont(const QString& fontFilePath)
 {
     auto result = VectorFontLoader::loadFont(fontFilePath);

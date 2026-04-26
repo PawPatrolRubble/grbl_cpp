@@ -1,4 +1,5 @@
 #include "CircleEntity.h"
+#include "GeometryUtils.h"
 
 #include <QLineF>
 #include <algorithm>
@@ -163,4 +164,41 @@ void CircleEntity::setGeometry(const QPointF& center, double radius)
 {
     m_center = center;
     m_radius = std::max(radius, 1.0);
+}
+
+TrimEnd CircleEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // For circle trimming, we convert the circle to an arc.
+    // The click position determines which portion of the circle to keep.
+    // The intersection point becomes the arc start point.
+    //
+    // We use the angular relationship between click and intersection to decide:
+    // - The intersection becomes one end of the arc
+    // - The click indicates which side of the circle to keep
+    //
+    // For simplicity, we return TrimEnd::Start to indicate that trimming
+    // should start from the intersection point toward the click position.
+
+    double clickAngle = GeometryUtils::pointAngle(clickPos, m_center);
+    double intAngle = GeometryUtils::pointAngle(intersection, m_center);
+
+    // Compute the angular delta from intersection to click
+    double delta = GeometryUtils::normAngle(clickAngle - intAngle);
+
+    // If delta > 180, the shorter arc goes the other way
+    // This determines whether we keep the "Start" or "End" portion
+    // For circles, we interpret Start as the intersection point
+    // and the arc sweep is determined by click position
+    return TrimEnd::Start;
+}
+
+QPointF CircleEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    // For circles, this is less meaningful since they don't have distinct endpoints
+    // Return a quadrant point as reference
+    if (end == TrimEnd::Start) {
+        return QPointF(m_center.x() + m_radius, m_center.y());  // Right quadrant
+    } else {
+        return QPointF(m_center.x() - m_radius, m_center.y());  // Left quadrant
+    }
 }

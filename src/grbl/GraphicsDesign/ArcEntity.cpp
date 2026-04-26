@@ -1,4 +1,5 @@
 #include "ArcEntity.h"
+#include "GeometryUtils.h"
 
 #include <QLineF>
 #include <algorithm>
@@ -228,4 +229,57 @@ void ArcEntity::setGeometry(const QPointF& center, double radius,
     m_radius = std::max(radius, 1.0);
     m_startAngleDegrees = startAngleDegrees;
     m_sweepAngleDegrees = sweepAngleDegrees;
+}
+
+TrimEnd ArcEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Get angles for click position and intersection
+    double clickAngle = GeometryUtils::pointAngle(clickPos, m_center);
+    double intAngle = GeometryUtils::pointAngle(intersection, m_center);
+
+    // Normalize angles
+    clickAngle = GeometryUtils::normAngle(clickAngle);
+    intAngle = GeometryUtils::normAngle(intAngle);
+
+    double startAngle = GeometryUtils::normAngle(m_startAngleDegrees);
+    double endAngle = GeometryUtils::normAngle(m_startAngleDegrees + m_sweepAngleDegrees);
+
+    // Determine arc direction (CCW if sweep >= 0, CW if sweep < 0)
+    bool isCCW = (m_sweepAngleDegrees >= 0);
+
+    // Compute angular distance from intersection to start and end
+    // along the arc direction
+    double distToStart, distToEnd;
+    if (isCCW) {
+        // CCW: angular distance from intersection toward start (backwards)
+        distToStart = GeometryUtils::normAngle(intAngle - startAngle);
+        // CCW: angular distance from intersection toward end (forward)
+        distToEnd = GeometryUtils::normAngle(endAngle - intAngle);
+    } else {
+        // CW: angular distance from intersection toward start (forward)
+        distToStart = GeometryUtils::normAngle(startAngle - intAngle);
+        // CW: angular distance from intersection toward end (backwards)
+        distToEnd = GeometryUtils::normAngle(intAngle - endAngle);
+    }
+
+    // Compute angular distance from intersection to click
+    double distToClick;
+    if (isCCW) {
+        distToClick = GeometryUtils::normAngle(clickAngle - intAngle);
+    } else {
+        distToClick = GeometryUtils::normAngle(intAngle - clickAngle);
+    }
+
+    // If click is closer to start side (shorter angular distance along arc direction)
+    // Note: For CCW arc, click between intersection and start means we trim start side
+    if (distToClick < distToStart + 0.5) {
+        return TrimEnd::Start;
+    } else {
+        return TrimEnd::End;
+    }
+}
+
+QPointF ArcEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return (end == TrimEnd::Start) ? startPoint() : endPoint();
 }

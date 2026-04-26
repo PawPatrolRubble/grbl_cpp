@@ -25,6 +25,10 @@ public:
     QJsonObject toJson() const override;
     static std::unique_ptr<CircleEntity> fromJson(const QJsonObject& json);
 
+    // Trim support - circle trimming converts to arc
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry
     double radius() const;
     void setGeometry(const QPointF& center, double radius);

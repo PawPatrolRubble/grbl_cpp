@@ -10,6 +10,13 @@
 #include <vector>
 #include <optional>
 
+/// Indicates which end of an entity should be trimmed/extended.
+enum class TrimEnd {
+    Start,  ///< Trim or extend at the start point
+    End,    ///< Trim or extend at the end point
+    None    ///< Cannot determine trim direction
+};
+
 /// Abstract base class for all drawable entities.
 /// Merges tinyCad's Entity (editHandles, snapPoints, distanceTo) with
 /// grbl_cpp's Shape (toGcodeMoves, toJson).
@@ -91,6 +98,17 @@ public:
 
     // Display name for entity list
     virtual QString displayName() const;
+
+    // === Trim/Extend support ===
+
+    /// Determine which end of the entity to trim based on click position vs intersection.
+    /// Returns TrimEnd::Start if click is near the start side of intersection,
+    /// TrimEnd::End if click is near the end side, TrimEnd::None if cannot determine.
+    /// Used by Trim tool to decide which portion to keep after trimming.
+    virtual TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const = 0;
+
+    /// Get the point at a specific trim end (Start returns startPoint, End returns endPoint).
+    virtual QPointF pointAtTrimEnd(TrimEnd end) const = 0;
 
 protected:
     QUuid m_id;

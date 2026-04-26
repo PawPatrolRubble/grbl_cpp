@@ -250,3 +250,15 @@ std::array<QPointF, 4> RectangleEntity::corners() const
 {
     return rectangleCorners(m_center, m_width, m_height, m_angleDegrees);
 }
+
+TrimEnd RectangleEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Rectangles are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF RectangleEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    const auto c = corners();
+    return (end == TrimEnd::Start) ? c[0] : c[3];
+}

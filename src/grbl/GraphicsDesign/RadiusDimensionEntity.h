@@ -37,6 +37,10 @@ public:
     static std::unique_ptr<RadiusDimensionEntity> fromJson(const QJsonObject& json);
     QString displayName() const override;
 
+    // Trim support - dimension entities are not trimmable
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry accessors
     QPointF circleCenter() const { return m_center; }
     double circleRadius() const { return m_radius; }

@@ -224,3 +224,14 @@ QString RadiusDimensionEntity::displayName() const
         return QString("Diameter (%1)").arg(m_radius * 2.0, 0, 'f', 2);
     return QString("Radius (%1)").arg(m_radius, 0, 'f', 2);
 }
+
+TrimEnd RadiusDimensionEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Dimensions are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF RadiusDimensionEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return m_center;
+}

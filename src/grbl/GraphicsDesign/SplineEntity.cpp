@@ -264,3 +264,15 @@ std::unique_ptr<SplineEntity> SplineEntity::fromJson(const QJsonObject& json)
         e->setStepsPerSegment(json["stepsPerSegment"].toInt(20));
     return e;
 }
+
+TrimEnd SplineEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Splines are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF SplineEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    if (m_points.isEmpty()) return QPointF();
+    return (end == TrimEnd::Start) ? m_points.first() : m_points.last();
+}

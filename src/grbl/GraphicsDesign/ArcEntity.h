@@ -25,6 +25,10 @@ public:
     QJsonObject toJson() const override;
     static std::unique_ptr<ArcEntity> fromJson(const QJsonObject& json);
 
+    // Trim support
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry
     double radius() const;
     double startAngleDegrees() const;

@@ -39,6 +39,10 @@ public:
 
     static std::unique_ptr<SplineEntity> fromJson(const QJsonObject& json);
 
+    // Trim support - spline trimming is not directly supported
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // --- Spline-specific API ---
     const QList<QPointF>& controlPoints()    const { return m_points; }
     void setControlPoints(const QList<QPointF>& pts) { m_points = pts; invalidateCache(); }

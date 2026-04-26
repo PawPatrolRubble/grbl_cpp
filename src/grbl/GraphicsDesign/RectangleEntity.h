@@ -26,6 +26,10 @@ public:
     QJsonObject toJson() const override;
     static std::unique_ptr<RectangleEntity> fromJson(const QJsonObject& json);
 
+    // Trim support - rectangle trimming is not directly supported
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry
     double width() const;
     double height() const;

@@ -261,3 +261,14 @@ QString LinearDimensionEntity::displayName() const
 {
     return QString("Dimension (%1)").arg(QString::number(measuredLength(), 'f', 2));
 }
+
+TrimEnd LinearDimensionEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Dimensions are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF LinearDimensionEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return (end == TrimEnd::Start) ? m_p1 : m_p2;
+}

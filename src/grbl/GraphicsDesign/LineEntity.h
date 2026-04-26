@@ -27,6 +27,10 @@ public:
     QJsonObject toJson() const override;
     static std::unique_ptr<LineEntity> fromJson(const QJsonObject& json);
 
+    // Trim support
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Geometry
     QPointF startPoint() const;
     QPointF endPoint() const;

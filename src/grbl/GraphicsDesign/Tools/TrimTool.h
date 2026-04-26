@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Tool.h"
+#include "../TrimModification.h"
 
 #include <QPointF>
 #include <optional>
@@ -10,16 +11,15 @@
 
 /// AutoCAD-style Trim tool with two-phase workflow and fence mode.
 ///
-/// Phase 1: Select cutting edges (boundary entities)
-/// Phase 2: Trim objects at intersections with cutting edges
-///   - Click to trim individual objects
-///   - Fence mode: sweep mouse across entities to trim multiple
+/// Quick-trim mode (default): Click entity to trim at nearest intersection.
+/// Shift+click: Select cutting edges explicitly.
+/// Fence mode: Drag across entities to trim multiple at once.
 ///
 class TrimTool final : public Tool
 {
 public:
     enum class Phase {
-        SelectCuttingEdges,  // Select boundary entities
+        SelectCuttingEdges,  // Select boundary entities (Shift+click)
         TrimObjects          // Trim objects at intersections
     };
 
@@ -55,10 +55,6 @@ private:
 
     // Trim phase state
     int m_hoverEntityIdx = -1;   // Entity under cursor
-    double m_hoverParam = 0.0;   // Parameter along entity
-    double m_trimLo = 0.0;       // Lower cut parameter
-    double m_trimHi = 1.0;       // Upper cut parameter
-    bool m_hasTrimSegment = false;
 
     // Fence mode state
     bool m_fenceMode = false;
@@ -68,10 +64,7 @@ private:
     std::vector<int> m_fenceCrossedEntities;  // Entities crossed by fence line
 
     // Helper methods
-    void updateHover(const QPointF& worldPos);
-    void updateFencePreview(const QPointF& worldPos);
-    std::vector<double> computeCutsOnEntity(int entityIdx) const;
     std::vector<int> findEntitiesCrossedByFence(const QPointF& p1, const QPointF& p2) const;
-    void trimEntity(int entityIdx, double clickParam);
     void trimEntitiesByFence();
+    void applyTrimResult(int entityIdx, TrimModification::TrimResult&& result);
 };

@@ -36,6 +36,10 @@ public:
     QJsonObject toJson() const override;
     static std::unique_ptr<TextEntity> fromJson(const QJsonObject& json);
 
+    // Trim support - text trimming is not directly supported
+    TrimEnd getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const override;
+    QPointF pointAtTrimEnd(TrimEnd end) const override;
+
     // Accessors
     QPointF position() const { return m_position; }
     QString text() const { return m_text; }

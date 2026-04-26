@@ -275,3 +275,14 @@ QString AngularDimensionEntity::displayName() const
 {
     return QString("Angle (%1°)").arg(measuredAngleDegrees(), 0, 'f', 1);
 }
+
+TrimEnd AngularDimensionEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
+{
+    // Dimensions are not directly trimmable - return None
+    return TrimEnd::None;
+}
+
+QPointF AngularDimensionEntity::pointAtTrimEnd(TrimEnd end) const
+{
+    return m_vertex;
+}
