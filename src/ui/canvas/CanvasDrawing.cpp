@@ -492,8 +492,16 @@ void CanvasDrawing::drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, b
 void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mouseWorldPos,
                                            const QString& activeSnapLabel,
                                            const QPointF& activeSnapPos,
-                                           bool snapActive) const
+                                           bool snapActive,
+                                           bool snapEnabled,
+                                           bool endpointSnap,
+                                           bool midpointSnap,
+                                           bool centerSnap,
+                                           bool perpendicularSnap) const
 {
+    // If snap is disabled globally, don't draw any markers
+    if (!snapEnabled) return;
+    
     // Threshold in screen pixels converted to world units
     const double screenThreshold = 50.0;  // pixels - how close mouse must be to entity to show markers
     const double worldThreshold = screenThreshold / m_transforms.zoom();
@@ -546,6 +554,11 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
                 label = "Point";
             }
 
+            // Skip marker if this snap type is disabled
+            if ((label == "Endpoint" || label == "Start" || label == "End" || label == "Corner") && !endpointSnap) continue;
+            if (label == "Midpoint" && !midpointSnap) continue;
+            if ((label == "Center" || label == "Quadrant") && !centerSnap) continue;
+
             // Determine if this is the active snap point
             // Use distance threshold for robust matching (floating point equality can fail)
             const double distToActiveSnap = QLineF(pt, activeSnapPos).length();
@@ -574,6 +587,9 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
         }
         
         // --- Perpendicular snap points (computed dynamically based on cursor position) ---
+        // Only compute if perpendicular snap is enabled
+        if (!perpendicularSnap) continue;
+        
         // Helper lambda to draw a perpendicular marker
         auto drawPerpMarker = [&](const QPointF& perpPt) {
             const double distToActiveSnap = QLineF(perpPt, activeSnapPos).length();

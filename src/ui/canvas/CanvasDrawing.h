@@ -54,7 +54,12 @@ public:
     void drawEntitySnapMarkers(QPainter& painter, const QPointF& mouseWorldPos,
                                 const QString& activeSnapLabel,
                                 const QPointF& activeSnapPos,
-                                bool snapActive) const;
+                                bool snapActive,
+                                bool snapEnabled,
+                                bool endpointSnap,
+                                bool midpointSnap,
+                                bool centerSnap,
+                                bool perpendicularSnap) const;
     void drawCrosshair(QPainter& painter, const QPointF& mouseScreenPos,
                        bool mouseInWidget, const QSize& widgetSize) const;
 

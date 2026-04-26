@@ -487,7 +487,12 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     const QPointF mouseWorldPos = toWorld(m_mouseScreenPos);
     m_drawing.drawEntitySnapMarkers(painter, mouseWorldPos, 
                                      m_snapResult.label, m_snapResult.worldPos, 
-                                     m_snapResult.active);
+                                     m_snapResult.active,
+                                     m_snapEnabled,
+                                     endpointSnapEnabled(),
+                                     midpointSnapEnabled(),
+                                     centerSnapEnabled(),
+                                     perpendicularSnapEnabled());
     
     painter.restore();
 
