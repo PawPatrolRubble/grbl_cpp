@@ -526,9 +526,9 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
             }
 
             // Determine if this is the active snap point
-            const bool isActive = snapActive && 
-                                  (pt == activeSnapPos || 
-                                   (activeSnapLabel == label && QLineF(pt, activeSnapPos).length() < 0.01));
+            // Use distance threshold for robust matching (floating point equality can fail)
+            const double distToActiveSnap = QLineF(pt, activeSnapPos).length();
+            const bool isActive = snapActive && distToActiveSnap < 0.1;
 
             // Marker size based on type and active state
             const double markerSize = isActive ? (6.0 / m_transforms.zoom()) : (4.0 / m_transforms.zoom());
