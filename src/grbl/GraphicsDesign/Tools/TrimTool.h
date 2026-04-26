@@ -50,7 +50,7 @@ public:
     bool fenceMode() const { return m_fenceMode; }
 
 private:
-    Phase m_phase = Phase::SelectCuttingEdges;
+    Phase m_phase = Phase::TrimObjects;  // Start in trim mode for quick-trim workflow
     QSet<QUuid> m_cuttingEdges;  // Selected cutting edge entities
 
     // Trim phase state
