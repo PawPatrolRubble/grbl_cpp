@@ -720,7 +720,7 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
         
         // --- Perpendicular snap points (reference-based, only when first point is placed) ---
         // Only compute if perpendicular snap is enabled and a reference point exists
-        if (perpendicularSnap && perpRef) {
+        if (perpendicularSnap && perpRef && snapActive && activeSnapLabel == "Perpendicular") {
         const QPointF& ref = *perpRef;
         // Helper lambda to draw a perpendicular marker (skips degenerate zero-length candidates)
         auto drawPerpMarker = [&](const std::optional<QPointF>& perp) {

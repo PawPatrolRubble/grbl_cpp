@@ -358,7 +358,6 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
         // Computes the point on each entity where the line from the reference is perpendicular.
         if (m_perpendicularSnap && tangentRef) {
             const QPointF& ref = *tangentRef;
-            const double entityScreenDistance = entity->distanceTo(rawWorldPos) * m_transforms.zoom();
 
             // Filter: skip perpendicular candidates that coincide with the reference point
             // (would produce a degenerate/invisible zero-length line)
@@ -366,22 +365,6 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
                 if (!perp) return;
                 const double refScreenDistance = QLineF(toScreen(ref), toScreen(*perp)).length();
                 if (refScreenDistance <= 2.0) {
-                    return;
-                }
-
-                const double pointScreenDistance = candidateScreenDistance(*perp);
-
-                // When the cursor is hovering near an entity, prefer that entity's valid
-                // perpendicular snap over its ordinary point snaps. This makes rectangles
-                // and other multi-edge entities behave like object snaps instead of only
-                // point snaps.
-                if (entityScreenDistance <= m_snapDistancePx) {
-                    if (!best.active || best.label != "Perpendicular" || pointScreenDistance <= bestScreenDistance) {
-                        best.active = true;
-                        best.worldPos = *perp;
-                        best.label = "Perpendicular";
-                        bestScreenDistance = pointScreenDistance;
-                    }
                     return;
                 }
 
