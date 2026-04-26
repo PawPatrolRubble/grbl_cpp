@@ -61,6 +61,21 @@ public:
     void setCanvasSettings(const SettingsManager::CanvasSettings &s);
     bool snapEnabled() const { return m_snapEnabled; }
     void setSnapEnabled(bool enabled);
+    // Per-type snap enable/disable (forwarded to CanvasSnap)
+    void setGridSnapEnabled(bool on);
+    void setEndpointSnapEnabled(bool on);
+    void setMidpointSnapEnabled(bool on);
+    void setCenterSnapEnabled(bool on);
+    void setIntersectionSnapEnabled(bool on);
+    void setPerpendicularSnapEnabled(bool on);
+    void setNearestSnapEnabled(bool on);
+    bool gridSnapEnabled()          const;
+    bool endpointSnapEnabled()      const;
+    bool midpointSnapEnabled()      const;
+    bool centerSnapEnabled()        const;
+    bool intersectionSnapEnabled()  const;
+    bool perpendicularSnapEnabled() const;
+    bool nearestSnapEnabled()       const;
     double gridSize() const { return m_gridSize; }
     void setGridSize(double size);
     double filletRadius() const;

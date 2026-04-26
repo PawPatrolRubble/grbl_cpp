@@ -481,7 +481,8 @@ void DesignCanvas::paintEvent(QPaintEvent *)
     painter.setPen(CanvasDrawing::createPreviewPen());
     activeTool().paintPreview(painter);
 
-    m_drawing.drawSnapIndicator(painter, m_snapResult.worldPos, m_snapResult.active);
+    m_drawing.drawSnapIndicator(painter, m_snapResult.worldPos, m_snapResult.active,
+                                m_snapResult.label);
     
     // Draw entity snap markers (AutoSnap preview)
     const QPointF mouseWorldPos = toWorld(m_mouseScreenPos);
@@ -492,7 +493,8 @@ void DesignCanvas::paintEvent(QPaintEvent *)
                                      endpointSnapEnabled(),
                                      midpointSnapEnabled(),
                                      centerSnapEnabled(),
-                                     perpendicularSnapEnabled());
+                                     perpendicularSnapEnabled(),
+                                     m_tangentReference);
     
     painter.restore();
 

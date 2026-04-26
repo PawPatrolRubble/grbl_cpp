@@ -6,6 +6,7 @@
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kHandleOffset = 8.0;
+constexpr double kMinBoundsExtent = 1e-6;
 
 double angleDegreesForVector(const QPointF& vector) {
     return std::atan2(vector.y(), vector.x()) * 180.0 / kPi;
@@ -29,7 +30,15 @@ QRectF LineEntity::boundingRect() const
     double maxX = std::max(m_line.p1().x(), m_line.p2().x());
     double minY = std::min(m_line.p1().y(), m_line.p2().y());
     double maxY = std::max(m_line.p1().y(), m_line.p2().y());
-    return QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
+
+    QRectF bounds(QPointF(minX, minY), QPointF(maxX, maxY));
+    if (bounds.width() < kMinBoundsExtent) {
+        bounds.adjust(-0.5 * kMinBoundsExtent, 0.0, 0.5 * kMinBoundsExtent, 0.0);
+    }
+    if (bounds.height() < kMinBoundsExtent) {
+        bounds.adjust(0.0, -0.5 * kMinBoundsExtent, 0.0, 0.5 * kMinBoundsExtent);
+    }
+    return bounds;
 }
 
 QPointF LineEntity::center() const

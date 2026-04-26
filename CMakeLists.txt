@@ -311,7 +311,23 @@ target_link_libraries(TestGcodeParser PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent
 add_executable(TestShxDebug tests/test_shx_debug.cpp src/grbl/TextToGcode/ShxFontParser.cpp)
 target_include_directories(TestShxDebug PRIVATE src)
 target_link_libraries(TestShxDebug PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent Qt6::Core5Compat)
+add_executable(TestCanvasSnap
+    tests/test_canvas_snap.cpp
+    src/ui/canvas/CanvasSnap.cpp
+    ${GRBL_SOURCES}
+)
+target_include_directories(TestCanvasSnap PRIVATE src)
+target_link_libraries(TestCanvasSnap PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Concurrent
+    Qt6::Core5Compat
+    Qt6::SerialPort
+    ${OpenCV_LIBS}
+)
 if(WIN32)
     target_compile_definitions(TestGcodeParser PRIVATE UNICODE _UNICODE)
     target_compile_definitions(TestShxDebug PRIVATE UNICODE _UNICODE)
+    target_compile_definitions(TestCanvasSnap PRIVATE UNICODE _UNICODE)
 endif()

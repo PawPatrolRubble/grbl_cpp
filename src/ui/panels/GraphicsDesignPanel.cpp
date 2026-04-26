@@ -254,6 +254,40 @@ void GraphicsDesignPanel::setupUi()
     ctrlBar->addStretch();
     rightLayout->addLayout(ctrlBar);
 
+    // Snap type toggle bar (like AutoCAD OSNAP toolbar)
+    auto *snapBar = new QHBoxLayout();
+    snapBar->setSpacing(3);
+
+    auto makeSnapBtn = [](const QString& text, const QString& tip) {
+        auto *btn = new QToolButton();
+        btn->setText(text);
+        btn->setCheckable(true);
+        btn->setChecked(true);
+        btn->setToolTip(tip);
+        btn->setMaximumWidth(40);
+        btn->setStyleSheet("QToolButton { padding: 1px 3px; font-size: 11px; }"
+                           "QToolButton:checked { background: #2d6a4f; color: #fff; border: 1px solid #40916c; }");
+        return btn;
+    };
+
+    snapBar->addWidget(new QLabel("Osnap:"));
+    m_snapGridBtn = makeSnapBtn("Grid", "Snap to grid points");
+    m_snapEndBtn  = makeSnapBtn("End",  "Snap to endpoints and corners");
+    m_snapMidBtn  = makeSnapBtn("Mid",  "Snap to midpoints");
+    m_snapCtrBtn  = makeSnapBtn("Ctr",  "Snap to centers and quadrants");
+    m_snapIntBtn  = makeSnapBtn("Int",  "Snap to intersections");
+    m_snapPerpBtn = makeSnapBtn("Perp", "Snap to perpendicular points");
+    m_snapNearBtn = makeSnapBtn("Near", "Snap to nearest point on curve");
+    snapBar->addWidget(m_snapGridBtn);
+    snapBar->addWidget(m_snapEndBtn);
+    snapBar->addWidget(m_snapMidBtn);
+    snapBar->addWidget(m_snapCtrBtn);
+    snapBar->addWidget(m_snapIntBtn);
+    snapBar->addWidget(m_snapPerpBtn);
+    snapBar->addWidget(m_snapNearBtn);
+    snapBar->addStretch();
+    rightLayout->addLayout(snapBar);
+
     // Action buttons row
     auto *actionRow = new QHBoxLayout();
     actionRow->setSpacing(6);
@@ -681,6 +715,16 @@ void GraphicsDesignPanel::setupConnections()
     // Snap toggle (bidirectional: button �?canvas)
     connect(m_snapBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setSnapEnabled);
     connect(m_canvas, &DesignCanvas::snapEnabledChanged, m_snapBtn, &QToolButton::setChecked);
+
+    // Per-type snap toggles
+    connect(m_snapGridBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setGridSnapEnabled);
+    connect(m_snapEndBtn,  &QToolButton::toggled, m_canvas, &DesignCanvas::setEndpointSnapEnabled);
+    connect(m_snapMidBtn,  &QToolButton::toggled, m_canvas, &DesignCanvas::setMidpointSnapEnabled);
+    connect(m_snapCtrBtn,  &QToolButton::toggled, m_canvas, &DesignCanvas::setCenterSnapEnabled);
+    connect(m_snapIntBtn,  &QToolButton::toggled, m_canvas, &DesignCanvas::setIntersectionSnapEnabled);
+    connect(m_snapPerpBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setPerpendicularSnapEnabled);
+    connect(m_snapNearBtn, &QToolButton::toggled, m_canvas, &DesignCanvas::setNearestSnapEnabled);
+
     connect(m_gridSizeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             m_canvas, &DesignCanvas::setGridSize);
     connect(m_canvas, &DesignCanvas::gridSizeChanged, m_gridSizeSpin, &QDoubleSpinBox::setValue);

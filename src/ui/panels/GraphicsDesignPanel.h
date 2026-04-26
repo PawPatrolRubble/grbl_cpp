@@ -100,6 +100,13 @@ private:
     QPushButton *m_exportBtn;
     QPushButton *m_generateBtn;
     QToolButton *m_snapBtn;
+    QToolButton *m_snapGridBtn = nullptr;
+    QToolButton *m_snapEndBtn  = nullptr;
+    QToolButton *m_snapMidBtn  = nullptr;
+    QToolButton *m_snapCtrBtn  = nullptr;
+    QToolButton *m_snapIntBtn  = nullptr;
+    QToolButton *m_snapPerpBtn = nullptr;
+    QToolButton *m_snapNearBtn = nullptr;
     QDoubleSpinBox *m_gridSizeSpin = nullptr;
     QLabel         *m_filletRadiusLabel  = nullptr;
     QDoubleSpinBox *m_filletRadiusSpin   = nullptr;
@@ -124,7 +131,7 @@ private:
     QStackedWidget *m_propertyStack;
     bool m_updatingUi = false;
 
-    // Text property widgets (no TextPage extracted yet â€?kept inline)
+    // Text property widgets (no TextPage extracted yet ï¿½?kept inline)
     QDoubleSpinBox *m_textPosX;
     QDoubleSpinBox *m_textPosY;
     QPlainTextEdit *m_textEdit;
@@ -161,7 +168,7 @@ private:
 
     void setupUi();
     void setupConnections();
-    void buildTextPage();          ///< Text entity page (inline â€?no PropertyPage subclass yet)
+    void buildTextPage();          ///< Text entity page (inline ï¿½?no PropertyPage subclass yet)
     void refreshEntityList();
     void onEntityItemChanged(QListWidgetItem *item);
     void applyProperties(int index, std::unique_ptr<Entity> newEntity);

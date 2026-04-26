@@ -31,7 +31,7 @@ std::optional<QPointF> perpendicularPointOnLine(const QPointF& p, const QPointF&
     const double t = (ap.x() * ab.x() + ap.y() * ab.y()) / len2;
     
     // Only snap if perpendicular falls within segment (not beyond endpoints)
-    if (t > 0.05 && t < 0.95) {
+    if (t >= 0.0 && t <= 1.0) {
         return a + t * ab;
     }
     return std::nullopt;
@@ -259,11 +259,18 @@ QPointF CanvasSnap::toScreen(const QPointF& worldPos) const
 CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool includeSelection,
                                                std::optional<QPointF> tangentRef) const
 {
+    // Entity snaps take priority over grid snap.
+    // We collect entity snaps first; grid snap is only used as a fallback
+    // if no entity snap is within range.
     SnapResult best;
     double bestScreenDistance = m_snapDistancePx;
 
+    auto candidateScreenDistance = [&](const QPointF& candidate) {
+        return QLineF(toScreen(rawWorldPos), toScreen(candidate)).length();
+    };
+
     auto tryCandidate = [&](const QPointF& candidate, const QString& label) {
-        const double screenDistance = QLineF(toScreen(rawWorldPos), toScreen(candidate)).length();
+        const double screenDistance = candidateScreenDistance(candidate);
         if (screenDistance <= bestScreenDistance) {
             best.active = true;
             best.worldPos = candidate;
@@ -272,12 +279,7 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
         }
     };
 
-    // Grid snap
-    const QPointF gridPoint(std::round(rawWorldPos.x() / m_gridSize) * m_gridSize,
-                            std::round(rawWorldPos.y() / m_gridSize) * m_gridSize);
-    tryCandidate(gridPoint, "Grid");
-
-    // Entity snap points
+    // Entity snap points (evaluated before grid so they take priority)
     const Entity* selected = m_document.selectedEntity();
 
     for (int i = 0; i < m_document.entityCount(); ++i) {
@@ -313,6 +315,18 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
                 const std::size_t vertexCount = (total + 1) / 2;
                 label = pointIndex < vertexCount ? "Endpoint" : "Midpoint";
             }
+
+            // Respect per-type flags
+            if (label == "Endpoint" || label == "Start" || label == "End" || label == "Corner") {
+                if (!m_endpointSnap) continue;
+            } else if (label == "Midpoint") {
+                if (!m_midpointSnap) continue;
+            } else if (label == "Center") {
+                if (!m_centerSnap) continue;
+            } else if (label == "Quadrant") {
+                if (!m_centerSnap) continue; // grouped with center
+            }
+
             tryCandidate(points[pointIndex], label);
         }
     }
@@ -326,55 +340,80 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
 
         const auto kind = entity->kind();
 
-        // LineEntity: perpendicular to line segment
-        if (kind == Entity::Kind::Line) {
-            auto* line = static_cast<LineEntity*>(entity);
-            auto perp = perpendicularPointOnLine(rawWorldPos, line->startPoint(), line->endPoint());
-            if (perp) tryCandidate(*perp, "Perpendicular");
-        }
-
-        // ArcEntity: nearest point on arc (if within arc sweep)
-        if (kind == Entity::Kind::Arc) {
+        // Nearest snap: nearest point on arc/circle circumference
+        if (m_nearestSnap && kind == Entity::Kind::Arc) {
             auto* arc = static_cast<ArcEntity*>(entity);
             auto nearest = nearestPointOnArc(rawWorldPos, arc->center(), arc->radius(),
                                              arc->startAngleDegrees(), arc->sweepAngleDegrees());
             if (nearest) tryCandidate(*nearest, "Nearest");
         }
 
-        // CircleEntity: nearest point on circle
-        if (kind == Entity::Kind::Circle) {
+        if (m_nearestSnap && kind == Entity::Kind::Circle) {
             auto* circle = static_cast<CircleEntity*>(entity);
             auto nearest = nearestPointOnCircle(rawWorldPos, circle->center(), circle->radius());
             if (nearest) tryCandidate(*nearest, "Nearest");
         }
 
-        // RectangleEntity: perpendicular to each edge
-        if (kind == Entity::Kind::Rectangle) {
-            auto* rect = static_cast<RectangleEntity*>(entity);
-            const auto c = rect->corners();
-            // Edges: c[0]-c[1], c[1]-c[2], c[2]-c[3], c[3]-c[0]
-            auto perp0 = perpendicularPointOnLine(rawWorldPos, c[0], c[1]);
-            if (perp0) tryCandidate(*perp0, "Perpendicular");
-            auto perp1 = perpendicularPointOnLine(rawWorldPos, c[1], c[2]);
-            if (perp1) tryCandidate(*perp1, "Perpendicular");
-            auto perp2 = perpendicularPointOnLine(rawWorldPos, c[2], c[3]);
-            if (perp2) tryCandidate(*perp2, "Perpendicular");
-            auto perp3 = perpendicularPointOnLine(rawWorldPos, c[3], c[0]);
-            if (perp3) tryCandidate(*perp3, "Perpendicular");
-        }
+        // Perpendicular snap: only meaningful when a reference (first) point exists.
+        // Computes the point on each entity where the line from the reference is perpendicular.
+        if (m_perpendicularSnap && tangentRef) {
+            const QPointF& ref = *tangentRef;
+            const double entityScreenDistance = entity->distanceTo(rawWorldPos) * m_transforms.zoom();
 
-        // PolylineEntity: perpendicular to each segment
-        if (kind == Entity::Kind::Polygon) {
-            auto* poly = static_cast<PolylineEntity*>(entity);
-            const auto& pts = poly->points();
-            for (int seg = 0; seg + 1 < pts.size(); ++seg) {
-                auto perp = perpendicularPointOnLine(rawWorldPos, pts[seg], pts[seg + 1]);
-                if (perp) tryCandidate(*perp, "Perpendicular");
+            // Filter: skip perpendicular candidates that coincide with the reference point
+            // (would produce a degenerate/invisible zero-length line)
+            auto tryPerp = [&](const std::optional<QPointF>& perp) {
+                if (!perp) return;
+                const double refScreenDistance = QLineF(toScreen(ref), toScreen(*perp)).length();
+                if (refScreenDistance <= 2.0) {
+                    return;
+                }
+
+                const double pointScreenDistance = candidateScreenDistance(*perp);
+
+                // When the cursor is hovering near an entity, prefer that entity's valid
+                // perpendicular snap over its ordinary point snaps. This makes rectangles
+                // and other multi-edge entities behave like object snaps instead of only
+                // point snaps.
+                if (entityScreenDistance <= m_snapDistancePx) {
+                    if (!best.active || best.label != "Perpendicular" || pointScreenDistance <= bestScreenDistance) {
+                        best.active = true;
+                        best.worldPos = *perp;
+                        best.label = "Perpendicular";
+                        bestScreenDistance = pointScreenDistance;
+                    }
+                    return;
+                }
+
+                tryCandidate(*perp, "Perpendicular");
+            };
+
+            // LineEntity: foot of perpendicular from reference to line segment
+            if (kind == Entity::Kind::Line) {
+                auto* line = static_cast<LineEntity*>(entity);
+                tryPerp(perpendicularPointOnLine(ref, line->startPoint(), line->endPoint()));
+            }
+
+            // RectangleEntity: perpendicular from reference to each edge
+            if (kind == Entity::Kind::Rectangle) {
+                auto* rect = static_cast<RectangleEntity*>(entity);
+                const auto c = rect->corners();
+                for (int edge = 0; edge < 4; ++edge)
+                    tryPerp(perpendicularPointOnLine(ref, c[edge], c[(edge + 1) % 4]));
+            }
+
+            // PolylineEntity: perpendicular from reference to each segment
+            if (kind == Entity::Kind::Polygon) {
+                auto* poly = static_cast<PolylineEntity*>(entity);
+                const auto& pts = poly->points();
+                for (int seg = 0; seg + 1 < pts.size(); ++seg)
+                    tryPerp(perpendicularPointOnLine(ref, pts[seg], pts[seg + 1]));
             }
         }
     }
 
     // Intersection snap points (between pairs of entities)
+    if (m_intersectionSnap)
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity1 = m_document.entityAt(i);
         if (!includeSelection && selected && entity1->id() == selected->id()) {
@@ -566,6 +605,18 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
                     }
                 }
             }
+        }
+    }
+
+    // Grid snap: only use if no entity snap was found
+    if (!best.active) {
+        const QPointF gridPoint(std::round(rawWorldPos.x() / m_gridSize) * m_gridSize,
+                                std::round(rawWorldPos.y() / m_gridSize) * m_gridSize);
+        const double screenDistance = QLineF(toScreen(rawWorldPos), toScreen(gridPoint)).length();
+        if (screenDistance <= m_snapDistancePx) {
+            best.active = true;
+            best.worldPos = gridPoint;
+            best.label = "Grid";
         }
     }
 

@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSize>
+#include <optional>
 
 /// All canvas rendering logic extracted from DesignCanvas.
 ///
@@ -50,7 +51,8 @@ public:
     void drawHandles(QPainter& painter,
                      const QString& hoverHandleId,
                      const std::vector<Entity::EditHandle>& handles) const;
-    void drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, bool snapActive) const;
+    void drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, bool snapActive,
+                           const QString& snapLabel = QString()) const;
     void drawEntitySnapMarkers(QPainter& painter, const QPointF& mouseWorldPos,
                                 const QString& activeSnapLabel,
                                 const QPointF& activeSnapPos,
@@ -59,7 +61,8 @@ public:
                                 bool endpointSnap,
                                 bool midpointSnap,
                                 bool centerSnap,
-                                bool perpendicularSnap) const;
+                                bool perpendicularSnap,
+                                std::optional<QPointF> perpRef = std::nullopt) const;
     void drawCrosshair(QPainter& painter, const QPointF& mouseScreenPos,
                        bool mouseInWidget, const QSize& widgetSize) const;
 

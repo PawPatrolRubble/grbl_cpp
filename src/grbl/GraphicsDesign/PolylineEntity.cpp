@@ -11,6 +11,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kArcTolerance = 0.3; // mm — max deviation from fitted arc
 constexpr int kMinArcPoints = 5;      // Minimum points for arc fitting
+constexpr double kMinBoundsExtent = 1e-6;
 
 /// Fit a circle through three points. Returns false if collinear.
 bool fitCircle(const QPointF& p1, const QPointF& p2, const QPointF& p3,
@@ -134,7 +135,15 @@ QRectF PolylineEntity::boundingRect() const
         minY = std::min(minY, pt.y());
         maxY = std::max(maxY, pt.y());
     }
-    return QRectF(minX, minY, maxX - minX, maxY - minY);
+
+    QRectF bounds(minX, minY, maxX - minX, maxY - minY);
+    if (bounds.width() < kMinBoundsExtent) {
+        bounds.adjust(-0.5 * kMinBoundsExtent, 0.0, 0.5 * kMinBoundsExtent, 0.0);
+    }
+    if (bounds.height() < kMinBoundsExtent) {
+        bounds.adjust(0.0, -0.5 * kMinBoundsExtent, 0.0, 0.5 * kMinBoundsExtent);
+    }
+    return bounds;
 }
 
 QPointF PolylineEntity::center() const

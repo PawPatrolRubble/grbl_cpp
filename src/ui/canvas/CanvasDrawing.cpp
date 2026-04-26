@@ -1,11 +1,14 @@
 #include "CanvasDrawing.h"
 #include "../../grbl/GraphicsDesign/LineEntity.h"
+#include "../../grbl/GraphicsDesign/CircleEntity.h"
+#include "../../grbl/GraphicsDesign/ArcEntity.h"
 #include "../../grbl/GraphicsDesign/RectangleEntity.h"
 #include "../../grbl/GraphicsDesign/PolylineEntity.h"
 
 #include <QFontMetrics>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 namespace {
@@ -48,10 +51,143 @@ std::optional<QPointF> perpendicularPointOnLine(const QPointF& p, const QPointF&
     const double t = (ap.x() * ab.x() + ap.y() * ab.y()) / len2;
     
     // Only snap if perpendicular falls within segment (not beyond endpoints)
-    if (t > 0.05 && t < 0.95) {
+    if (t >= 0.0 && t <= 1.0) {
         return a + t * ab;
     }
     return std::nullopt;
+}
+
+/// Distance from point p to line segment a-b.
+double pointToSegmentDist(const QPointF& p, const QPointF& a, const QPointF& b) {
+    const QPointF ab = b - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    if (len2 < 1e-10) return std::hypot(p.x() - a.x(), p.y() - a.y());
+    const QPointF ap = p - a;
+    const double t = std::clamp((ap.x() * ab.x() + ap.y() * ab.y()) / len2, 0.0, 1.0);
+    const QPointF proj = a + t * ab;
+    return std::hypot(p.x() - proj.x(), p.y() - proj.y());
+}
+
+/// Approximate geometric distance from mouse to entity (world units).
+double mouseToEntityDist(const QPointF& mouse, const Entity* entity) {
+    const auto kind = entity->kind();
+    if (kind == Entity::Kind::Line) {
+        const auto* line = static_cast<const LineEntity*>(entity);
+        return pointToSegmentDist(mouse, line->startPoint(), line->endPoint());
+    }
+    if (kind == Entity::Kind::Circle) {
+        const auto* circle = static_cast<const CircleEntity*>(entity);
+        const double d = std::hypot(mouse.x() - circle->center().x(), mouse.y() - circle->center().y());
+        return std::abs(d - circle->radius());
+    }
+    if (kind == Entity::Kind::Arc) {
+        const auto* arc = static_cast<const ArcEntity*>(entity);
+        const double d = std::hypot(mouse.x() - arc->center().x(), mouse.y() - arc->center().y());
+        // Distance to the arc's circle circumference regardless of sweep
+        return std::abs(d - arc->radius());
+    }
+    if (kind == Entity::Kind::Rectangle) {
+        const auto* rect = static_cast<const RectangleEntity*>(entity);
+        const auto c = rect->corners();
+        double minDist = std::numeric_limits<double>::max();
+        for (int e = 0; e < 4; ++e)
+            minDist = std::min(minDist, pointToSegmentDist(mouse, c[e], c[(e + 1) % 4]));
+        return minDist;
+    }
+    if (kind == Entity::Kind::Polygon) {
+        const auto* poly = static_cast<const PolylineEntity*>(entity);
+        const auto& pts = poly->points();
+        double minDist = std::numeric_limits<double>::max();
+        for (int s = 0; s + 1 < pts.size(); ++s)
+            minDist = std::min(minDist, pointToSegmentDist(mouse, pts[s], pts[s + 1]));
+        return minDist;
+    }
+    // Fallback: distance to bounding rect center
+    const QRectF b = entity->boundingRect();
+    return std::hypot(mouse.x() - b.center().x(), mouse.y() - b.center().y());
+}
+/// Draw a distinct snap symbol at the given world point.
+/// Each snap type uses a unique shape, matching common CAD conventions.
+void drawSnapSymbol(QPainter& painter, const QString& label, const QPointF& pt,
+                    bool isActive, double invZoom)
+{
+    const double s = (isActive ? 7.0 : 5.0) * invZoom; // half-size in world units
+    const QColor activeColor(255, 220, 50);           // bright yellow when snapping
+    const QColor inactiveColor(140, 140, 140, 200);   // gray for candidate
+
+    const QColor color = isActive ? activeColor : inactiveColor;
+    const double pw = 1.5 * invZoom; // pen width in world units
+
+    QPen pen(color, pw);
+    pen.setCosmetic(false);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+
+    if (label == "Endpoint" || label == "Corner" || label == "Start" || label == "End") {
+        // Square box
+        painter.drawRect(QRectF(pt.x() - s, pt.y() - s, 2.0 * s, 2.0 * s));
+
+    } else if (label == "Midpoint") {
+        // Upward-pointing equilateral triangle
+        const double h = s * 1.732; // sqrt(3) * s
+        QPolygonF tri;
+        tri << QPointF(pt.x(),       pt.y() + h * 0.667)
+            << QPointF(pt.x() + s,   pt.y() - h * 0.333)
+            << QPointF(pt.x() - s,   pt.y() - h * 0.333);
+        painter.drawPolygon(tri);
+
+    } else if (label == "Center") {
+        // Circle
+        painter.drawEllipse(pt, s, s);
+
+    } else if (label == "Quadrant") {
+        // Diamond (rotated square)
+        QPolygonF diamond;
+        diamond << QPointF(pt.x(),     pt.y() + s)
+                << QPointF(pt.x() + s, pt.y())
+                << QPointF(pt.x(),     pt.y() - s)
+                << QPointF(pt.x() - s, pt.y());
+        diamond << diamond[0]; // close
+        painter.drawPolyline(diamond);
+
+    } else if (label == "Intersection") {
+        // X-cross (two diagonal lines)
+        painter.drawLine(QPointF(pt.x() - s, pt.y() - s), QPointF(pt.x() + s, pt.y() + s));
+        painter.drawLine(QPointF(pt.x() + s, pt.y() - s), QPointF(pt.x() - s, pt.y() + s));
+
+    } else if (label == "Perpendicular") {
+        // Right-angle mark: L-shape with a small square at corner
+        const double ls = s * 1.2;
+        painter.drawLine(QPointF(pt.x(),      pt.y() - ls), QPointF(pt.x(),      pt.y()));
+        painter.drawLine(QPointF(pt.x(),      pt.y()),       QPointF(pt.x() + ls, pt.y()));
+        // tiny corner square
+        const double cs = ls * 0.3;
+        painter.drawRect(QRectF(pt.x(), pt.y() - cs, cs, cs));
+
+    } else if (label == "Nearest") {
+        // Hourglass: two triangles (top and bottom)
+        painter.drawLine(QPointF(pt.x() - s, pt.y() + s), QPointF(pt.x() + s, pt.y() - s));
+        painter.drawLine(QPointF(pt.x() - s, pt.y() - s * 0.3), QPointF(pt.x() + s, pt.y() - s * 0.3));
+        painter.drawLine(QPointF(pt.x() - s, pt.y() + s * 0.3), QPointF(pt.x() + s, pt.y() + s * 0.3));
+
+    } else if (label == "Tangent") {
+        // Circle with a tangent horizontal line through it
+        painter.drawEllipse(pt, s * 0.7, s * 0.7);
+        painter.drawLine(QPointF(pt.x() - s * 1.2, pt.y() + s), QPointF(pt.x() + s * 1.2, pt.y() + s));
+
+    } else {
+        // Fallback: small circle
+        painter.drawEllipse(pt, s * 0.6, s * 0.6);
+    }
+
+    // When active, add a highlight ring
+    if (isActive) {
+        QPen ringPen(QColor(255, 220, 50, 120), pw * 0.8);
+        ringPen.setCosmetic(false);
+        painter.setPen(ringPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(pt, s * 1.5, s * 1.5);
+    }
 }
 } // namespace
 
@@ -466,22 +602,18 @@ void CanvasDrawing::drawHandles(QPainter& painter,
 // Snap Indicator
 // ============================================================================
 
-void CanvasDrawing::drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, bool snapActive) const
+void CanvasDrawing::drawSnapIndicator(QPainter& painter, QPointF snapWorldPos, bool snapActive,
+                                      const QString& snapLabel) const
 {
     if (!snapActive) return;
 
     painter.save();
-    QPen pen(QColor(22, 138, 173), 1.5 / m_transforms.zoom());
-    pen.setCosmetic(true);
-    painter.setPen(pen);
-    painter.setBrush(QColor(186, 230, 253, 160));
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const double half = 7.0 / m_transforms.zoom();
-    painter.drawLine(QPointF(snapWorldPos.x() - half, snapWorldPos.y()),
-                     QPointF(snapWorldPos.x() + half, snapWorldPos.y()));
-    painter.drawLine(QPointF(snapWorldPos.x(), snapWorldPos.y() - half),
-                     QPointF(snapWorldPos.x(), snapWorldPos.y() + half));
-    painter.drawEllipse(snapWorldPos, 3.5 / m_transforms.zoom(), 3.5 / m_transforms.zoom());
+    // Draw the type-specific snap symbol (active/highlighted state)
+    drawSnapSymbol(painter, snapLabel.isEmpty() ? QString("Point") : snapLabel,
+                   snapWorldPos, true, 1.0 / m_transforms.zoom());
+
     painter.restore();
 }
 
@@ -497,31 +629,50 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
                                            bool endpointSnap,
                                            bool midpointSnap,
                                            bool centerSnap,
-                                           bool perpendicularSnap) const
+                                           bool perpendicularSnap,
+                                           std::optional<QPointF> perpRef) const
 {
     // If snap is disabled globally, don't draw any markers
     if (!snapEnabled) return;
     
     // Threshold in screen pixels converted to world units
-    const double screenThreshold = 50.0;  // pixels - how close mouse must be to entity to show markers
+    const double screenThreshold = 60.0;  // pixels - how close mouse must be to entity to show markers
     const double worldThreshold = screenThreshold / m_transforms.zoom();
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
 
+    // Find the single closest entity within the world threshold.
+    // Only that entity's snap markers are drawn, avoiding visual clutter.
+    int closestIndex = -1;
+    double closestDist = worldThreshold;
+
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
         if (!entity || !entity->isEnabled()) continue;
 
-        // Check if mouse is near entity's bounding rect (dilated by threshold)
-        QRectF bounds = entity->boundingRect();
-        QRectF dilatedBounds(bounds.x() - worldThreshold, bounds.y() - worldThreshold,
-                             bounds.width() + 2 * worldThreshold,
-                             bounds.height() + 2 * worldThreshold);
+        // Quick bounding-rect early-exit with generous padding
+        const QRectF bounds = entity->boundingRect();
+        const QRectF padded(bounds.x() - worldThreshold, bounds.y() - worldThreshold,
+                            bounds.width() + 2.0 * worldThreshold,
+                            bounds.height() + 2.0 * worldThreshold);
+        if (!padded.contains(mouseWorldPos)) continue;
 
-        if (!dilatedBounds.contains(mouseWorldPos)) continue;
+        const double dist = mouseToEntityDist(mouseWorldPos, entity);
+        if (dist < closestDist) {
+            closestDist = dist;
+            closestIndex = i;
+        }
+    }
 
-        // Mouse is near this entity - draw markers at its snap points
+    if (closestIndex < 0) {
+        painter.restore();
+        return;
+    }
+
+    // Draw snap markers for the closest entity only
+    {
+        Entity* entity = m_document.entityAt(closestIndex);
         const auto snapPoints = entity->snapPoints();
         const auto kind = entity->kind();
 
@@ -564,57 +715,28 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
             const double distToActiveSnap = QLineF(pt, activeSnapPos).length();
             const bool isActive = snapActive && distToActiveSnap < 0.1;
 
-            // Marker size based on type and active state
-            const double markerSize = isActive ? (6.0 / m_transforms.zoom()) : (4.0 / m_transforms.zoom());
-
-            // Draw marker
-            if (isActive) {
-                // Active snap point - highlighted (blue)
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(59, 130, 246));  // Blue
-                painter.drawEllipse(pt, markerSize, markerSize);
-
-                // Draw a ring around active marker
-                painter.setPen(QPen(QColor(59, 130, 246, 180), 1.5 / m_transforms.zoom()));
-                painter.setBrush(Qt::NoBrush);
-                painter.drawEllipse(pt, markerSize + 2.0 / m_transforms.zoom(), markerSize + 2.0 / m_transforms.zoom());
-            } else {
-                // Candidate snap point - gray
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(120, 120, 120, 180));  // Gray semi-transparent
-                painter.drawEllipse(pt, markerSize, markerSize);
-            }
+            drawSnapSymbol(painter, label, pt, isActive, 1.0 / m_transforms.zoom());
         }
         
-        // --- Perpendicular snap points (computed dynamically based on cursor position) ---
-        // Only compute if perpendicular snap is enabled
-        if (!perpendicularSnap) continue;
-        
-        // Helper lambda to draw a perpendicular marker
-        auto drawPerpMarker = [&](const QPointF& perpPt) {
-            const double distToActiveSnap = QLineF(perpPt, activeSnapPos).length();
+        // --- Perpendicular snap points (reference-based, only when first point is placed) ---
+        // Only compute if perpendicular snap is enabled and a reference point exists
+        if (perpendicularSnap && perpRef) {
+        const QPointF& ref = *perpRef;
+        // Helper lambda to draw a perpendicular marker (skips degenerate zero-length candidates)
+        auto drawPerpMarker = [&](const std::optional<QPointF>& perp) {
+            if (!perp) return;
+            // Filter: skip if perpendicular point coincides with the reference (zero-length line)
+            const double screenDist = QLineF(m_transforms.toScreen(ref), m_transforms.toScreen(*perp)).length();
+            if (screenDist < 2.0) return;
+            const double distToActiveSnap = QLineF(*perp, activeSnapPos).length();
             const bool isActive = snapActive && distToActiveSnap < 0.1 && activeSnapLabel == "Perpendicular";
-            const double markerSize = isActive ? (6.0 / m_transforms.zoom()) : (4.0 / m_transforms.zoom());
-            
-            if (isActive) {
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(59, 130, 246));  // Blue
-                painter.drawEllipse(perpPt, markerSize, markerSize);
-                painter.setPen(QPen(QColor(59, 130, 246, 180), 1.5 / m_transforms.zoom()));
-                painter.setBrush(Qt::NoBrush);
-                painter.drawEllipse(perpPt, markerSize + 2.0 / m_transforms.zoom(), markerSize + 2.0 / m_transforms.zoom());
-            } else {
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(180, 90, 90, 180));  // Orange-ish for perpendicular preview
-                painter.drawEllipse(perpPt, markerSize, markerSize);
-            }
+            drawSnapSymbol(painter, "Perpendicular", *perp, isActive, 1.0 / m_transforms.zoom());
         };
         
         // LineEntity: perpendicular to line segment
         if (kind == Entity::Kind::Line) {
             auto* line = static_cast<LineEntity*>(entity);
-            auto perp = perpendicularPointOnLine(mouseWorldPos, line->startPoint(), line->endPoint());
-            if (perp) drawPerpMarker(*perp);
+            drawPerpMarker(perpendicularPointOnLine(ref, line->startPoint(), line->endPoint()));
         }
         
         // RectangleEntity: perpendicular to each edge
@@ -622,22 +744,19 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
             auto* rect = static_cast<RectangleEntity*>(entity);
             const auto c = rect->corners();
             // Edges: c[0]-c[1], c[1]-c[2], c[2]-c[3], c[3]-c[0]
-            for (int edge = 0; edge < 4; ++edge) {
-                auto perp = perpendicularPointOnLine(mouseWorldPos, c[edge], c[(edge + 1) % 4]);
-                if (perp) drawPerpMarker(*perp);
-            }
+            for (int edge = 0; edge < 4; ++edge)
+                drawPerpMarker(perpendicularPointOnLine(ref, c[edge], c[(edge + 1) % 4]));
         }
         
         // PolylineEntity: perpendicular to each segment
         if (kind == Entity::Kind::Polygon) {
             auto* poly = static_cast<PolylineEntity*>(entity);
             const auto& pts = poly->points();
-            for (int seg = 0; seg + 1 < pts.size(); ++seg) {
-                auto perp = perpendicularPointOnLine(mouseWorldPos, pts[seg], pts[seg + 1]);
-                if (perp) drawPerpMarker(*perp);
-            }
+            for (int seg = 0; seg + 1 < pts.size(); ++seg)
+                drawPerpMarker(perpendicularPointOnLine(ref, pts[seg], pts[seg + 1]));
         }
-    }
+        } // end if (perpendicularSnap && perpRef)
+    } // end closest entity block
 
     painter.restore();
 }
