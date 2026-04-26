@@ -214,6 +214,10 @@ void LineEntity::setCenterLengthAngle(const QPointF& centerPoint, double lineLen
 
 TrimEnd LineEntity::getTrimPoint(const QPointF& clickPos, const QPointF& intersection) const
 {
+    // The click position determines which PORTION to REMOVE.
+    // If click is on the start side of intersection, remove from start to intersection.
+    // If click is on the end side of intersection, remove from intersection to end.
+
     // Vector from intersection to click position
     QPointF toClick = clickPos - intersection;
 
@@ -224,16 +228,16 @@ TrimEnd LineEntity::getTrimPoint(const QPointF& clickPos, const QPointF& interse
     QPointF toEnd = endPoint() - intersection;
 
     // Compute dot products to determine which side the click is on
-    // Positive dot product means vectors point in similar direction
     double dotStart = toClick.x() * toStart.x() + toClick.y() * toStart.y();
     double dotEnd = toClick.x() * toEnd.x() + toClick.y() * toEnd.y();
 
-    // If click aligns more with start direction, trim the start side
-    // (keep the end portion from intersection to end)
+    // If click aligns more with start direction (click is near start side),
+    // we want to REMOVE the start portion - so keep segment from intersection to end.
+    // This means trimming at the Start end.
     if (dotStart > dotEnd) {
-        return TrimEnd::Start;
+        return TrimEnd::Start;  // Trim off the start portion
     } else {
-        return TrimEnd::End;
+        return TrimEnd::End;    // Trim off the end portion
     }
 }
 

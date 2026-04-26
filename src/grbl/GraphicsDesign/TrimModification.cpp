@@ -5,6 +5,7 @@
 #include "CircleEntity.h"
 #include "GeometryUtils.h"
 
+#include <QDebug>
 #include <algorithm>
 #include <cmath>
 
@@ -21,8 +22,12 @@ TrimModification::TrimResult TrimModification::quickTrim(const Entity* entityToT
 
     if (!entityToTrim) {
         result.errorMessage = "Null entity";
+        qDebug() << "quickTrim: Null entity";
         return result;
     }
+
+    qDebug() << "quickTrim: Entity kind=" << static_cast<int>(entityToTrim->kind())
+             << "index=" << entityIndex << "clickPos=" << clickPos;
 
     // Collect all visible entities for intersection search
     std::vector<const Entity*> allEntities;
@@ -33,11 +38,19 @@ TrimModification::TrimResult TrimModification::quickTrim(const Entity* entityToT
         }
     }
 
+    qDebug() << "quickTrim: Total visible entities=" << allEntities.size();
+
     // Find all intersections with other entities
     auto intersections = GeometryUtils::findAllIntersections(entityToTrim, entityIndex, allEntities);
 
+    qDebug() << "quickTrim: Found intersections=" << intersections.size();
+    for (const auto& pt : intersections) {
+        qDebug() << "  intersection at" << pt;
+    }
+
     if (intersections.empty()) {
         result.errorMessage = "No intersections found";
+        qDebug() << "quickTrim: No intersections found";
         return result;
     }
 
@@ -65,10 +78,13 @@ TrimModification::TrimResult TrimModification::trimAtIntersection(const Entity* 
 
     if (!entityToTrim) {
         result.errorMessage = "Null entity";
+        qDebug() << "trimAtIntersection: Null entity";
         return result;
     }
 
     auto kind = entityToTrim->kind();
+    qDebug() << "trimAtIntersection: Entity kind=" << static_cast<int>(kind)
+             << "intersection=" << intersection << "clickPos=" << clickPos;
 
     if (kind == Entity::Kind::Line) {
         const auto* line = static_cast<const LineEntity*>(entityToTrim);
@@ -84,7 +100,12 @@ TrimModification::TrimResult TrimModification::trimAtIntersection(const Entity* 
     }
     else {
         result.errorMessage = "Unsupported entity type for trimming";
+        qDebug() << "trimAtIntersection: Unsupported entity type";
     }
+
+    qDebug() << "trimAtIntersection: Result success=" << result.success
+             << "replacements=" << result.replacements.size()
+             << "errorMessage=" << result.errorMessage;
 
     return result;
 }
@@ -197,19 +218,25 @@ TrimModification::TrimResult TrimModification::trimLine(const LineEntity* line,
 
     if (!line || intersections.empty()) {
         result.errorMessage = "Invalid line or no intersections";
+        qDebug() << "trimLine: Invalid - line=" << (line ? "valid" : "null")
+                 << "intersections=" << intersections.size();
         return result;
     }
 
     QPointF start = line->startPoint();
     QPointF end = line->endPoint();
+    qDebug() << "trimLine: Line from" << start << "to" << end;
 
     // For each intersection, determine which side to trim
     for (const auto& intersection : intersections) {
         TrimEnd trimEnd = line->getTrimPoint(clickPos, intersection);
+        qDebug() << "trimLine: Intersection at" << intersection
+                 << "trimEnd=" << (trimEnd == TrimEnd::Start ? "Start" : "End");
 
         if (trimEnd == TrimEnd::Start) {
             // Keep segment from intersection to end
             // (click is near start side, so trim start portion)
+            qDebug() << "  Creating new line from intersection to end:" << intersection << "->" << end;
             auto newLine = std::make_unique<LineEntity>(intersection, end);
             newLine->setId(line->id());
             newLine->setLayerId(line->layerId());
@@ -220,6 +247,7 @@ TrimModification::TrimResult TrimModification::trimLine(const LineEntity* line,
         else if (trimEnd == TrimEnd::End) {
             // Keep segment from start to intersection
             // (click is near end side, so trim end portion)
+            qDebug() << "  Creating new line from start to intersection:" << start << "->" << intersection;
             auto newLine = std::make_unique<LineEntity>(start, intersection);
             newLine->setId(line->id());
             newLine->setLayerId(line->layerId());

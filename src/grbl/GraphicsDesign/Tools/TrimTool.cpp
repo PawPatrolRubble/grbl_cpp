@@ -11,6 +11,7 @@
 #include "../GeometryUtils.h"
 #include "../TrimModification.h"
 
+#include <QDebug>
 #include <QPainter>
 #include <QLineF>
 #include <QRectF>
@@ -148,13 +149,22 @@ void TrimTool::mousePress(const QPointF& pos)
             m_fenceCrossedEntities.clear();
         } else {
             // Quick trim: click entity to trim at nearest intersection
+            qDebug() << "TrimTool::mousePress - trying to find entity at" << pos;
+            qDebug() << "  document entityCount=" << document().entityCount();
             int idx = nearestEntity(pos, document());
+            qDebug() << "  nearestEntity returned idx=" << idx;
             if (idx >= 0) {
                 const Entity* e = document().entityAt(idx);
+                qDebug() << "  entity kind=" << static_cast<int>(e->kind())
+                         << "id=" << e->id().toString();
                 if (e && !m_cuttingEdges.contains(e->id())) {
                     TrimModification trimmer(document());
                     applyTrimResult(idx, trimmer.quickTrim(e, idx, pos));
+                } else {
+                    qDebug() << "  entity is cutting edge or null, skipping";
                 }
+            } else {
+                qDebug() << "  no entity found near click position";
             }
         }
     }

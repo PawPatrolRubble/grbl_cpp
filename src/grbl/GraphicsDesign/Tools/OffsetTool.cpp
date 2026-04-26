@@ -13,6 +13,7 @@
 #include <QLineF>
 #include <cmath>
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -35,6 +36,21 @@ QPointF lineNormal(const QPointF &p1, const QPointF &p2)
     double len = std::hypot(d.x(), d.y());
     if (len < 1e-9) return QPointF(0, 1);
     return QPointF(-d.y() / len, d.x() / len);
+}
+
+// Calculate intersection of two lines defined by points and directions
+// Returns intersection point, or false if parallel
+std::optional<QPointF> intersectOffsetLines(const QPointF& p1, const QPointF& dir1,
+                                            const QPointF& p2, const QPointF& dir2)
+{
+    // Solve: p1 + t*dir1 = p2 + s*dir2
+    double denom = dir1.x() * dir2.y() - dir1.y() * dir2.x();
+    if (std::abs(denom) < 1e-9) {
+        return std::nullopt;  // Lines are parallel
+    }
+    QPointF diff = p2 - p1;
+    double t = (diff.x() * dir2.y() - diff.y() * dir2.x()) / denom;
+    return p1 + t * dir1;
 }
 
 } // namespace
@@ -133,33 +149,68 @@ std::unique_ptr<Entity> OffsetTool::makeOffset(int idx, const QPointF& sidePos) 
         const auto *poly = static_cast<const PolylineEntity*>(e);
         const auto &pts = poly->points();
         if (pts.size() < 2) return nullptr;
-        // Simple per-segment offset: move each point by average of adjacent segment normals
-        // Determine side sign using centroid vs sidePos
+
+        // Determine offset side by comparing click distance to centroid
         QPointF centroid;
         for (const auto &p : pts) centroid += p;
         centroid /= static_cast<double>(pts.size());
-        double sign = QLineF(centroid, sidePos).length() > QLineF(centroid, pts[0]).length() ? 1.0 : -1.0;
+
+        // Use signed distance to first segment to determine side
+        double sign = signedDistToLine(sidePos, pts[0], pts[1]) >= 0 ? 1.0 : -1.0;
+        const double offsetDist = sign * d;
 
         QList<QPointF> newPts;
         newPts.reserve(pts.size());
-        for (int i = 0; i < pts.size(); ++i) {
-            // Average normal of surrounding segments
-            QPointF n(0, 0);
-            int count = 0;
-            if (i > 0) {
-                n += lineNormal(pts[i-1], pts[i]);
-                ++count;
+
+        // Process each segment
+        for (int i = 0; i < pts.size() - 1; ++i) {
+            const QPointF& p1 = pts[i];
+            const QPointF& p2 = pts[i + 1];
+
+            // Calculate offset for this segment
+            QPointF n = lineNormal(p1, p2);
+            QPointF offsetVec = n * offsetDist;
+
+            QPointF offsetP1 = p1 + offsetVec;
+            QPointF offsetP2 = p2 + offsetVec;
+
+            if (i == 0) {
+                // First point: just add the offset start point
+                newPts.append(offsetP1);
             }
-            if (i < pts.size() - 1) {
-                n += lineNormal(pts[i], pts[i+1]);
-                ++count;
+
+            // For subsequent segments, calculate intersection with previous offset segment
+            if (i > 0 && newPts.size() >= 2) {
+                // Previous segment endpoints (original and offset)
+                const QPointF& prevP1 = pts[i - 1];
+                const QPointF& prevP2 = pts[i];
+
+                // Calculate intersection of previous and current offset lines
+                auto intersection = intersectOffsetLines(
+                    newPts.last(),  // Previous offset end point
+                    prevP2 - prevP1, // Previous segment direction
+                    offsetP1,        // Current offset start point
+                    p2 - p1          // Current segment direction
+                );
+
+                if (intersection) {
+                    // Use intersection point as the corner point
+                    newPts.append(*intersection);
+                } else {
+                    // Lines are parallel - add a bridging segment or just use offset points
+                    newPts.append(offsetP1);
+                }
             }
-            if (count > 0) n /= static_cast<double>(count);
-            else n = QPointF(0, 1);
-            double len = std::hypot(n.x(), n.y());
-            if (len > 1e-9) n /= len;
-            newPts.append(pts[i] + n * (sign * d));
+
+            // Add the end point of current segment
+            if (i == pts.size() - 2) {
+                // Last segment - add the offset end point
+                newPts.append(offsetP2);
+            } else {
+                // Will be handled in next iteration's intersection calculation
+            }
         }
+
         return std::make_unique<PolylineEntity>(newPts);
     }
     default:
