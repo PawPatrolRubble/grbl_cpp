@@ -117,6 +117,9 @@ nul
 # GSD local state
 .gsd/
 
+# Claude local settings
+.claude/
+
 # Build probe
 build-probe/
 
