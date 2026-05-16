@@ -57,7 +57,9 @@ void considerSegment(const QPointF& pos,
     if (distance < bestDistance) {
         AngularDimensionTool::Segment pickedSegment = segment;
         pickedSegment.pickPoint = closestPointOnSegment(pos, segment.start, segment.end);
+        pickedSegment.mousePoint = pos;
         pickedSegment.hasPickPoint = true;
+        pickedSegment.hasMousePoint = true;
         bestDistance = distance;
         bestSegment = pickedSegment;
     }
@@ -78,7 +80,9 @@ std::optional<QPointF> infiniteLineIntersection(const AngularDimensionTool::Segm
 
 QPointF directionPointForSegment(const AngularDimensionTool::Segment& segment, const QPointF& vertex)
 {
-    QPointF directionPoint = segment.hasPickPoint ? segment.pickPoint : (segment.start + segment.end) * 0.5;
+    QPointF directionPoint = segment.hasMousePoint ? segment.mousePoint
+                                                   : (segment.hasPickPoint ? segment.pickPoint
+                                                                           : (segment.start + segment.end) * 0.5);
     if (QLineF(vertex, directionPoint).length() > kMinSegmentLength)
         return directionPoint;
 
@@ -97,10 +101,24 @@ double ccwSweepDegrees(const QPointF& vertex, const QPointF& p1, const QPointF& 
     return sweep;
 }
 
+struct IncludedSector {
+    QPointF start;
+    QPointF end;
+};
+
+IncludedSector includedSector(const QPointF& vertex, const QPointF& firstPoint, const QPointF& secondPoint)
+{
+    const double sweep = ccwSweepDegrees(vertex, firstPoint, secondPoint);
+    if (sweep <= 180.0)
+        return {firstPoint, secondPoint};
+
+    return {secondPoint, firstPoint};
+}
+
 double annotationRadius(const QPointF& vertex, const QPointF& p1, const QPointF& p2)
 {
-    const double radius = (QLineF(vertex, p1).length() + QLineF(vertex, p2).length()) * 0.5;
-    return std::max(radius, 3.0);
+    const double availableRadius = std::min(QLineF(vertex, p1).length(), QLineF(vertex, p2).length());
+    return std::max(availableRadius, 3.0);
 }
 
 std::optional<AngularDimensionEntity> previewEntity(const AngularDimensionTool::Segment& firstSegment,
@@ -117,14 +135,13 @@ std::optional<AngularDimensionEntity> previewEntity(const AngularDimensionTool::
         return std::nullopt;
     }
 
-    double sweep = ccwSweepDegrees(*vertex, firstPoint, secondPoint);
+    const double sweep = ccwSweepDegrees(*vertex, firstPoint, secondPoint);
     if (sweep < 1e-6 || std::abs(sweep - 360.0) < 1e-6)
         return std::nullopt;
-    if (sweep > 180.0)
-        std::swap(firstPoint, secondPoint);
 
-    return AngularDimensionEntity(*vertex, firstPoint, secondPoint,
-                                  annotationRadius(*vertex, firstPoint, secondPoint));
+    const IncludedSector sector = includedSector(*vertex, firstPoint, secondPoint);
+    return AngularDimensionEntity(*vertex, sector.start, sector.end,
+                                  annotationRadius(*vertex, sector.start, sector.end));
 }
 } // namespace
 

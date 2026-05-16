@@ -61,6 +61,7 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/LineEntity.cpp
     src/grbl/GraphicsDesign/PolylineEntity.cpp
     src/grbl/GraphicsDesign/SplineEntity.cpp
+    src/grbl/GraphicsDesign/GroupEntity.cpp
     src/grbl/GraphicsDesign/LinearDimensionEntity.cpp
     src/grbl/GraphicsDesign/AngularDimensionEntity.cpp
     src/grbl/GraphicsDesign/RadiusDimensionEntity.cpp
@@ -124,6 +125,7 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/ShapeModel.h
     src/grbl/GraphicsDesign/LineEntity.h
     src/grbl/GraphicsDesign/PolylineEntity.h
+    src/grbl/GraphicsDesign/GroupEntity.h
     src/grbl/GraphicsDesign/LinearDimensionEntity.h
     src/grbl/GraphicsDesign/AngularDimensionEntity.h
     src/grbl/GraphicsDesign/RadiusDimensionEntity.h

@@ -6,6 +6,7 @@
 #include "TextEntity.h"
 #include "PolylineEntity.h"
 #include "SplineEntity.h"
+#include "GroupEntity.h"
 #include "LinearDimensionEntity.h"
 #include "AngularDimensionEntity.h"
 #include "RadiusDimensionEntity.h"
@@ -40,6 +41,8 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
         return AngularDimensionEntity::fromJson(json);
     if (typeStr == "radiusDimension")
         return RadiusDimensionEntity::fromJson(json);
+    if (typeStr == "group")
+        return GroupEntity::fromJson(json);
 
     return nullptr;
 }
@@ -54,6 +57,7 @@ QString Entity::displayName() const
         {Kind::AngularDimension, "Angular Dim"},
         {Kind::RadiusDimension, "Radius Dim"},
         {Kind::Spline, "Spline"},
+        {Kind::Group, "Group"},
     };
     return names.value(m_kind, "Entity");
 }

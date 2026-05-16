@@ -1,6 +1,7 @@
 #include "AngularDimensionEntity.h"
 
 #include <QPainter>
+#include <QPainterPath>
 #include <QLineF>
 #include <QFontMetricsF>
 #include <QJsonObject>
@@ -60,7 +61,8 @@ double AngularDimensionEntity::sweepCCW(double a1, double a2)
 
 double AngularDimensionEntity::measuredAngleDegrees() const
 {
-    return sweepCCW(angleDeg(m_p1), angleDeg(m_p2));
+    const double sweep = sweepCCW(angleDeg(m_p1), angleDeg(m_p2));
+    return sweep > 180.0 ? 360.0 - sweep : sweep;
 }
 
 // -----------------------------------------------------------------------
@@ -136,8 +138,8 @@ void AngularDimensionEntity::draw(QPainter& painter) const
     QRectF arcRect(m_vertex.x() - m_radius, m_vertex.y() - m_radius,
                    m_radius * 2, m_radius * 2);
     painter.drawArc(arcRect,
-                    static_cast<int>(a1 * 16),
-                    static_cast<int>(sweep * 16));
+                    static_cast<int>(-a1 * 16),
+                    static_cast<int>(-sweep * 16));
 
     const double arrowLen = 3.5;
     const double arrowWidth = arrowLen * 0.35;
@@ -162,15 +164,15 @@ void AngularDimensionEntity::draw(QPainter& painter) const
 
     const double endAngle = a1 + sweep;
     if (arrowsInside) {
-        drawArrow(arcStart, a1 - 90.0);
-        drawArrow(arcEnd, endAngle + 90.0);
-    } else {
         drawArrow(arcStart, a1 + 90.0);
         drawArrow(arcEnd, endAngle - 90.0);
+    } else {
+        drawArrow(arcStart, a1 - 90.0);
+        drawArrow(arcEnd, endAngle + 90.0);
     }
 
-    // Dimension text at arc midpoint
-    double midAngle = a1 + sweep / 2.0;
+    // Dimension text at the drawn arc midpoint (LibreCAD-style)
+    const double midAngle = a1 + sweep / 2.0;
     QPointF textPos(m_vertex.x() + m_radius * qCos(qDegreesToRadians(midAngle)),
                     m_vertex.y() + m_radius * qSin(qDegreesToRadians(midAngle)));
 
@@ -183,12 +185,15 @@ void AngularDimensionEntity::draw(QPainter& painter) const
     QFont font("Arial", 1);
     font.setPointSizeF(textHeight * 0.72);
     painter.setFont(font);
-    QFontMetricsF fm(font);
-    QRectF textRect = fm.boundingRect(text);
     painter.scale(1, -1);
-    painter.drawText(QRectF(-textRect.width() / 2 - 1, -textRect.height() / 2 - 0.5,
-                             textRect.width() + 2, textRect.height() + 1),
-                     Qt::AlignCenter, text);
+    QPainterPath textPath;
+    textPath.addText(QPointF(0.0, 0.0), font, text);
+    const QRectF glyphBounds = textPath.boundingRect();
+    painter.translate(-glyphBounds.center());
+    QPen noPen(Qt::NoPen);
+    painter.setPen(noPen);
+    painter.setBrush(savedPen.color());
+    painter.drawPath(textPath);
     painter.restore();
 }
 

@@ -33,7 +33,8 @@ public:
         LinearDimension,
         AngularDimension,
         RadiusDimension,
-        Spline
+        Spline,
+        Group
     };
 
     enum class HandleRole {

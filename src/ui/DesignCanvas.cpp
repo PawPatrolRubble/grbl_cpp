@@ -238,6 +238,9 @@ void DesignCanvas::setTool(ToolType toolType)
     ToolManager::Type mt = toToolManagerType(toolType);
     if (m_toolManagerActiveType == mt) return;
 
+    if (mt != ToolManager::Type::Select)
+        m_lastCommandType = mt;
+
     activeTool().cancel();
     m_toolManagerActiveType = mt;
     m_snapResult = {};
@@ -882,6 +885,13 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
     }
     if (event->matches(QKeySequence::Redo)) {
         redo();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
+        if (m_lastCommandType != ToolManager::Type::Select) {
+            setTool(fromToolManagerType(m_lastCommandType));
+        }
         event->accept();
         return;
     }

@@ -28,6 +28,31 @@ bool nearlyEqual(const QPointF& a, const QPointF& b, double epsilon = 1e-6)
     return nearlyEqual(a.x(), b.x(), epsilon) && nearlyEqual(a.y(), b.y(), epsilon);
 }
 
+double normDeg(double angle)
+{
+    angle = std::fmod(angle, 360.0);
+    if (angle < 0.0)
+        angle += 360.0;
+    return angle;
+}
+
+double angleDeg(const QPointF& vertex, const QPointF& point)
+{
+    return normDeg(std::atan2(point.y() - vertex.y(), point.x() - vertex.x()) * 180.0 / M_PI);
+}
+
+double sweepCCW(const AngularDimensionEntity& dimension)
+{
+    return normDeg(angleDeg(dimension.vertex(), dimension.p2()) - angleDeg(dimension.vertex(), dimension.p1()));
+}
+
+QPointF arcMidpoint(const AngularDimensionEntity& dimension)
+{
+    const double midAngle = angleDeg(dimension.vertex(), dimension.p1()) + sweepCCW(dimension) * 0.5;
+    return QPointF(dimension.vertex().x() + dimension.radius() * std::cos(midAngle * M_PI / 180.0),
+                   dimension.vertex().y() + dimension.radius() * std::sin(midAngle * M_PI / 180.0));
+}
+
 int runRectanglePerpendicularOverrideTest()
 {
     Document document;
@@ -472,7 +497,7 @@ int runAngularDimensionToolSegmentAngleProbe()
     }
 
     const auto* annotation = dynamic_cast<const AngularDimensionEntity*>(document.entityAt(2));
-    if (!annotation || !nearlyEqual(annotation->measuredAngleDegrees(), 90.0)) {
+    if (!annotation || !nearlyEqual(annotation->measuredAngleDegrees(), 90.0) || sweepCCW(*annotation) > 180.0) {
         std::cerr << "Expected the created entity to be a 90 degree angular dimension annotation." << std::endl;
         return 1;
     }
@@ -514,6 +539,76 @@ int runAngularDimensionToolSegmentAngleProbe()
 
     if (!mixedAngleTool.hasMeasurement() || !nearlyEqual(mixedAngleTool.angle(), 90.0) || mixedDocument.entityCount() != 3) {
         std::cerr << "Expected rectangle edges and polyline segments to create an angle annotation." << std::endl;
+        return 1;
+    }
+
+    Document downDocument;
+    CommandStack downCommandStack(downDocument);
+    AngularDimensionTool downAngleTool(downDocument, downCommandStack);
+
+    downDocument.addEntity(std::make_unique<LineEntity>(QPointF(-10.0, 0.0), QPointF(10.0, 0.0)));
+    downDocument.addEntity(std::make_unique<LineEntity>(QPointF(0.0, -10.0), QPointF(0.0, 10.0)));
+    downAngleTool.mousePress(QPointF(5.0, 0.0));
+    downAngleTool.mousePress(QPointF(0.0, -5.0));
+
+    const auto* downAnnotation = dynamic_cast<const AngularDimensionEntity*>(downDocument.entityAt(2));
+    std::cout << "  down-facing angle: " << downAngleTool.angle() << std::endl;
+
+    if (!downAnnotation || !nearlyEqual(downAngleTool.angle(), 90.0) || sweepCCW(*downAnnotation) > 180.0 ||
+        arcMidpoint(*downAnnotation).y() >= downAnnotation->vertex().y()) {
+        std::cerr << "Expected down-facing picks to keep the angular dimension arc below the horizontal line." << std::endl;
+        return 1;
+    }
+
+    Document leftDocument;
+    CommandStack leftCommandStack(leftDocument);
+    AngularDimensionTool leftAngleTool(leftDocument, leftCommandStack);
+
+    leftDocument.addEntity(std::make_unique<LineEntity>(QPointF(-10.0, 0.0), QPointF(10.0, 0.0)));
+    leftDocument.addEntity(std::make_unique<LineEntity>(QPointF(0.0, -10.0), QPointF(0.0, 10.0)));
+    leftAngleTool.mousePress(QPointF(-5.0, 0.0));
+    leftAngleTool.mousePress(QPointF(0.0, 5.0));
+
+    const auto* leftAnnotation = dynamic_cast<const AngularDimensionEntity*>(leftDocument.entityAt(2));
+    std::cout << "  left-facing angle: " << leftAngleTool.angle() << std::endl;
+
+    if (!leftAnnotation || !nearlyEqual(leftAngleTool.angle(), 90.0) || sweepCCW(*leftAnnotation) > 180.0 ||
+        arcMidpoint(*leftAnnotation).x() >= leftAnnotation->vertex().x()) {
+        std::cerr << "Expected left-facing picks to keep the angular dimension arc left of the vertical line." << std::endl;
+        return 1;
+    }
+
+    Document wrappedDocument;
+    CommandStack wrappedCommandStack(wrappedDocument);
+    AngularDimensionTool wrappedAngleTool(wrappedDocument, wrappedCommandStack);
+
+    wrappedDocument.addEntity(std::make_unique<LineEntity>(QPointF(-10.0, 0.0), QPointF(10.0, 0.0)));
+    wrappedDocument.addEntity(std::make_unique<LineEntity>(QPointF(0.0, -10.0), QPointF(0.0, 10.0)));
+    wrappedAngleTool.mousePress(QPointF(0.0, 5.0));
+    wrappedAngleTool.mousePress(QPointF(5.0, 0.0));
+
+    const auto* wrappedAnnotation = dynamic_cast<const AngularDimensionEntity*>(wrappedDocument.entityAt(2));
+    if (!wrappedAnnotation || !nearlyEqual(wrappedAngleTool.angle(), 90.0) || sweepCCW(*wrappedAnnotation) > 180.0 ||
+        arcMidpoint(*wrappedAnnotation).x() <= wrappedAnnotation->vertex().x() ||
+        arcMidpoint(*wrappedAnnotation).y() <= wrappedAnnotation->vertex().y()) {
+        std::cerr << "Expected wrapped pick order to draw only the included angular space." << std::endl;
+        return 1;
+    }
+
+    Document crossingDocument;
+    CommandStack crossingCommandStack(crossingDocument);
+    AngularDimensionTool crossingAngleTool(crossingDocument, crossingCommandStack);
+
+    crossingDocument.addEntity(std::make_unique<LineEntity>(QPointF(-10.0, 0.0), QPointF(10.0, 0.0)));
+    crossingDocument.addEntity(std::make_unique<LineEntity>(QPointF(0.0, -10.0), QPointF(0.0, 10.0)));
+    crossingAngleTool.mousePress(QPointF(-5.0, 0.0));
+    crossingAngleTool.mousePress(QPointF(0.0, -5.0));
+
+    const auto* crossingAnnotation = dynamic_cast<const AngularDimensionEntity*>(crossingDocument.entityAt(2));
+    if (!crossingAnnotation || !nearlyEqual(crossingAngleTool.angle(), 90.0) || sweepCCW(*crossingAnnotation) > 180.0 ||
+        arcMidpoint(*crossingAnnotation).x() >= crossingAnnotation->vertex().x() ||
+        arcMidpoint(*crossingAnnotation).y() >= crossingAnnotation->vertex().y()) {
+        std::cerr << "Expected cross-line mouse coordinates to choose the clicked lower-left quadrant." << std::endl;
         return 1;
     }
 

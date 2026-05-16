@@ -15,7 +15,9 @@ public:
         QPointF start;
         QPointF end;
         QPointF pickPoint;
+        QPointF mousePoint;
         bool hasPickPoint = false;
+        bool hasMousePoint = false;
     };
 
     AngularDimensionTool(Document& document, CommandStack& commandStack);

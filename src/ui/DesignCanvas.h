@@ -153,6 +153,7 @@ private:
 
     ToolManager m_toolManager;
     ToolManager::Type m_toolManagerActiveType = ToolManager::Type::Select;
+    ToolManager::Type m_lastCommandType = ToolManager::Type::Select;
 
     CoordinateTransform m_transforms;
     CanvasDrawing m_drawing;
