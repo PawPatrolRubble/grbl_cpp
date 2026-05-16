@@ -2,14 +2,22 @@
 
 #include "Tool.h"
 
+#include <optional>
+
 /// Angular dimension tool.
-/// Workflow (3 clicks):
-///   1st click = vertex (apex of angle)
-///   2nd click = point on first ray
-///   3rd click = point on second ray (places the dimension arc at radius = distance from vertex to cursor)
-class AngularDimensionTool final : public Tool
+/// Workflow:
+///   1st click = first line-like entity segment
+///   2nd click = second line-like entity segment, creating an angle annotation
+class AngularDimensionTool : public Tool
 {
 public:
+    struct Segment {
+        QPointF start;
+        QPointF end;
+        QPointF pickPoint;
+        bool hasPickPoint = false;
+    };
+
     AngularDimensionTool(Document& document, CommandStack& commandStack);
 
     QString name() const override;
@@ -22,10 +30,22 @@ public:
     void paintPreview(QPainter& painter) const override;
     bool isActive() const override;
 
+    bool hasMeasurement() const { return m_hasResult; }
+    bool hasLinearMeasurement() const { return false; }
+    double distance() const { return 0.0; }
+    double deltaX() const { return 0.0; }
+    double deltaY() const { return 0.0; }
+    double angle() const { return m_angle; }
+
 private:
-    enum class Phase { Idle, HasVertex, HasP1 };
-    Phase   m_phase = Phase::Idle;
-    QPointF m_vertex;
-    QPointF m_p1;
-    QPointF m_currentPos;
+    bool m_hasFirst = false;
+    bool m_hasHover = false;
+    bool m_hasResult = false;
+    Segment m_firstSegment;
+    Segment m_secondSegment;
+    Segment m_hoverSegment;
+    double m_angle = 0.0;
+
+    std::optional<Segment> pickSegment(const QPointF& pos) const;
+    bool createAngleAnnotation(const Segment& secondSegment);
 };

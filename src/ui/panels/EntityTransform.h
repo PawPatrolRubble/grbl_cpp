@@ -24,6 +24,9 @@ QPointF flipV(const QPointF &pt, const QPointF &pivot);
 // Mirror axis direction for makeMirroredEntity
 enum class FlipAxis { H, V };
 
+// Create a rotated copy of an entity around an explicit pivot point.
+std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, const QPointF &pivot, double angleDeg);
+
 // Create a rotated copy of an entity (around entity's own center)
 std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, double angleDeg);
 

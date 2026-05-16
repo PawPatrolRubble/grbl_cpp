@@ -20,6 +20,7 @@ public:
     void cancel() override;
     void paintPreview(QPainter& painter) const override;
     bool isActive() const override;
+    std::optional<QPointF> inferenceReferencePoint() const override;
 
 private:
     std::optional<QPointF> m_startPoint;

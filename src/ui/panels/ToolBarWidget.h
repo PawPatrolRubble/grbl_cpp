@@ -24,14 +24,17 @@ public:
         DimLinear  = 7,
         DimAngular = 8,
         DimRadius  = 9,
-        Trim       = 10,
-        Extend     = 11,
-        Chamfer    = 12,
-        Fillet     = 13,
-        Offset     = 14,
-        Measure    = 15,
-        Spline     = 16,
-        ToolCount  = 17
+        Move       = 10,
+        Copy       = 11,
+        Rotate     = 12,
+        Trim       = 13,
+        Extend     = 14,
+        Chamfer    = 15,
+        Fillet     = 16,
+        Offset     = 17,
+        Measure    = 18,
+        Spline     = 19,
+        ToolCount  = 20
     };
 
     explicit ToolBarWidget(QWidget *parent = nullptr);
@@ -46,7 +49,7 @@ signals:
     void toolSelected(int toolIndex);
 
 private:
-    QToolButton *m_buttons[ToolCount];
+    QToolButton *m_buttons[ToolCount] = {};
 };
 
 #endif // TOOLBARWIDGET_H

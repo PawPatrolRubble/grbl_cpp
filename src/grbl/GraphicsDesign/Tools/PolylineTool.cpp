@@ -80,6 +80,13 @@ bool PolylineTool::isActive() const
     return !m_points.isEmpty();
 }
 
+std::optional<QPointF> PolylineTool::inferenceReferencePoint() const
+{
+    if (m_points.isEmpty())
+        return std::nullopt;
+    return m_points.last();
+}
+
 bool PolylineTool::finish()
 {
     if (m_points.size() < 2) {

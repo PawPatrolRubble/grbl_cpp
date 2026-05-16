@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #include <optional>
+#include <QVector>
 
 /// Manages a collection of entities with selection and undo/redo support.
 /// Merges tinyCad's Document with grbl_cpp's ShapeModel.
@@ -45,7 +46,10 @@ public:
     void selectAll();
     void setSelected(const QUuid& id, bool selected);
     QSet<QUuid> selectedIds() const { return m_selectedIds; }
-    Entity* selectedEntity() const;  // Returns first selected or null
+    QVector<int> selectedIndices() const;
+    QVector<Entity*> selectedEntities() const;
+    QUuid primarySelectedId() const { return m_primarySelectedId; }
+    Entity* selectedEntity() const;
 
     // Selection by position (from tinyCad)
     void selectNearest(const QPointF& worldPos, double tolerance);
@@ -89,10 +93,12 @@ signals:
 
 private:
     void normalizeSelectionAfterRemoval(int removedIndex);
+    void ensurePrimarySelection();
 
     std::vector<std::unique_ptr<Entity>> m_entities;
     int m_batchDepth = 0;
     QSet<QUuid> m_selectedIds;
+    QUuid m_primarySelectedId;
     CommandStack* m_commandStack;
     double m_worktableWidth = 300.0;
     QList<Layer> m_layers;

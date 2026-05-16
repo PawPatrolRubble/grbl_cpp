@@ -102,8 +102,14 @@ int Document::indexOf(const QUuid& id) const
 
 void Document::select(const QUuid& id)
 {
-    if (indexOf(id) >= 0) {
-        m_selectedIds.insert(id);
+    if (indexOf(id) < 0) return;
+
+    const bool inserted = !m_selectedIds.contains(id);
+    m_selectedIds.insert(id);
+    const bool primaryChanged = (m_primarySelectedId != id);
+    m_primarySelectedId = id;
+
+    if (inserted || primaryChanged) {
         emit selectionChanged();
     }
 }
@@ -111,23 +117,31 @@ void Document::select(const QUuid& id)
 void Document::deselect(const QUuid& id)
 {
     if (m_selectedIds.remove(id)) {
+        if (m_primarySelectedId == id)
+            ensurePrimarySelection();
         emit selectionChanged();
     }
 }
 
 void Document::clearSelection()
 {
-    if (!m_selectedIds.isEmpty()) {
+    if (!m_selectedIds.isEmpty() || !m_primarySelectedId.isNull()) {
         m_selectedIds.clear();
+        m_primarySelectedId = QUuid();
         emit selectionChanged();
     }
 }
 
 void Document::selectAll()
 {
+    m_selectedIds.clear();
+    m_primarySelectedId = QUuid();
     for (const auto& e : m_entities) {
-        if (e && e->isEnabled())
+        if (e && e->isEnabled()) {
             m_selectedIds.insert(e->id());
+            if (m_primarySelectedId.isNull())
+                m_primarySelectedId = e->id();
+        }
     }
     emit selectionChanged();
 }
@@ -138,10 +152,47 @@ void Document::setSelected(const QUuid& id, bool selected)
     else deselect(id);
 }
 
+QVector<int> Document::selectedIndices() const
+{
+    QVector<int> indices;
+    indices.reserve(m_selectedIds.size());
+    if (!m_primarySelectedId.isNull() && m_selectedIds.contains(m_primarySelectedId)) {
+        const int primaryIndex = indexOf(m_primarySelectedId);
+        if (primaryIndex >= 0)
+            indices.push_back(primaryIndex);
+    }
+
+    for (int i = 0; i < entityCount(); ++i) {
+        if (m_entities[i] && m_selectedIds.contains(m_entities[i]->id()) && m_entities[i]->id() != m_primarySelectedId)
+            indices.push_back(i);
+    }
+    return indices;
+}
+
+QVector<Entity*> Document::selectedEntities() const
+{
+    QVector<Entity*> entities;
+    const QVector<int> indices = selectedIndices();
+    entities.reserve(indices.size());
+    for (int index : indices)
+        entities.push_back(entityAt(index));
+    return entities;
+}
+
 Entity* Document::selectedEntity() const
 {
     if (m_selectedIds.isEmpty()) return nullptr;
-    return entityAt(indexOf(*m_selectedIds.begin()));
+    if (!m_primarySelectedId.isNull()) {
+        const int primaryIndex = indexOf(m_primarySelectedId);
+        if (primaryIndex >= 0)
+            return entityAt(primaryIndex);
+    }
+
+    for (int i = 0; i < entityCount(); ++i) {
+        if (m_entities[i] && m_selectedIds.contains(m_entities[i]->id()))
+            return m_entities[i].get();
+    }
+    return nullptr;
 }
 
 void Document::selectNearest(const QPointF& worldPos, double tolerance)
@@ -163,6 +214,7 @@ void Document::selectNearest(const QPointF& worldPos, double tolerance)
     clearSelection();
     if (nearestIndex >= 0) {
         m_selectedIds.insert(m_entities[nearestIndex]->id());
+        m_primarySelectedId = m_entities[nearestIndex]->id();
         emit selectionChanged();
     }
 }
@@ -392,12 +444,40 @@ void Document::redo()
 
 void Document::normalizeSelectionAfterRemoval(int removedIndex)
 {
-    // If selected entity was removed, clear its selection
+    Q_UNUSED(removedIndex);
+
+    QSet<QUuid> remainingSelectedIds;
     for (int i = 0; i < entityCount(); ++i) {
-        if (m_selectedIds.contains(m_entities[i]->id())) {
-            // Selection still valid
+        if (m_selectedIds.contains(m_entities[i]->id()))
+            remainingSelectedIds.insert(m_entities[i]->id());
+    }
+
+    if (remainingSelectedIds == m_selectedIds) {
+        ensurePrimarySelection();
+        return;
+    }
+
+    m_selectedIds = std::move(remainingSelectedIds);
+    ensurePrimarySelection();
+    emit selectionChanged();
+}
+
+void Document::ensurePrimarySelection()
+{
+    if (m_selectedIds.isEmpty()) {
+        m_primarySelectedId = QUuid();
+        return;
+    }
+
+    if (!m_primarySelectedId.isNull() && m_selectedIds.contains(m_primarySelectedId) && indexOf(m_primarySelectedId) >= 0)
+        return;
+
+    for (int i = 0; i < entityCount(); ++i) {
+        if (m_entities[i] && m_selectedIds.contains(m_entities[i]->id())) {
+            m_primarySelectedId = m_entities[i]->id();
             return;
         }
     }
-    clearSelection();
+
+    m_primarySelectedId = QUuid();
 }

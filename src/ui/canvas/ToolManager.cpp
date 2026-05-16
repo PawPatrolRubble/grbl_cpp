@@ -9,6 +9,9 @@
 #include "../../grbl/GraphicsDesign/Tools/DimensionTool.h"
 #include "../../grbl/GraphicsDesign/Tools/AngularDimensionTool.h"
 #include "../../grbl/GraphicsDesign/Tools/RadiusDimensionTool.h"
+#include "../../grbl/GraphicsDesign/Tools/MoveTool.h"
+#include "../../grbl/GraphicsDesign/Tools/CopyTool.h"
+#include "../../grbl/GraphicsDesign/Tools/RotateTool.h"
 #include "../../grbl/GraphicsDesign/Tools/TrimExtendTool.h"
 #include "../../grbl/GraphicsDesign/Tools/TrimTool.h"
 #include "../../grbl/GraphicsDesign/Tools/ChamferTool.h"
@@ -32,6 +35,9 @@ ToolManager::ToolManager(Document& document, CommandStack& commandStack)
     m_tools[static_cast<int>(Type::Dimension)] = std::make_unique<DimensionTool>(document, commandStack);
     m_tools[static_cast<int>(Type::AngularDimension)] = std::make_unique<AngularDimensionTool>(document, commandStack);
     m_tools[static_cast<int>(Type::RadiusDimension)] = std::make_unique<RadiusDimensionTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Move)] = std::make_unique<MoveTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Copy)] = std::make_unique<CopyTool>(document, commandStack);
+    m_tools[static_cast<int>(Type::Rotate)] = std::make_unique<RotateTool>(document, commandStack);
     m_tools[static_cast<int>(Type::Trim)] = std::make_unique<TrimTool>(document, commandStack);
     m_tools[static_cast<int>(Type::Extend)] = std::make_unique<TrimExtendTool>(document, commandStack, TrimExtendTool::Mode::Extend);
     m_tools[static_cast<int>(Type::Chamfer)] = std::make_unique<ChamferTool>(document, commandStack);

@@ -139,17 +139,19 @@ void AngularDimensionEntity::draw(QPainter& painter) const
                     static_cast<int>(a1 * 16),
                     static_cast<int>(sweep * 16));
 
-    // Arrowheads at arc ends (tangent to arc)
-    auto drawArrow = [&](const QPointF& tip, double arcAngleDeg, double direction) {
-        // Tangent direction at tip: perpendicular to radius
-        double tang = arcAngleDeg + 90.0 * direction;
-        QPointF tangDir(qCos(qDegreesToRadians(tang)), qSin(qDegreesToRadians(tang)));
-        QPointF perpDir(-tangDir.y(), tangDir.x());
-        double arrowLen = 3.5;
+    const double arrowLen = 3.5;
+    const double arrowWidth = arrowLen * 0.35;
+    const double arcLength = qDegreesToRadians(sweep) * m_radius;
+    const bool arrowsInside = arcLength >= arrowLen * 2.8;
+
+    auto drawArrow = [&](const QPointF& tip, double directionAngleDeg) {
+        const QPointF dir(qCos(qDegreesToRadians(directionAngleDeg)),
+                          qSin(qDegreesToRadians(directionAngleDeg)));
+        const QPointF normal(-dir.y(), dir.x());
         QPolygonF arrow;
         arrow << tip
-              << (tip + tangDir * arrowLen + perpDir * (arrowLen * 0.35))
-              << (tip + tangDir * arrowLen - perpDir * (arrowLen * 0.35));
+              << (tip - dir * arrowLen + normal * arrowWidth)
+              << (tip - dir * arrowLen - normal * arrowWidth);
         painter.setBrush(savedPen.color());
         QPen noPen(Qt::NoPen);
         painter.setPen(noPen);
@@ -158,10 +160,14 @@ void AngularDimensionEntity::draw(QPainter& painter) const
         painter.setPen(savedPen);
     };
 
-    // Arrow at arcStart pointing CCW (direction +1)
-    drawArrow(arcStart, a1, -1.0);
-    // Arrow at arcEnd pointing CW (direction -1)
-    drawArrow(arcEnd, a1 + sweep, 1.0);
+    const double endAngle = a1 + sweep;
+    if (arrowsInside) {
+        drawArrow(arcStart, a1 - 90.0);
+        drawArrow(arcEnd, endAngle + 90.0);
+    } else {
+        drawArrow(arcStart, a1 + 90.0);
+        drawArrow(arcEnd, endAngle - 90.0);
+    }
 
     // Dimension text at arc midpoint
     double midAngle = a1 + sweep / 2.0;
@@ -180,7 +186,7 @@ void AngularDimensionEntity::draw(QPainter& painter) const
     QFontMetricsF fm(font);
     QRectF textRect = fm.boundingRect(text);
     painter.scale(1, -1);
-    painter.drawText(QRectF(-textRect.width() / 2 - 1, -textRect.height() - 0.5,
+    painter.drawText(QRectF(-textRect.width() / 2 - 1, -textRect.height() / 2 - 0.5,
                              textRect.width() + 2, textRect.height() + 1),
                      Qt::AlignCenter, text);
     painter.restore();

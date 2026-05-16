@@ -151,17 +151,23 @@ void TrimTool::mousePress(const QPointF& pos)
             // Quick trim: click entity to trim at nearest intersection
             qDebug() << "TrimTool::mousePress - trying to find entity at" << pos;
             qDebug() << "  document entityCount=" << document().entityCount();
-            int idx = nearestEntity(pos, document());
-            qDebug() << "  nearestEntity returned idx=" << idx;
-            if (idx >= 0) {
-                const Entity* e = document().entityAt(idx);
+
+            int idx = m_hoverEntityIdx;
+            const Entity* e = idx >= 0 ? document().entityAt(idx) : nullptr;
+            if (!e || !document().isEntityVisible(e) || m_cuttingEdges.contains(e->id())) {
+                idx = nearestEntity(pos, document());
+                e = idx >= 0 ? document().entityAt(idx) : nullptr;
+            }
+
+            qDebug() << "  resolved entity idx=" << idx;
+            if (idx >= 0 && e) {
                 qDebug() << "  entity kind=" << static_cast<int>(e->kind())
                          << "id=" << e->id().toString();
-                if (e && !m_cuttingEdges.contains(e->id())) {
+                if (!m_cuttingEdges.contains(e->id())) {
                     TrimModification trimmer(document());
                     applyTrimResult(idx, trimmer.quickTrim(e, idx, pos));
                 } else {
-                    qDebug() << "  entity is cutting edge or null, skipping";
+                    qDebug() << "  entity is cutting edge, skipping";
                 }
             } else {
                 qDebug() << "  no entity found near click position";

@@ -6,6 +6,7 @@
 
 #include <QPointF>
 #include <QString>
+#include <QSet>
 #include <optional>
 #include <vector>
 
@@ -22,12 +23,31 @@ public:
         QString label;
     };
 
+    enum class InferredRelation {
+        None,
+        Coincident,
+        Midpoint,
+        Horizontal,
+        Vertical
+    };
+
+    struct InferenceResult {
+        QPointF worldPos;
+        InferredRelation relation = InferredRelation::None;
+        QString label;
+        std::optional<QPointF> referencePoint;
+    };
+
     CanvasSnap(const Document& document, const CoordinateTransform& transforms,
                double gridSize = 10.0, double snapDistancePx = 14.0);
 
     // --- Snap computation ---
     SnapResult computeSnap(const QPointF& rawWorldPos, bool includeSelection,
-                           std::optional<QPointF> tangentRef = std::nullopt) const;
+                           std::optional<QPointF> tangentRef = std::nullopt,
+                           const QSet<QUuid>& excludedIds = {}) const;
+    InferenceResult inferPoint(const QPointF& rawWorldPos,
+                               const SnapResult& snapResult,
+                               std::optional<QPointF> referencePoint = std::nullopt) const;
 
     // --- Handle hit-testing ---
     std::optional<Entity::EditHandle> hitHandle(

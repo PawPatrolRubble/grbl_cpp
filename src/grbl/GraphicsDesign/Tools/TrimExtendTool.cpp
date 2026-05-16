@@ -181,6 +181,8 @@ void TrimExtendTool::cancel()
 
 void TrimExtendTool::mousePress(const QPointF& pos)
 {
+    updateHover(pos);
+
     if (m_mode == Mode::Trim) {
         if (m_hoverIdx < 0 || !m_hasLo || !m_hasHi) return;
         const Entity *e = document().entityAt(m_hoverIdx);

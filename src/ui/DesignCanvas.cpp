@@ -9,10 +9,14 @@
 #include "../grbl/GraphicsDesign/Tools/ChamferTool.h"
 #include "../grbl/GraphicsDesign/Tools/FilletTool.h"
 #include "../grbl/GraphicsDesign/Tools/MeasureTool.h"
+#include "../grbl/GraphicsDesign/Tools/MoveTool.h"
+#include "../grbl/GraphicsDesign/Tools/CopyTool.h"
+#include "../grbl/GraphicsDesign/Tools/RotateTool.h"
 #include "../grbl/GraphicsDesign/Tools/SplineTool.h"
 #include "../grbl/GraphicsDesign/Tools/OffsetTool.h"
 #include "../grbl/GraphicsDesign/Tools/PolylineTool.h"
 #include "../grbl/GraphicsDesign/Tools/SelectTool.h"
+#include "../grbl/GraphicsDesign/Tools/TrimTool.h"
 
 #include <QMenu>
 #include <QContextMenuEvent>
@@ -31,6 +35,41 @@ constexpr double kShortcutDuplicateOffset = 10.0;
 QPointF shortcutOffsetForStep(int step) {
     const double offset = kShortcutDuplicateOffset * std::max(step, 1);
     return QPointF(offset, offset);
+}
+
+bool toolUsesRawCursor(ToolManager::Type type)
+{
+    return type == ToolManager::Type::Extend;
+}
+
+bool toolAutoSwitchesToSelectAfterCreation(ToolManager::Type type)
+{
+    switch (type) {
+        case ToolManager::Type::Line:
+        case ToolManager::Type::Polyline:
+        case ToolManager::Type::Rectangle:
+        case ToolManager::Type::Circle:
+        case ToolManager::Type::Arc:
+        case ToolManager::Type::Text:
+        case ToolManager::Type::Dimension:
+        case ToolManager::Type::AngularDimension:
+        case ToolManager::Type::RadiusDimension:
+        case ToolManager::Type::Spline:
+            return true;
+        case ToolManager::Type::Select:
+        case ToolManager::Type::Move:
+        case ToolManager::Type::Copy:
+        case ToolManager::Type::Rotate:
+        case ToolManager::Type::Trim:
+        case ToolManager::Type::Extend:
+        case ToolManager::Type::Chamfer:
+        case ToolManager::Type::Fillet:
+        case ToolManager::Type::Offset:
+        case ToolManager::Type::Measure:
+        case ToolManager::Type::Count:
+            return false;
+    }
+    return false;
 }
 }
 
@@ -109,6 +148,9 @@ ToolManager::Type DesignCanvas::toToolManagerType(ToolType t)
         case ToolType::Dimension: return ToolManager::Type::Dimension;
         case ToolType::AngularDimension: return ToolManager::Type::AngularDimension;
         case ToolType::RadiusDimension:  return ToolManager::Type::RadiusDimension;
+        case ToolType::Move:      return ToolManager::Type::Move;
+        case ToolType::Copy:      return ToolManager::Type::Copy;
+        case ToolType::Rotate:    return ToolManager::Type::Rotate;
         case ToolType::Trim:      return ToolManager::Type::Trim;
         case ToolType::Extend:    return ToolManager::Type::Extend;
         case ToolType::Chamfer:   return ToolManager::Type::Chamfer;
@@ -133,6 +175,9 @@ DesignCanvas::ToolType DesignCanvas::fromToolManagerType(ToolManager::Type t)
         case ToolManager::Type::Dimension: return ToolType::Dimension;
         case ToolManager::Type::AngularDimension: return ToolType::AngularDimension;
         case ToolManager::Type::RadiusDimension:  return ToolType::RadiusDimension;
+        case ToolManager::Type::Move:      return ToolType::Move;
+        case ToolManager::Type::Copy:      return ToolType::Copy;
+        case ToolManager::Type::Rotate:    return ToolType::Rotate;
         case ToolManager::Type::Trim:      return ToolType::Trim;
         case ToolManager::Type::Extend:    return ToolType::Extend;
         case ToolManager::Type::Chamfer:   return ToolType::Chamfer;
@@ -196,9 +241,11 @@ void DesignCanvas::setTool(ToolType toolType)
     activeTool().cancel();
     m_toolManagerActiveType = mt;
     m_snapResult = {};
+    m_inferenceResult = {};
     m_hoverHandleId.clear();
     m_tangentReference = std::nullopt;
     unsetCursor();
+    setFocus(Qt::OtherFocusReason);
     emitToolStatus();
     scheduleUpdate();
     emit toolChanged(toolType);
@@ -331,6 +378,11 @@ bool DesignCanvas::hasMeasurement() const
     auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
     return t && t->hasMeasurement();
 }
+bool DesignCanvas::hasLinearMeasurement() const
+{
+    auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
+    return t && t->hasLinearMeasurement();
+}
 double DesignCanvas::measureDistance() const
 {
     auto* t = m_toolManager.toolAs<MeasureTool>(ToolManager::Type::Measure);
@@ -391,6 +443,19 @@ QPointF DesignCanvas::toScreen(const QPointF& worldPos) const
     return m_transforms.toScreen(worldPos);
 }
 
+QPointF DesignCanvas::resolveToolPoint(const QPointF& rawWorldPos, bool includeSelection)
+{
+    const bool useRawCursor = toolUsesRawCursor(m_toolManagerActiveType);
+    if (m_snapEnabled && !useRawCursor) {
+        m_snapResult = m_snap.computeSnap(rawWorldPos, includeSelection, m_tangentReference, activeTool().snapExclusionIds());
+    } else {
+        m_snapResult = {};
+    }
+
+    m_inferenceResult = m_snap.inferPoint(rawWorldPos, m_snapResult, activeTool().inferenceReferencePoint());
+    return m_inferenceResult.worldPos;
+}
+
 void DesignCanvas::scheduleUpdate()
 {
     m_repaintPending = true;
@@ -401,8 +466,11 @@ void DesignCanvas::scheduleUpdate()
 
 void DesignCanvas::emitToolStatus()
 {
-    const QString snapText = m_snapResult.active
-        ? QString("  |  Snap: %1").arg(m_snapResult.label)
+    const QString snapLabel = !m_inferenceResult.label.isEmpty()
+        ? m_inferenceResult.label
+        : (m_snapResult.active ? m_snapResult.label : QString());
+    const QString snapText = !snapLabel.isEmpty()
+        ? QString("  |  Snap: %1").arg(snapLabel)
         : QString("  |  Snap: grid/end/corner/center/quadrant");
     emit toolStatusChanged(QString("%1: %2%3")
         .arg(activeToolName(), activeToolInstructions(), snapText));
@@ -419,11 +487,15 @@ void DesignCanvas::emitUndoRedoState()
 
 void DesignCanvas::cancelActiveToolInternal()
 {
+    const bool wasMeasureTool = (m_toolManagerActiveType == ToolManager::Type::Measure);
     m_hoverHandleId.clear();
     m_snapResult = {};
+    m_inferenceResult = {};
     m_tangentReference = std::nullopt;
     activeTool().cancel();
     unsetCursor();
+    if (wasMeasureTool)
+        emit measurementChanged();
     emitToolStatus();
     scheduleUpdate();
 }
@@ -483,18 +555,22 @@ void DesignCanvas::paintEvent(QPaintEvent *)
 
     m_drawing.drawSnapIndicator(painter, m_snapResult.worldPos, m_snapResult.active,
                                 m_snapResult.label);
-    
+    m_drawing.drawInferenceGuide(painter, m_inferenceResult.worldPos,
+                                 m_inferenceResult.label,
+                                 m_inferenceResult.referencePoint);
+
     // Draw entity snap markers (AutoSnap preview)
     const QPointF mouseWorldPos = toWorld(m_mouseScreenPos);
-    m_drawing.drawEntitySnapMarkers(painter, mouseWorldPos, 
-                                     m_snapResult.label, m_snapResult.worldPos, 
+    m_drawing.drawEntitySnapMarkers(painter, mouseWorldPos,
+                                     m_snapResult.label, m_snapResult.worldPos,
                                      m_snapResult.active,
                                      m_snapEnabled,
                                      endpointSnapEnabled(),
                                      midpointSnapEnabled(),
                                      centerSnapEnabled(),
                                      perpendicularSnapEnabled(),
-                                     m_tangentReference);
+                                     m_tangentReference,
+                                     activeTool().snapExclusionIds());
     
     painter.restore();
 
@@ -525,36 +601,34 @@ void DesignCanvas::mousePressEvent(QMouseEvent *event)
     }
 
     if (event->button() == Qt::LeftButton) {
-        if (m_snapEnabled) {
-            m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
-        } else {
-            m_snapResult = {};
-        }
-        const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
+        const QPointF toolPos = resolveToolPoint(rawWorldPos);
 
         // Pre-resolve handle hit in screen space for SelectTool
         if (m_toolManagerActiveType == ToolManager::Type::Select) {
             auto handle = m_snap.hitHandle(rawWorldPos, selectedHandles());
             m_hoverHandleId = handle ? handle->id : QString();
-            // Pass hit handle ID to SelectTool before mousePress
             if (auto* selectTool = m_toolManager.toolAs<SelectTool>(ToolManager::Type::Select)) {
                 selectTool->setHitHandleId(m_hoverHandleId);
+                selectTool->setCtrlPressed(event->modifiers().testFlag(Qt::ControlModifier));
             }
         }
 
         const bool wasActiveBefore = activeTool().isActive();
         const int entityCountBefore = m_document.entityCount();
-        activeTool().mousePress(snappedPos);
+        activeTool().mousePress(toolPos);
         const int entityCountAfter = m_document.entityCount();
         const bool isNowActive = activeTool().isActive();
+        if (m_toolManagerActiveType == ToolManager::Type::Measure)
+            emit measurementChanged();
 
         // If tool transitioned from inactive to active, set tangent reference for tangent snap
         if (!wasActiveBefore && isNowActive) {
-            m_tangentReference = snappedPos;
+            m_tangentReference = toolPos;
         }
 
         // Auto-switch to Select tool after creation (clear tangent reference)
-        if (entityCountAfter > entityCountBefore) {
+        if (entityCountAfter > entityCountBefore &&
+            toolAutoSwitchesToSelectAfterCreation(m_toolManagerActiveType)) {
             m_document.select(m_document.entityAt(entityCountAfter - 1)->id());
             m_tangentReference = std::nullopt;
             setTool(ToolType::Select);
@@ -583,19 +657,22 @@ void DesignCanvas::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
-    bool isDragging = (m_toolManagerActiveType == ToolManager::Type::Select && activeTool().isActive());
+    const bool isSelectActive = (m_toolManagerActiveType == ToolManager::Type::Select && activeTool().isActive());
+    const bool supportsDragInference = isSelectActive && activeTool().inferenceReferencePoint().has_value();
+    const bool bypassInferenceDuringDrag = isSelectActive && !supportsDragInference;
 
-    if (m_toolManagerActiveType == ToolManager::Type::Select && !isDragging) {
+    if (m_toolManagerActiveType == ToolManager::Type::Select && !isSelectActive) {
         updateHoverCursor(rawWorldPos);
     }
 
-    if (m_snapEnabled && !isDragging) {
-        m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
+    QPointF toolPos = rawWorldPos;
+    if (!bypassInferenceDuringDrag) {
+        toolPos = resolveToolPoint(rawWorldPos);
     } else {
         m_snapResult = {};
+        m_inferenceResult = { rawWorldPos, CanvasSnap::InferredRelation::None, QString(), std::nullopt };
     }
-    const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
-    activeTool().mouseMove(snappedPos);
+    activeTool().mouseMove(toolPos);
 
     if (m_toolManagerActiveType == ToolManager::Type::Measure)
         emit measurementChanged();
@@ -626,13 +703,16 @@ void DesignCanvas::mouseReleaseEvent(QMouseEvent *event)
     }
 
     if (event->button() == Qt::LeftButton) {
-        if (m_snapEnabled) {
-            m_snapResult = m_snap.computeSnap(rawWorldPos, true, m_tangentReference);
-        } else {
+        const bool isSelectActive = (m_toolManagerActiveType == ToolManager::Type::Select && activeTool().isActive());
+        const bool supportsDragInference = isSelectActive && activeTool().inferenceReferencePoint().has_value();
+        const QPointF toolPos = (isSelectActive && !supportsDragInference) ? rawWorldPos : resolveToolPoint(rawWorldPos);
+        if (isSelectActive && !supportsDragInference) {
             m_snapResult = {};
+            m_inferenceResult = { rawWorldPos, CanvasSnap::InferredRelation::None, QString(), std::nullopt };
         }
-        const QPointF snappedPos = m_snapResult.active ? m_snapResult.worldPos : rawWorldPos;
-        activeTool().mouseRelease(snappedPos);
+        activeTool().mouseRelease(toolPos);
+        if (m_toolManagerActiveType == ToolManager::Type::Measure)
+            emit measurementChanged();
         emitToolStatus();
         scheduleUpdate();
     }
@@ -646,11 +726,7 @@ void DesignCanvas::mouseDoubleClickEvent(QMouseEvent *event)
     }
 
     const int entityCountBefore = m_document.entityCount();
-    if (m_snapEnabled) {
-        m_snapResult = m_snap.computeSnap(toWorld(event->position()), true, m_tangentReference);
-    } else {
-        m_snapResult = {};
-    }
+    resolveToolPoint(toWorld(event->position()));
 
     auto* polyTool = m_toolManager.toolAs<PolylineTool>(ToolManager::Type::Polyline);
     if (polyTool && polyTool->finish() && m_document.entityCount() > entityCountBefore) {
@@ -707,6 +783,29 @@ std::vector<Entity::EditHandle> DesignCanvas::selectedHandles() const
 
 void DesignCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (m_toolManagerActiveType == ToolManager::Type::Trim) {
+        auto* trimTool = m_toolManager.toolAs<TrimTool>(ToolManager::Type::Trim);
+        if (trimTool) {
+            if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) &&
+                trimTool->phase() == TrimTool::Phase::SelectCuttingEdges) {
+                trimTool->finishCuttingEdgeSelection();
+                emitToolStatus();
+                scheduleUpdate();
+                event->accept();
+                return;
+            }
+
+            if (event->key() == Qt::Key_F && event->modifiers() == Qt::NoModifier &&
+                trimTool->phase() == TrimTool::Phase::TrimObjects) {
+                trimTool->enableFenceMode(!trimTool->fenceMode());
+                emitToolStatus();
+                scheduleUpdate();
+                event->accept();
+                return;
+            }
+        }
+    }
+
     if (m_toolManagerActiveType == ToolManager::Type::Polyline) {
         auto* polyTool = m_toolManager.toolAs<PolylineTool>(ToolManager::Type::Polyline);
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
@@ -787,7 +886,11 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
         return;
     }
     if (event->key() == Qt::Key_Escape) {
-        cancelActiveToolInternal();
+        if (m_toolManagerActiveType == ToolManager::Type::Select) {
+            cancelActiveToolInternal();
+        } else {
+            setTool(ToolType::Select);
+        }
         event->accept();
         return;
     }
@@ -814,8 +917,26 @@ void DesignCanvas::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    if (event->key() == Qt::Key_G && event->modifiers() == Qt::NoModifier) {
+        setTool(ToolType::Move);
+        emitToolStatus();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Y && event->modifiers() == Qt::NoModifier) {
+        setTool(ToolType::Copy);
+        emitToolStatus();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Q && event->modifiers() == Qt::NoModifier) {
+        setTool(ToolType::Rotate);
+        emitToolStatus();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_M && event->modifiers() == Qt::NoModifier) {
-        setTool(ToolType::Measure);
+        setTool(ToolType::AngularDimension);
         emitToolStatus();
         event->accept();
         return;

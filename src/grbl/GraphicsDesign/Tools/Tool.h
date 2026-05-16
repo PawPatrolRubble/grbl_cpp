@@ -6,6 +6,9 @@
 #include <QPainter>
 #include <QString>
 #include <QPointF>
+#include <QSet>
+#include <QUuid>
+#include <optional>
 
 /// Base class for drawing/editing tools.
 /// Tools handle user interaction with the canvas and modify the document
@@ -43,6 +46,12 @@ public:
 
     /// Check if tool is in an active operation
     virtual bool isActive() const = 0;
+
+    /// Entity ids that should be excluded from snapping while this tool is active.
+    virtual QSet<QUuid> snapExclusionIds() const { return {}; }
+
+    /// Optional anchor/reference point for lightweight relation inference.
+    virtual std::optional<QPointF> inferenceReferencePoint() const { return std::nullopt; }
 
 protected:
     Document& document() const { return m_document; }

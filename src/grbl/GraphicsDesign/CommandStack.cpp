@@ -72,6 +72,28 @@ void ClearDocumentCommand::undo(Document& document)
     document.restoreEntities(std::move(m_clearedEntities));
 }
 
+void CompositeCommand::add(std::unique_ptr<Command> command)
+{
+    if (command)
+        m_commands.push_back(std::move(command));
+}
+
+void CompositeCommand::execute(Document& document)
+{
+    for (auto& command : m_commands) {
+        if (command)
+            command->execute(document);
+    }
+}
+
+void CompositeCommand::undo(Document& document)
+{
+    for (auto it = m_commands.rbegin(); it != m_commands.rend(); ++it) {
+        if (*it)
+            (*it)->undo(document);
+    }
+}
+
 CommandStack::CommandStack(Document& document)
     : m_document(document)
 {

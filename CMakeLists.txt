@@ -80,6 +80,9 @@ set(GRBL_SOURCES
     src/grbl/GraphicsDesign/Tools/DimensionTool.cpp
     src/grbl/GraphicsDesign/Tools/AngularDimensionTool.cpp
     src/grbl/GraphicsDesign/Tools/RadiusDimensionTool.cpp
+    src/grbl/GraphicsDesign/Tools/MoveTool.cpp
+    src/grbl/GraphicsDesign/Tools/CopyTool.cpp
+    src/grbl/GraphicsDesign/Tools/RotateTool.cpp
     src/grbl/GraphicsDesign/Tools/TrimExtendTool.cpp
     src/grbl/GraphicsDesign/Tools/TrimTool.cpp
     src/grbl/GraphicsDesign/Tools/ChamferTool.cpp
@@ -142,6 +145,9 @@ set(GRBL_HEADERS
     src/grbl/GraphicsDesign/Tools/DimensionTool.h
     src/grbl/GraphicsDesign/Tools/AngularDimensionTool.h
     src/grbl/GraphicsDesign/Tools/RadiusDimensionTool.h
+    src/grbl/GraphicsDesign/Tools/MoveTool.h
+    src/grbl/GraphicsDesign/Tools/CopyTool.h
+    src/grbl/GraphicsDesign/Tools/RotateTool.h
     src/grbl/GraphicsDesign/Tools/RectangleTool.h
     src/grbl/GraphicsDesign/Tools/CircleTool.h
     src/grbl/GraphicsDesign/Tools/ArcTool.h
@@ -308,6 +314,18 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMENT "Copying bigfonts directory..."
 )
 
+if(WIN32)
+    file(GLOB OPENCV_DLLS "${OpenCV_DIR}/../bin/opencv_world*.dll")
+    foreach(DLL ${OPENCV_DLLS})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${DLL}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+            COMMENT "Copying OpenCV DLL..."
+        )
+    endforeach()
+endif()
+
 # --- Unit tests (minimal, only GcodeParser) ---
 add_executable(TestGcodeParser tests/test_gcode_parser.cpp src/grbl/GcodeParser.cpp src/grbl/TextToGcode/ShxFontParser.cpp)
 target_include_directories(TestGcodeParser PRIVATE src)
@@ -318,6 +336,7 @@ target_link_libraries(TestShxDebug PRIVATE Qt6::Core Qt6::Gui Qt6::Concurrent Qt
 add_executable(TestCanvasSnap
     tests/test_canvas_snap.cpp
     src/ui/canvas/CanvasSnap.cpp
+    src/ui/panels/EntityTransform.cpp
     ${GRBL_SOURCES}
 )
 target_include_directories(TestCanvasSnap PRIVATE src)

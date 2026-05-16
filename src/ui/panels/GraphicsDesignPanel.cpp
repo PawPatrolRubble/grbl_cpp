@@ -301,6 +301,18 @@ void GraphicsDesignPanel::setupUi()
     redoBtn->setShortcut(QKeySequence::Redo);
     actionRow->addWidget(redoBtn);
 
+    auto *copyBtn = new QPushButton("Copy");
+    copyBtn->setObjectName("copyBtn");
+    actionRow->addWidget(copyBtn);
+
+    auto *pasteBtn = new QPushButton("Paste");
+    pasteBtn->setObjectName("pasteBtn");
+    actionRow->addWidget(pasteBtn);
+
+    auto *dupBtn = new QPushButton("Duplicate");
+    dupBtn->setObjectName("duplicateBtn");
+    actionRow->addWidget(dupBtn);
+
     m_deleteBtn = new QPushButton("Delete");
     m_deleteBtn->setEnabled(false);
     actionRow->addWidget(m_deleteBtn);
@@ -323,8 +335,25 @@ void GraphicsDesignPanel::setupUi()
     floatingLayout->setContentsMargins(8, 8, 8, 8);
     floatingLayout->setSpacing(6);
 
-    // Opacity control header
+    // Header row: collapse button + opacity control
     auto *opacityHeader = new QHBoxLayout();
+
+    // Collapse/expand toggle button
+    m_collapseBtn = new QToolButton();
+    m_collapseBtn->setText("▼");
+    m_collapseBtn->setToolTip("Collapse property panel");
+    m_collapseBtn->setAutoRaise(true);
+    m_collapseBtn->setFixedSize(20, 20);
+    connect(m_collapseBtn, &QToolButton::clicked, this, [this]() {
+        m_propertyPanelCollapsed = !m_propertyPanelCollapsed;
+        m_propertyStack->setVisible(!m_propertyPanelCollapsed);
+        m_layerGroup->setVisible(!m_propertyPanelCollapsed);
+        m_collapseBtn->setText(m_propertyPanelCollapsed ? "▶" : "▼");
+        m_collapseBtn->setToolTip(m_propertyPanelCollapsed ? "Expand property panel" : "Collapse property panel");
+        m_floatingPropertyPanel->adjustSize();
+    });
+    opacityHeader->addWidget(m_collapseBtn);
+
     auto *opacityLabel = new QLabel("Opacity:");
     opacityLabel->setStyleSheet("font-size: 10px; color: #666;");
     opacityHeader->addWidget(opacityLabel);
@@ -345,6 +374,7 @@ void GraphicsDesignPanel::setupUi()
         );
     });
     opacityHeader->addWidget(m_opacitySlider);
+    opacityHeader->addStretch();  // Push everything to the left
     floatingLayout->addLayout(opacityHeader);
 
     // Property stack (moved from right panel)
@@ -741,8 +771,23 @@ void GraphicsDesignPanel::setupConnections()
     // Undo/Redo buttons
     auto *undoBtn = findChild<QPushButton*>("undoBtn");
     auto *redoBtn = findChild<QPushButton*>("redoBtn");
+    auto *copyBtn = findChild<QPushButton*>("copyBtn");
+    auto *pasteBtn = findChild<QPushButton*>("pasteBtn");
+    auto *duplicateBtn = findChild<QPushButton*>("duplicateBtn");
     if (undoBtn) connect(undoBtn, &QPushButton::clicked, m_canvas, &DesignCanvas::undo);
     if (redoBtn) connect(redoBtn, &QPushButton::clicked, m_canvas, &DesignCanvas::redo);
+    if (copyBtn) connect(copyBtn, &QPushButton::clicked, this, [this]() {
+        QKeyEvent event(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
+        QApplication::sendEvent(m_canvas, &event);
+    });
+    if (pasteBtn) connect(pasteBtn, &QPushButton::clicked, this, [this]() {
+        QKeyEvent event(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier);
+        QApplication::sendEvent(m_canvas, &event);
+    });
+    if (duplicateBtn) connect(duplicateBtn, &QPushButton::clicked, this, [this]() {
+        QKeyEvent event(QEvent::KeyPress, Qt::Key_D, Qt::ControlModifier);
+        QApplication::sendEvent(m_canvas, &event);
+    });
 
     // Document changes
     connect(m_canvas, &DesignCanvas::documentStateChanged, this, &GraphicsDesignPanel::updatePreview);
@@ -758,6 +803,7 @@ void GraphicsDesignPanel::setupConnections()
         Document *doc = m_canvas->document();
         if (row >= 0 && row < doc->entityCount()) {
             Entity *e = doc->entityAt(row);
+            doc->clearSelection();
             doc->setSelected(e->id(), true);
             m_canvas->update();
         }
@@ -912,7 +958,7 @@ void GraphicsDesignPanel::onToolChanged(int index)
     bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
     bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
     bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
-    bool isMeasure = (tool == DesignCanvas::ToolType::Measure);
+    bool isMeasure = false;
     m_filletRadiusLabel->setVisible(isFillet);
     m_filletRadiusSpin->setVisible(isFillet);
     m_chamferDistLabel->setVisible(isChamfer);
@@ -935,7 +981,7 @@ void GraphicsDesignPanel::onCanvasToolChanged()
     bool isFillet  = (tool == DesignCanvas::ToolType::Fillet);
     bool isChamfer = (tool == DesignCanvas::ToolType::Chamfer);
     bool isOffset  = (tool == DesignCanvas::ToolType::Offset);
-    bool isMeasure = (tool == DesignCanvas::ToolType::Measure);
+    bool isMeasure = false;
     m_filletRadiusLabel->setVisible(isFillet);
     m_filletRadiusSpin->setVisible(isFillet);
     m_chamferDistLabel->setVisible(isChamfer);
@@ -955,11 +1001,13 @@ void GraphicsDesignPanel::onSelectionChanged()
         m_propertyStack->setCurrentIndex(0);
         m_deleteBtn->setEnabled(false);
         m_transformPanel->setVisible(false);
+        m_moveToLayerBtn->setEnabled(false);
         m_updatingUi = false;
         return;
     }
 
     m_deleteBtn->setEnabled(true);
+    m_moveToLayerBtn->setEnabled(m_layerList->currentRow() >= 0);
 
     static const QHash<int, int> kindToPage = {
         {static_cast<int>(Entity::Kind::Line),             1},
@@ -1936,9 +1984,15 @@ void GraphicsDesignPanel::onMeasurementChanged()
         m_measureAngleLabel->setText("—");
         return;
     }
-    m_measureDistLabel->setText(QString::number(m_canvas->measureDistance(), 'f', 3) + " mm");
-    m_measureDxLabel->setText(QString::number(m_canvas->measureDeltaX(), 'f', 3));
-    m_measureDyLabel->setText(QString::number(m_canvas->measureDeltaY(), 'f', 3));
+    if (m_canvas->hasLinearMeasurement()) {
+        m_measureDistLabel->setText(QString::number(m_canvas->measureDistance(), 'f', 3) + " mm");
+        m_measureDxLabel->setText(QString::number(m_canvas->measureDeltaX(), 'f', 3));
+        m_measureDyLabel->setText(QString::number(m_canvas->measureDeltaY(), 'f', 3));
+    } else {
+        m_measureDistLabel->setText("—");
+        m_measureDxLabel->setText("—");
+        m_measureDyLabel->setText("—");
+    }
     m_measureAngleLabel->setText(QString::number(m_canvas->measureAngle(), 'f', 2) + "°");
 }
 

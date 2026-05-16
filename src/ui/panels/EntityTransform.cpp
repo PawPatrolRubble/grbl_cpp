@@ -37,41 +37,61 @@ QPointF flipV(const QPointF &pt, const QPointF &pivot)
     return QPointF(pt.x(), 2.0 * pivot.y() - pt.y());
 }
 
-std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, double angleDeg)
+std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, const QPointF &pivot, double angleDeg)
 {
-    const QPointF pivot = e->center();
+    auto rotated = e->clone();
+
     switch (e->kind()) {
     case Entity::Kind::Line: {
         const auto *line = static_cast<const LineEntity*>(e);
-        return std::make_unique<LineEntity>(
+        auto *target = static_cast<LineEntity*>(rotated.get());
+        target->setStartEnd(
             rotatePoint(line->startPoint(), pivot, angleDeg),
             rotatePoint(line->endPoint(), pivot, angleDeg));
+        return rotated;
     }
     case Entity::Kind::Rectangle: {
         const auto *rect = static_cast<const RectangleEntity*>(e);
-        return std::make_unique<RectangleEntity>(
-            pivot, rect->width(), rect->height(), rect->angleDegrees() + angleDeg);
+        auto *target = static_cast<RectangleEntity*>(rotated.get());
+        target->setGeometry(
+            rotatePoint(rect->center(), pivot, angleDeg),
+            rect->width(), rect->height(), rect->angleDegrees() + angleDeg);
+        return rotated;
     }
-    case Entity::Kind::Circle:
-        return e->clone();  // Circle is symmetric; rotation has no visible effect
+    case Entity::Kind::Circle: {
+        const auto *circle = static_cast<const CircleEntity*>(e);
+        auto *target = static_cast<CircleEntity*>(rotated.get());
+        target->setGeometry(rotatePoint(circle->center(), pivot, angleDeg), circle->radius());
+        return rotated;
+    }
     case Entity::Kind::Arc: {
         const auto *arc = static_cast<const ArcEntity*>(e);
-        return std::make_unique<ArcEntity>(
-            pivot, arc->radius(),
+        auto *target = static_cast<ArcEntity*>(rotated.get());
+        target->setGeometry(
+            rotatePoint(arc->center(), pivot, angleDeg),
+            arc->radius(),
             arc->startAngleDegrees() + angleDeg,
             arc->sweepAngleDegrees());
+        return rotated;
     }
     case Entity::Kind::Polygon: {
         const auto *poly = static_cast<const PolylineEntity*>(e);
+        auto *target = static_cast<PolylineEntity*>(rotated.get());
         QList<QPointF> pts;
         pts.reserve(poly->points().size());
         for (const QPointF &pt : poly->points())
             pts.append(rotatePoint(pt, pivot, angleDeg));
-        return std::make_unique<PolylineEntity>(pts);
+        target->setPoints(pts);
+        return rotated;
     }
     default:
-        return e->clone();
+        return rotated;
     }
+}
+
+std::unique_ptr<Entity> makeRotatedEntity(const Entity *e, double angleDeg)
+{
+    return makeRotatedEntity(e, e->center(), angleDeg);
 }
 
 std::unique_ptr<Entity> makeScaledEntity(const Entity *e, const QPointF &pivot, double factor)

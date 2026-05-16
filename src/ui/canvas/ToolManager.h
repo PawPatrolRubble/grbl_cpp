@@ -20,6 +20,7 @@ public:
     enum class Type {
         Select, Line, Polyline, Rectangle, Circle, Arc, Text,
         Dimension, AngularDimension, RadiusDimension,
+        Move, Copy, Rotate,
         Trim, Extend, Chamfer, Fillet, Offset, Measure, Spline, Count
     };
 

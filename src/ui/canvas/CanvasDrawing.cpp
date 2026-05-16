@@ -630,7 +630,8 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
                                            bool midpointSnap,
                                            bool centerSnap,
                                            bool perpendicularSnap,
-                                           std::optional<QPointF> perpRef) const
+                                           std::optional<QPointF> perpRef,
+                                           const QSet<QUuid>& excludedIds) const
 {
     // If snap is disabled globally, don't draw any markers
     if (!snapEnabled) return;
@@ -649,7 +650,7 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
 
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
-        if (!entity || !entity->isEnabled()) continue;
+        if (!entity || !entity->isEnabled() || excludedIds.contains(entity->id())) continue;
 
         // Quick bounding-rect early-exit with generous padding
         const QRectF bounds = entity->boundingRect();
@@ -757,6 +758,29 @@ void CanvasDrawing::drawEntitySnapMarkers(QPainter& painter, const QPointF& mous
         }
         } // end if (perpendicularSnap && perpRef)
     } // end closest entity block
+
+    painter.restore();
+}
+
+void CanvasDrawing::drawInferenceGuide(QPainter& painter,
+                                      const QPointF& point,
+                                      const QString& label,
+                                      std::optional<QPointF> referencePoint) const
+{
+    if (label.isEmpty())
+        return;
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QPen guidePen(QColor(59, 130, 246, 190), 1.5 / m_transforms.zoom(), Qt::DashLine);
+    painter.setPen(guidePen);
+
+    if (referencePoint && (label == "Horizontal" || label == "Vertical")) {
+        painter.drawLine(*referencePoint, point);
+        painter.setBrush(QColor(59, 130, 246, 90));
+        painter.drawEllipse(*referencePoint, 3.0 / m_transforms.zoom(), 3.0 / m_transforms.zoom());
+    }
 
     painter.restore();
 }

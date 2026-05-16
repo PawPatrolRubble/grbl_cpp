@@ -66,3 +66,8 @@ bool LineTool::isActive() const
 {
     return m_startPoint.has_value();
 }
+
+std::optional<QPointF> LineTool::inferenceReferencePoint() const
+{
+    return m_startPoint;
+}

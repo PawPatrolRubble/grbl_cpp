@@ -62,7 +62,12 @@ public:
                                 bool midpointSnap,
                                 bool centerSnap,
                                 bool perpendicularSnap,
-                                std::optional<QPointF> perpRef = std::nullopt) const;
+                                std::optional<QPointF> perpRef = std::nullopt,
+                                const QSet<QUuid>& excludedIds = {}) const;
+    void drawInferenceGuide(QPainter& painter,
+                            const QPointF& point,
+                            const QString& label,
+                            std::optional<QPointF> referencePoint = std::nullopt) const;
     void drawCrosshair(QPainter& painter, const QPointF& mouseScreenPos,
                        bool mouseInWidget, const QSize& widgetSize) const;
 

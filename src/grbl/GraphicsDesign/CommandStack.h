@@ -69,6 +69,20 @@ private:
     std::vector<std::unique_ptr<Entity>> m_clearedEntities;
 };
 
+/// Command grouping multiple child commands into one undo/redo step.
+class CompositeCommand : public Command
+{
+public:
+    void add(std::unique_ptr<Command> command);
+    bool empty() const { return m_commands.empty(); }
+
+    void execute(Document& document) override;
+    void undo(Document& document) override;
+
+private:
+    std::vector<std::unique_ptr<Command>> m_commands;
+};
+
 /// Undo/redo stack managing command history.
 class CommandStack
 {

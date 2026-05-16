@@ -2,48 +2,75 @@
 
 void EntityClipboard::copy()
 {
-    const Entity* selected = m_document.selectedEntity();
-    if (!selected) return;
+    m_copiedEntities.clear();
+    const QVector<Entity*> selected = m_document.selectedEntities();
+    if (selected.isEmpty()) return;
 
-    m_copiedEntity = selected->clone();
+    m_copiedEntities.reserve(selected.size());
+    for (const Entity* entity : selected) {
+        if (entity)
+            m_copiedEntities.push_back(entity->clone());
+    }
     m_pasteSerial = 0;
 }
 
 void EntityClipboard::paste()
 {
-    if (!m_copiedEntity) return;
+    if (m_copiedEntities.empty()) return;
 
-    auto entity = m_copiedEntity->clone();
     ++m_pasteSerial;
-    entity->translate(shortcutOffsetForStep(m_pasteSerial));
-    addEntity(std::move(entity));
+    std::vector<std::unique_ptr<Entity>> entities;
+    entities.reserve(m_copiedEntities.size());
+    for (const auto& copied : m_copiedEntities) {
+        if (!copied) continue;
+        auto entity = copied->clone();
+        entity->translate(shortcutOffsetForStep(m_pasteSerial));
+        entities.push_back(std::move(entity));
+    }
+    addEntities(std::move(entities));
 }
 
 void EntityClipboard::duplicate()
 {
-    const Entity* selected = m_document.selectedEntity();
-    if (!selected) return;
+    const QVector<Entity*> selected = m_document.selectedEntities();
+    if (selected.isEmpty()) return;
 
-    auto entity = selected->clone();
-    entity->translate(shortcutOffsetForStep(1));
-    addEntity(std::move(entity));
+    std::vector<std::unique_ptr<Entity>> entities;
+    entities.reserve(selected.size());
+    m_copiedEntities.clear();
+    m_copiedEntities.reserve(selected.size());
+    for (const Entity* entity : selected) {
+        if (!entity) continue;
+        auto duplicate = entity->clone();
+        duplicate->translate(shortcutOffsetForStep(1));
+        entities.push_back(std::move(duplicate));
+        m_copiedEntities.push_back(entity->clone());
+    }
 
-    // Also update clipboard so subsequent pastes work
-    m_copiedEntity = selected->clone();
     m_pasteSerial = 1;
+    addEntities(std::move(entities));
 }
 
-void EntityClipboard::addEntity(std::unique_ptr<Entity> entity)
+void EntityClipboard::addEntities(std::vector<std::unique_ptr<Entity>> entities)
 {
-    if (!entity) return;
+    if (entities.empty()) return;
 
     const int entityCountBefore = m_document.entityCount();
-    m_commandStack.execute(std::make_unique<AddEntityCommand>(std::move(entity)));
+    auto command = std::make_unique<CompositeCommand>();
+    for (auto& entity : entities) {
+        if (entity)
+            command->add(std::make_unique<AddEntityCommand>(std::move(entity)));
+    }
 
-    if (m_document.entityCount() > entityCountBefore) {
-        m_document.clearSelection();
-        if (Entity* created = m_document.entityAt(entityCountBefore)) {
+    if (command->empty()) return;
+
+    m_commandStack.execute(std::move(command));
+
+    if (m_document.entityCount() <= entityCountBefore) return;
+
+    m_document.clearSelection();
+    for (int index = entityCountBefore; index < m_document.entityCount(); ++index) {
+        if (Entity* created = m_document.entityAt(index))
             m_document.select(created->id());
-        }
     }
 }

@@ -90,6 +90,8 @@ private:
     DesignCanvas *m_canvas;
     ToolBarWidget *m_toolBar;
     QWidget *m_floatingPropertyPanel = nullptr;
+    QToolButton *m_collapseBtn = nullptr;
+    bool m_propertyPanelCollapsed = false;
     QSlider *m_opacitySlider = nullptr;
     QComboBox *m_toolModeCombo;
 

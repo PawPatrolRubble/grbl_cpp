@@ -5,6 +5,7 @@
 
 #include <QPointF>
 #include <memory>
+#include <vector>
 
 /// Manages copy/paste/duplicate operations for canvas entities.
 /// Handles entity cloning with offset positioning and command stack integration.
@@ -26,13 +27,13 @@ public:
     void duplicate();
 
     /// Clear the clipboard.
-    void clear() { m_copiedEntity.reset(); m_pasteSerial = 0; }
+    void clear() { m_copiedEntities.clear(); m_pasteSerial = 0; }
 
     /// Check if clipboard has content.
-    bool hasContent() const { return m_copiedEntity != nullptr; }
+    bool hasContent() const { return !m_copiedEntities.empty(); }
 
 private:
-    void addEntity(std::unique_ptr<Entity> entity);
+    void addEntities(std::vector<std::unique_ptr<Entity>> entities);
 
     static QPointF shortcutOffsetForStep(int step) {
         constexpr double kOffset = 10.0;
@@ -41,6 +42,6 @@ private:
 
     Document& m_document;
     CommandStack& m_commandStack;
-    std::unique_ptr<Entity> m_copiedEntity;
+    std::vector<std::unique_ptr<Entity>> m_copiedEntities;
     int m_pasteSerial = 0;
 };

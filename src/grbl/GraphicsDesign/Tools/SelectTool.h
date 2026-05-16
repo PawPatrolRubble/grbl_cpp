@@ -3,6 +3,7 @@
 #include "Tool.h"
 
 #include <optional>
+#include <vector>
 
 /// Select tool for selecting and manipulating existing entities.
 /// Handles selection, dragging handles, and moving entities.
@@ -20,6 +21,8 @@ public:
     void cancel() override;
     void paintPreview(QPainter& painter) const override;
     bool isActive() const override;
+    QSet<QUuid> snapExclusionIds() const override;
+    std::optional<QPointF> inferenceReferencePoint() const override;
 
     /// Set by the canvas before mousePress using screen-space hit-testing.
     void setHitHandleId(const QString& id) { m_hitHandleId = id; }
@@ -46,5 +49,9 @@ private:
     QString m_activeHandleId;
     QString m_hitHandleId;  ///< Pre-resolved by canvas (screen-space hit-test)
     bool m_ctrlPressed = false;
+    bool m_rubberBandAdditive = false;
     std::unique_ptr<Entity> m_dragEntityPreview;
+    std::vector<int> m_dragEntityIndices;
+    std::vector<std::unique_ptr<Entity>> m_dragEntityBefore;
+    std::vector<std::unique_ptr<Entity>> m_dragEntityAfter;
 };

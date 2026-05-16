@@ -27,6 +27,7 @@ public:
     enum class ToolType {
         Select, Line, Polyline, Rectangle, Circle, Arc, Text,
         Dimension, AngularDimension, RadiusDimension,
+        Move, Copy, Rotate,
         Trim, Extend, Chamfer, Fillet, Offset, Measure, Spline
     };
 
@@ -86,6 +87,7 @@ public:
     void setOffsetDistance(double d);
     // Measure tool accessors (valid when Measure tool is active)
     bool   hasMeasurement()   const;
+    bool   hasLinearMeasurement() const;
     double measureDistance()  const;
     double measureDeltaX()    const;
     double measureDeltaY()    const;
@@ -143,6 +145,7 @@ private:
     QPointF toScreen(const QPointF& worldPos) const;
     std::vector<Entity::EditHandle> selectedHandles() const;
     void updateHoverCursor(const QPointF& worldPos);
+    QPointF resolveToolPoint(const QPointF& rawWorldPos, bool includeSelection = true);
 
     // --- Subsystems ---
     Document m_document;
@@ -171,6 +174,7 @@ private:
 
     // --- Snap state ---
     CanvasSnap::SnapResult m_snapResult;
+    CanvasSnap::InferenceResult m_inferenceResult;
     QString m_hoverHandleId;
     std::optional<QPointF> m_tangentReference;  ///< Reference point for tangent snap (last clicked point)
 

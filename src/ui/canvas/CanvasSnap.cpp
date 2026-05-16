@@ -20,6 +20,12 @@ bool isRotateRole(Entity::HandleRole role) {
     return role == Entity::HandleRole::Rotate;
 }
 
+bool isCoincidentSnapLabel(const QString& label)
+{
+    return label == "Endpoint" || label == "Corner" || label == "Start" ||
+           label == "End" || label == "Center" || label == "Quadrant";
+}
+
 /// Project point onto line segment, return perpendicular point if within segment.
 /// Returns nullopt if the perpendicular falls outside the segment bounds.
 std::optional<QPointF> perpendicularPointOnLine(const QPointF& p, const QPointF& a, const QPointF& b) {
@@ -252,12 +258,60 @@ QPointF CanvasSnap::toScreen(const QPointF& worldPos) const
     );
 }
 
+CanvasSnap::InferenceResult CanvasSnap::inferPoint(const QPointF& rawWorldPos,
+                                                   const SnapResult& snapResult,
+                                                   std::optional<QPointF> referencePoint) const
+{
+    if (snapResult.active) {
+        if (snapResult.label == "Midpoint") {
+            return { snapResult.worldPos, InferredRelation::Midpoint, "Midpoint", std::nullopt };
+        }
+        if (isCoincidentSnapLabel(snapResult.label)) {
+            return { snapResult.worldPos, InferredRelation::Coincident, "Coincident", std::nullopt };
+        }
+    }
+
+    if (snapResult.active && snapResult.label != "Grid")
+        return { snapResult.worldPos, InferredRelation::None, snapResult.label, std::nullopt };
+
+    if (referencePoint) {
+        constexpr double kAxisTolerancePx = 10.0;
+        const QPointF referenceScreen = toScreen(*referencePoint);
+        const QPointF rawScreen = toScreen(rawWorldPos);
+        const double dxPx = std::abs(rawScreen.x() - referenceScreen.x());
+        const double dyPx = std::abs(rawScreen.y() - referenceScreen.y());
+
+        if (dyPx <= kAxisTolerancePx && dyPx <= dxPx) {
+            return {
+                QPointF(rawWorldPos.x(), referencePoint->y()),
+                InferredRelation::Horizontal,
+                "Horizontal",
+                referencePoint
+            };
+        }
+        if (dxPx <= kAxisTolerancePx) {
+            return {
+                QPointF(referencePoint->x(), rawWorldPos.y()),
+                InferredRelation::Vertical,
+                "Vertical",
+                referencePoint
+            };
+        }
+    }
+
+    if (snapResult.active)
+        return { snapResult.worldPos, InferredRelation::None, snapResult.label, std::nullopt };
+
+    return { rawWorldPos, InferredRelation::None, QString(), std::nullopt };
+}
+
 // ============================================================================
 // Snap computation
 // ============================================================================
 
 CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool includeSelection,
-                                               std::optional<QPointF> tangentRef) const
+                                               std::optional<QPointF> tangentRef,
+                                               const QSet<QUuid>& excludedIds) const
 {
     // Entity snaps take priority over grid snap.
     // We collect entity snaps first; grid snap is only used as a fallback
@@ -284,7 +338,7 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
 
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
-        if (!includeSelection && selected && entity->id() == selected->id()) {
+        if ((!includeSelection && selected && entity->id() == selected->id()) || excludedIds.contains(entity->id())) {
             continue;
         }
 
@@ -334,7 +388,7 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
     // Perpendicular/nearest snap points
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity = m_document.entityAt(i);
-        if (!includeSelection && selected && entity->id() == selected->id()) {
+        if ((!includeSelection && selected && entity->id() == selected->id()) || excludedIds.contains(entity->id())) {
             continue;
         }
 
@@ -399,14 +453,14 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
     if (m_intersectionSnap)
     for (int i = 0; i < m_document.entityCount(); ++i) {
         Entity* entity1 = m_document.entityAt(i);
-        if (!includeSelection && selected && entity1->id() == selected->id()) {
+        if ((!includeSelection && selected && entity1->id() == selected->id()) || excludedIds.contains(entity1->id())) {
             continue;
         }
         const auto kind1 = entity1->kind();
 
         for (int j = i + 1; j < m_document.entityCount(); ++j) {
             Entity* entity2 = m_document.entityAt(j);
-            if (!includeSelection && selected && entity2->id() == selected->id()) {
+            if ((!includeSelection && selected && entity2->id() == selected->id()) || excludedIds.contains(entity2->id())) {
                 continue;
             }
             const auto kind2 = entity2->kind();
@@ -564,7 +618,7 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
     if (tangentRef) {
         for (int i = 0; i < m_document.entityCount(); ++i) {
             Entity* entity = m_document.entityAt(i);
-            if (!includeSelection && selected && entity->id() == selected->id()) {
+            if ((!includeSelection && selected && entity->id() == selected->id()) || excludedIds.contains(entity->id())) {
                 continue;
             }
 
