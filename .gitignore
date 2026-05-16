@@ -113,3 +113,15 @@ desktop.ini
 *~
 .omc/  
 nul  
+
+# GSD local state
+.gsd/
+
+# Build probe
+build-probe/
+
+# Local test/debug files
+Unnamed
+run_debug.ps1
+agents.md
+test_gbk.cpp
