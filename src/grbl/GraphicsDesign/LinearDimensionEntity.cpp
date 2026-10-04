@@ -1,6 +1,7 @@
 #include "LinearDimensionEntity.h"
 
 #include <QPainter>
+#include <QPainterPath>
 #include <QLineF>
 #include <QFontMetricsF>
 #include <QJsonObject>
@@ -173,9 +174,14 @@ void LinearDimensionEntity::draw(QPainter& painter) const
     QRectF textRect = fm.boundingRect(text);
     // Position text centered on the dimension line, slightly offset into perp direction
     painter.scale(1, -1);  // un-flip Y for text rendering
-    painter.drawText(QRectF(-textRect.width() / 2 - 1, -textRect.height() - 0.5,
-                             textRect.width() + 2, textRect.height() + 1),
-                     Qt::AlignCenter, text);
+    // Use QPainterPath::addText for reliable rendering under complex transforms
+    QPainterPath textPath;
+    textPath.addText(QPointF(0.0, 0.0), font, text);
+    const QRectF glyphBounds = textPath.boundingRect();
+    painter.translate(-glyphBounds.center());
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(savedPen.color());
+    painter.drawPath(textPath);
     painter.restore();
 }
 

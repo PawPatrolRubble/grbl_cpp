@@ -72,8 +72,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Check results
-    bool test1Pass = true;
-    if (moves1.size() >= 6) {
+    bool test1Pass = moves1.size() == 6;
+    if (moves1.size() == 6) {
         // Line 1,2 should be Rapid
         if (moves1[0].type != GcodeMove::Type::Rapid) test1Pass = false;
         if (moves1[1].type != GcodeMove::Type::Rapid) test1Pass = false;
@@ -85,8 +85,8 @@ int main(int argc, char *argv[]) {
         if (moves1[5].type != GcodeMove::Type::Rapid) test1Pass = false;
     }
 
-    bool test3Pass = true;
-    if (moves3.size() >= 2) {
+    bool test3Pass = moves3.size() == 2;
+    if (moves3.size() == 2) {
         if (moves3[0].type != GcodeMove::Type::Rapid) test3Pass = false;
         if (moves3[1].type != GcodeMove::Type::Linear) test3Pass = false;
     }

@@ -14,6 +14,7 @@ ControlPanel::ControlPanel(QWidget *parent)
     ui->feedOverrideSlider->setValue(100);
     ui->spindleOverrideSlider->setRange(0, 200);
     ui->spindleOverrideSlider->setValue(100);
+    updateControls();
 
     // Connections
     connect(ui->loadBtn, &QPushButton::clicked, this, &ControlPanel::loadFileRequested);
@@ -42,36 +43,66 @@ ControlPanel::~ControlPanel()
 
 void ControlPanel::setConnected(bool connected)
 {
-    Q_UNUSED(connected)
+    m_connected = connected;
+    updateControls();
+}
+
+void ControlPanel::setExecutionReady(bool ready)
+{
+    m_ready = ready;
+    updateControls();
+}
+
+void ControlPanel::updateControls()
+{
+    ui->startBtn->setEnabled(m_connected && m_ready && m_fileLoaded && !m_streaming);
+    ui->homeBtn->setEnabled(m_connected && !m_streaming);
+    ui->unlockBtn->setEnabled(m_connected && !m_streaming);
+    ui->resetBtn->setEnabled(m_connected);
+    ui->statusBtn->setEnabled(m_connected);
+    ui->loadBtn->setEnabled(!m_streaming);
+    if (!m_streaming) {
+        ui->pauseBtn->setEnabled(false);
+        ui->resumeBtn->setEnabled(false);
+        ui->stopBtn->setEnabled(false);
+    }
 }
 
 void ControlPanel::setFileLoaded(const QString &fileName, int lineCount)
 {
+    m_fileLoaded = !fileName.isEmpty() && lineCount > 0;
     if (fileName.isEmpty() || lineCount == 0) {
         ui->progressLabel->setText("No file loaded");
         ui->startBtn->setEnabled(false);
     } else {
         ui->progressLabel->setText(QString("Loaded: %1 (%2 lines)").arg(fileName).arg(lineCount));
-        ui->startBtn->setEnabled(true);
     }
+    updateControls();
 }
 
 void ControlPanel::setStreamingProgress(int current, int total)
 {
-    ui->progressLabel->setText(QString("Streaming: %1 / %2").arg(current).arg(total));
+    ui->progressLabel->setText((m_executionPhase.isEmpty() ? QString{} : m_executionPhase + "\n")
+        + QString("Acknowledged line: %1 / %2").arg(current + 1).arg(total));
 }
 
 void ControlPanel::setStreamingFinished()
 {
-    ui->startBtn->setEnabled(true);
-    ui->pauseBtn->setEnabled(false);
-    ui->resumeBtn->setEnabled(false);
-    ui->stopBtn->setEnabled(false);
-    ui->progressLabel->setText("Streaming complete");
+    setStreamingEnded("Plotting complete");
+}
+
+void ControlPanel::setStreamingEnded(const QString& message)
+{
+    m_streaming = false;
+    m_executionPhase.clear();
+    updateControls();
+    ui->progressLabel->setText(message);
 }
 
 void ControlPanel::setStreamingStarted()
 {
+    m_streaming = true;
+    updateControls();
     ui->startBtn->setEnabled(false);
     ui->pauseBtn->setEnabled(true);
     ui->resumeBtn->setEnabled(false);

@@ -1,4 +1,5 @@
 #include "SettingsManager.h"
+#include "grbl/ToolLibrary.h"
 
 #include <QSettings>
 #include <QStandardPaths>
@@ -8,6 +9,7 @@
 #include <QJsonArray>
 #include <QFile>
 #include <QDir>
+#include <QSaveFile>
 
 SettingsManager& SettingsManager::instance()
 {
@@ -19,7 +21,9 @@ SettingsManager::SettingsManager(QObject *parent)
     : QObject(parent)
 {
     m_settings = new QSettings("GrblSender", "GrblSender", this);
+    m_toolLibrary = new ToolLibrary(this);
     load();
+    connect(m_toolLibrary, &ToolLibrary::changed, this, &SettingsManager::save);
 }
 
 // ---- Layout (binary, stays in QSettings) ----
@@ -108,6 +112,8 @@ QColor SettingsManager::colorFromJson(const QJsonObject &obj, const QColor &fall
 QJsonObject SettingsManager::toJson() const
 {
     QJsonObject root;
+    root["tools"] = m_toolLibrary->toJson();
+    root["penRack"] = m_toolLibrary->rackToJson();
 
     // Jog
     QJsonObject jog;
@@ -132,6 +138,10 @@ QJsonObject SettingsManager::toJson() const
 void SettingsManager::fromJson(const QJsonObject &root)
 {
     CanvasSettings defaults;
+    // An explicitly empty tools collection must not resurrect legacy pens.
+    const auto definitions = root.contains("tools") ? root["tools"] : root["pens"];
+    if (definitions.isArray()) m_toolLibrary->loadFromJson(definitions.toArray());
+    m_toolLibrary->loadRackFromJson(root["penRack"].toObject());
 
     // Jog
     QJsonObject jog = root["jog"].toObject();
@@ -151,10 +161,13 @@ void SettingsManager::fromJson(const QJsonObject &root)
 
 void SettingsManager::save()
 {
-    QFile file(settingsFilePath());
-    if (!file.open(QIODevice::WriteOnly))
+    QSaveFile file(settingsFilePath());
+    if (!file.open(QIODevice::WriteOnly)) {
+        emit settingsSaveFailed(file.errorString());
         return;
+    }
     file.write(QJsonDocument(toJson()).toJson(QJsonDocument::Indented));
+    if (!file.commit()) emit settingsSaveFailed(file.errorString());
 }
 
 void SettingsManager::load()

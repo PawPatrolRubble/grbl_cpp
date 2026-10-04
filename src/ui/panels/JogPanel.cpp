@@ -2,6 +2,8 @@
 #include "ui_JogPanel.h"
 #include <QRegularExpressionValidator>
 #include <QKeyEvent>
+#include <QIcon>
+#include <QSize>
 
 JogPanel::JogPanel(QWidget *parent)
     : QWidget(parent), ui(new Ui::JogPanel)
@@ -23,7 +25,14 @@ JogPanel::JogPanel(QWidget *parent)
         m_jogMode = static_cast<JogMode>(idx);
     });
 
-    auto setupJogBtn = [this](QPushButton *btn, const QString &axis, int dir) {
+    auto setupJogBtn = [this](QPushButton *btn, const QString &axis, int dir, const QString &shortcut) {
+        const bool positive = dir > 0;
+        btn->setIcon(QIcon(QString(":/icons/icons/jog_%1_%2.svg")
+                               .arg(axis.toLower(), positive ? QStringLiteral("plus") : QStringLiteral("minus"))));
+        btn->setIconSize(QSize(16, 16));
+        btn->setToolTip(QString("Jog %1%2\nKeyboard: %3")
+                            .arg(axis, positive ? QStringLiteral("+") : QStringLiteral("-"), shortcut));
+
         connect(btn, &QPushButton::pressed, this, [this, axis, dir]() {
             doJog(axis, dir);
         });
@@ -33,12 +42,12 @@ JogPanel::JogPanel(QWidget *parent)
         });
     };
 
-    setupJogBtn(ui->btnXPlus, "X", 1);
-    setupJogBtn(ui->btnXMinus, "X", -1);
-    setupJogBtn(ui->btnYPlus, "Y", 1);
-    setupJogBtn(ui->btnYMinus, "Y", -1);
-    setupJogBtn(ui->btnZPlus, "Z", 1);
-    setupJogBtn(ui->btnZMinus, "Z", -1);
+    setupJogBtn(ui->btnXPlus, "X", 1, "Right Arrow");
+    setupJogBtn(ui->btnXMinus, "X", -1, "Left Arrow");
+    setupJogBtn(ui->btnYPlus, "Y", 1, "Up Arrow");
+    setupJogBtn(ui->btnYMinus, "Y", -1, "Down Arrow");
+    setupJogBtn(ui->btnZPlus, "Z", 1, "Page Up");
+    setupJogBtn(ui->btnZMinus, "Z", -1, "Page Down");
 
     connect(ui->goToAbsBtn, &QPushButton::clicked, this, [this]() {
         double x = ui->absXEdit->text().toDouble();
@@ -86,6 +95,7 @@ void JogPanel::doJog(const QString &axis, int direction)
 
 bool JogPanel::handleKeyPress(QKeyEvent *event)
 {
+    if (!ui->btnXPlus->isEnabled()) return false;
     if (event->isAutoRepeat())
         return true;
 
@@ -102,6 +112,7 @@ bool JogPanel::handleKeyPress(QKeyEvent *event)
 
 bool JogPanel::handleKeyRelease(QKeyEvent *event)
 {
+    if (event->isAutoRepeat()) return true;
     if (m_jogMode != JogMode::Continuous)
         return false;
 
@@ -121,14 +132,24 @@ bool JogPanel::handleKeyRelease(QKeyEvent *event)
 
 void JogPanel::setMotionEnabled(bool enabled)
 {
+    setJogEnabled(enabled);
+    setAbsoluteMotionEnabled(enabled);
+}
+
+void JogPanel::setAbsoluteMotionEnabled(bool enabled)
+{
+    ui->goToAbsBtn->setEnabled(enabled);
+    ui->goToXBtn->setEnabled(enabled);
+    ui->goToYBtn->setEnabled(enabled);
+    ui->goToZBtn->setEnabled(enabled);
+}
+
+void JogPanel::setJogEnabled(bool enabled)
+{
     ui->btnXPlus->setEnabled(enabled);
     ui->btnXMinus->setEnabled(enabled);
     ui->btnYPlus->setEnabled(enabled);
     ui->btnYMinus->setEnabled(enabled);
     ui->btnZPlus->setEnabled(enabled);
     ui->btnZMinus->setEnabled(enabled);
-    ui->goToAbsBtn->setEnabled(enabled);
-    ui->goToXBtn->setEnabled(enabled);
-    ui->goToYBtn->setEnabled(enabled);
-    ui->goToZBtn->setEnabled(enabled);
 }

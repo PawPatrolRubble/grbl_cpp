@@ -103,6 +103,9 @@ TrimModification::TrimResult TrimModification::trimAtIntersection(const Entity* 
         qDebug() << "trimAtIntersection: Unsupported entity type";
     }
 
+    for (auto& replacement : result.replacements)
+        replacement->copyPlotMetadataFrom(*entityToTrim);
+
     qDebug() << "trimAtIntersection: Result success=" << result.success
              << "replacements=" << result.replacements.size()
              << "errorMessage=" << result.errorMessage;
@@ -164,6 +167,8 @@ TrimModification::TrimResult TrimModification::extendEntity(const Entity* entity
         result.errorMessage = "Cannot extend this entity type";
     }
 
+    for (auto& replacement : result.replacements)
+        replacement->copyPlotMetadataFrom(*entityToExtend);
     return result;
 }
 
@@ -204,6 +209,7 @@ TrimModification::TrimResult TrimModification::trimCircleToArc(const CircleEntit
     arc->setLayerId(circle->layerId());
     arc->setRotation(circle->rotation());
     arc->setEnabled(circle->isEnabled());
+    arc->copyPlotMetadataFrom(*circle);
 
     result.replacements.push_back(std::move(arc));
     result.success = true;

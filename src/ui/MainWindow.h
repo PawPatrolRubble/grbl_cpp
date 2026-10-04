@@ -1,9 +1,8 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QFutureWatcher>
 
-#include "ui_MainWindow.h"
+namespace Ui { class MainWindow; }
 
 class ApplicationCore;
 class SettingsManager;
@@ -46,6 +45,7 @@ private:
     void restoreLayout();
     void loadAndParseFile(const QString &filePath);
     void updateTitleBarButtons();
+    void updateMotionControls();
 
     /// Create a dock panel for the given widget.
     DockPanel *createDock(const QString &title, QWidget *widget,
@@ -57,7 +57,6 @@ private:
 
     ApplicationCore *m_core;
     SettingsManager *m_settings;
-    QFutureWatcher<QList<GcodeMove>> *m_parseWatcher;
 
     // Dock panels
     DockPanel *m_dockConnection;

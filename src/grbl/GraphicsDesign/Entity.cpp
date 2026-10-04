@@ -21,30 +21,50 @@ std::unique_ptr<Entity> Entity::fromJson(const QJsonObject& json)
 {
     QString typeStr = json["type"].toString();
 
-    if (typeStr == "line")
-        return LineEntity::fromJson(json);
-    if (typeStr == "rectangle")
-        return RectangleEntity::fromJson(json);
-    if (typeStr == "circle")
-        return CircleEntity::fromJson(json);
-    if (typeStr == "arc")
-        return ArcEntity::fromJson(json);
-    if (typeStr == "text")
-        return TextEntity::fromJson(json);
-    if (typeStr == "polyline")
-        return PolylineEntity::fromJson(json);
-    if (typeStr == "spline")
-        return SplineEntity::fromJson(json);
-    if (typeStr == "dimension")
-        return LinearDimensionEntity::fromJson(json);
-    if (typeStr == "angularDimension")
-        return AngularDimensionEntity::fromJson(json);
-    if (typeStr == "radiusDimension")
-        return RadiusDimensionEntity::fromJson(json);
-    if (typeStr == "group")
-        return GroupEntity::fromJson(json);
+    std::unique_ptr<Entity> entity;
+    if (typeStr == "line") entity = LineEntity::fromJson(json);
+    else if (typeStr == "rectangle") entity = RectangleEntity::fromJson(json);
+    else if (typeStr == "circle") entity = CircleEntity::fromJson(json);
+    else if (typeStr == "arc") entity = ArcEntity::fromJson(json);
+    else if (typeStr == "text") entity = TextEntity::fromJson(json);
+    else if (typeStr == "polyline") entity = PolylineEntity::fromJson(json);
+    else if (typeStr == "spline") entity = SplineEntity::fromJson(json);
+    else if (typeStr == "dimension") entity = LinearDimensionEntity::fromJson(json);
+    else if (typeStr == "angularDimension") entity = AngularDimensionEntity::fromJson(json);
+    else if (typeStr == "radiusDimension") entity = RadiusDimensionEntity::fromJson(json);
+    else if (typeStr == "group") entity = GroupEntity::fromJson(json);
+    if (entity) {
+        const QUuid id = QUuid::fromString(json["id"].toString());
+        if (!id.isNull()) entity->setId(id);
+        entity->setToolId(QUuid::fromString(json["toolId"].toString()));
+        entity->setEnabled(json["enabled"].toBool(true));
+        if (json.contains("layerId"))
+            entity->setLayerId(QUuid::fromString(json["layerId"].toString()));
+    }
+    return entity;
+}
 
-    return nullptr;
+bool Entity::isDrawable() const
+{
+    return kind() != Kind::LinearDimension && kind() != Kind::AngularDimension
+        && kind() != Kind::RadiusDimension;
+}
+
+void Entity::copyPlotMetadataFrom(const Entity& source)
+{
+    m_toolId = source.m_toolId;
+    m_enabled = source.m_enabled;
+    if (m_layerId.isNull()) m_layerId = source.m_layerId;
+}
+
+QJsonObject Entity::toJsonWithMetadata() const
+{
+    QJsonObject json = toJson();
+    json["id"] = id().toString();
+    json["enabled"] = isEnabled();
+    json["layerId"] = layerId().toString();
+    if (!toolId().isNull()) json["toolId"] = toolId().toString();
+    return json;
 }
 
 QString Entity::displayName() const

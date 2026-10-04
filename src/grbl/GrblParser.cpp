@@ -3,6 +3,47 @@
 
 #include <QStringList>
 #include <QRegularExpression>
+#include <cmath>
+#include <limits>
+
+namespace {
+std::optional<QVector3D> validatedPosition(const QString& text)
+{
+    const auto words = text.split(',');
+    if (words.size() != 3) return {};
+    double values[3];
+    for (int axis = 0; axis < 3; ++axis) {
+        bool ok = false;
+        values[axis] = words[axis].toDouble(&ok);
+        if (!ok || !std::isfinite(values[axis]) || std::abs(values[axis]) > std::numeric_limits<float>::max()) return {};
+    }
+    return QVector3D(values[0], values[1], values[2]);
+}
+}
+
+void GrblParser::invalidateOffsets()
+{
+    m_wcsOffsets.clear();
+    m_wcoKnown = false;
+    m_positionKnown = false;
+}
+void GrblParser::invalidateCoordinates()
+{
+    invalidateOffsets();
+    m_positionAge.invalidate();
+}
+std::optional<QVector3D> GrblParser::workCoordinateOffset(int frame) const
+{
+    const auto key = QString("G%1").arg(frame);
+    if (frame < 54 || frame > 59 || !m_wcsOffsets.contains(key)
+        || !m_wcsOffsets.contains("G92") || !m_wcsOffsets.contains("TLO")) return {};
+    return m_wcsOffsets[key] + m_wcsOffsets["G92"] + m_wcsOffsets["TLO"];
+}
+std::optional<QVector3D> GrblParser::currentMachinePosition() const
+{
+    if (!m_positionKnown || !m_positionAge.isValid() || m_positionAge.elapsed() > 5000) return {};
+    return m_machineState->machinePosition();
+}
 
 GrblParser::GrblParser(MachineState *machineState, QObject *parent)
     : QObject(parent)
@@ -22,8 +63,18 @@ void GrblParser::parseResponse(const QString &response)
         parseGCodeState(response);
     else if (response.startsWith("[MSG:"))
         m_machineState->setMessage(response.mid(5, response.size() - 6));
-    else if (response.startsWith("error"))
-        emit m_machineState->stateChanged(MachineState::State::Alarm);
+    else if (response.startsWith("ALARM:")) {
+        m_machineState->setState(MachineState::State::Alarm);
+        m_machineState->setMessage(response);
+    } else if (response.startsWith("error:"))
+        m_machineState->setMessage(response);
+    else if (response.startsWith("Grbl")) {
+        invalidateCoordinates();
+        m_lastWco = {};
+        m_wcsOffsets.clear();
+        m_activeWcs = "G54";
+        m_machineState->reset();
+    }
     else if (response.startsWith("$") && response.contains("="))
         parseGrblSetting(response);
 }
@@ -52,14 +103,19 @@ void GrblParser::parseStatusReport(const QString &report)
         const QString &field = fields[i];
 
         if (field.startsWith("WCO:")) {
-            m_lastWco = parseWco(field.mid(4));
-            m_machineState->setWco(m_lastWco);
+            const auto value = validatedPosition(field.mid(4));
+            m_wcoKnown = value.has_value();
+            if (value) { m_lastWco = *value; m_machineState->setWco(m_lastWco); }
         } else if (field.startsWith("MPos:")) {
-            parsedMPos = parsePosition(field.mid(5));
-            hasMPos = true;
+            const auto value = validatedPosition(field.mid(5));
+            hasMPos = value.has_value();
+            if (value) parsedMPos = *value;
+            else m_positionKnown = false;
         } else if (field.startsWith("WPos:")) {
-            parsedWPos = parsePosition(field.mid(5));
-            hasWPos = true;
+            const auto value = validatedPosition(field.mid(5));
+            hasWPos = value.has_value();
+            if (value) parsedWPos = *value;
+            else m_positionKnown = false;
         } else if (field.startsWith("FS:") || field.startsWith("Fs:")) {
             parseFeedOverrides(field.mid(3));
         } else if (field.startsWith("F:")) {
@@ -74,9 +130,13 @@ void GrblParser::parseStatusReport(const QString &report)
     }
 
     if (hasMPos) {
+        m_positionKnown = true;
+        m_positionAge.start();
         m_machineState->setMachinePosition(parsedMPos);
         m_machineState->setWorkPosition(parsedMPos - m_lastWco);
-    } else if (hasWPos) {
+    } else if (hasWPos && m_wcoKnown) {
+        m_positionKnown = true;
+        m_positionAge.start();
         m_machineState->setWorkPosition(parsedWPos);
         m_machineState->setMachinePosition(parsedWPos + m_lastWco);
     }
@@ -150,12 +210,15 @@ void GrblParser::parseGCodeParameters(const QString &line)
     if (key == QLatin1String("TLO")) {
         bool ok;
         double tlo = value.toDouble(&ok);
-        if (ok)
+        if (ok && std::isfinite(tlo) && std::abs(tlo) <= std::numeric_limits<float>::max())
             m_wcsOffsets[key] = QVector3D(0, 0, static_cast<float>(tlo));
+        else m_wcsOffsets.remove(key);
     } else if (key == QLatin1String("PRB")) {
         return;  // Skip probe data
     } else {
-        m_wcsOffsets[key] = parsePosition(value);
+        const auto coordinates = validatedPosition(value);
+        if (coordinates) m_wcsOffsets[key] = *coordinates;
+        else m_wcsOffsets.remove(key);
     }
 
     if (key == m_activeWcs || key == QLatin1String("G92") || key == QLatin1String("TLO"))
@@ -169,8 +232,7 @@ void GrblParser::parseGCodeState(const QString &line)
     QStringList tokens = content.split(' ');
 
     for (const QString &token : tokens) {
-        if ((token.startsWith(QLatin1String("G5")) && token.size() == 3)
-            || token == QLatin1String("G28") || token == QLatin1String("G30")) {
+        if (token.size() == 3 && token >= "G54" && token <= "G59") {
             m_activeWcs = token;
             updateWcoFromOffsets();
             return;
@@ -180,6 +242,7 @@ void GrblParser::parseGCodeState(const QString &line)
 
 void GrblParser::updateWcoFromOffsets()
 {
+    m_wcoKnown = workCoordinateOffset(m_activeWcs.mid(1).toInt()).has_value();
     QVector3D wco = m_wcsOffsets.value(m_activeWcs, QVector3D());
     wco += m_wcsOffsets.value(QStringLiteral("G92"), QVector3D());
     wco += m_wcsOffsets.value(QStringLiteral("TLO"), QVector3D());

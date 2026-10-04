@@ -9,6 +9,12 @@
         <file>icons/generate.svg</file>
         <file>icons/import_image.svg</file>
         <file>icons/import_dxf.svg</file>
+        <file>icons/jog_x_plus.svg</file>
+        <file>icons/jog_x_minus.svg</file>
+        <file>icons/jog_y_plus.svg</file>
+        <file>icons/jog_y_minus.svg</file>
+        <file>icons/jog_z_plus.svg</file>
+        <file>icons/jog_z_minus.svg</file>
     </qresource>
     <qresource prefix="/fonts">
         <file>fonts/futural.jhf</file>

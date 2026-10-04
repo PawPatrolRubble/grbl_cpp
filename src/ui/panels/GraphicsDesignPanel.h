@@ -2,7 +2,10 @@
 
 #include <QWidget>
 #include <QStringList>
+#include <QUuid>
+#include <array>
 #include <memory>
+#include "plotting/PlotJob.h"
 
 class DesignCanvas;
 class QCheckBox;
@@ -13,14 +16,11 @@ class QToolButton;
 class QLabel;
 class QDoubleSpinBox;
 class QSpinBox;
-class QSlider;
-class QStackedWidget;
 class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QPlainTextEdit;
 class QGroupBox;
-class LineNumberPlainTextEdit;
 class Entity;
 class ToolBarWidget;
 class TransformPanel;
@@ -48,6 +48,7 @@ public:
 
 signals:
     void gcodeGenerated(const QStringList &lines);
+    void plotJobGenerated(const PlotJob& job);
 
 private slots:
     void onToolChanged(int index);
@@ -86,14 +87,16 @@ protected:
 
 private:
     QStringList m_generatedLines;
+    PlotJob m_generatedJob;
+    QString m_generationIssue;
 
     DesignCanvas *m_canvas;
     ToolBarWidget *m_toolBar;
-    QWidget *m_floatingPropertyPanel = nullptr;
-    QToolButton *m_collapseBtn = nullptr;
-    bool m_propertyPanelCollapsed = false;
-    QSlider *m_opacitySlider = nullptr;
     QComboBox *m_toolModeCombo;
+    QCheckBox *m_automaticRackCheck;
+    QComboBox *m_initialHolderCombo;
+    QCheckBox *m_returnFinalPenCheck;
+    QComboBox *m_workCoordinateCombo;
 
     QPushButton *m_deleteBtn;
     QPushButton *m_clearBtn;
@@ -127,16 +130,19 @@ private:
     QDoubleSpinBox *m_plungeSpeedSpinBox;
     QDoubleSpinBox *m_fastHeightSpinBox;
     QDoubleSpinBox *m_workHeightSpinBox;
-    LineNumberPlainTextEdit *m_gcodePreview;
     QListWidget *m_entityList;
+    QComboBox* m_assignToolCombo;
+    QComboBox* m_defaultToolCombo;
+    QLabel* m_toolStatusLabel;
 
-    QStackedWidget *m_propertyStack;
+    std::array<QWidget*, 11> m_propertyPages{};
     bool m_updatingUi = false;
 
     // Text property widgets (no TextPage extracted yet �?kept inline)
     QDoubleSpinBox *m_textPosX;
     QDoubleSpinBox *m_textPosY;
     QPlainTextEdit *m_textEdit;
+    QLabel *m_textStatsLabel;
     QDoubleSpinBox *m_textFontSize;
     QDoubleSpinBox *m_textLineHeight;
     QComboBox *m_textFontModeCombo;
@@ -170,9 +176,15 @@ private:
 
     void setupUi();
     void setupConnections();
-    void buildTextPage();          ///< Text entity page (inline �?no PropertyPage subclass yet)
+    QWidget *buildTextPage();          ///< Text entity page (inline �?no PropertyPage subclass yet)
+    void showPropertyPage(int pageIndex);
+    void updateTextStatsLabel();
     void refreshEntityList();
     void onEntityItemChanged(QListWidgetItem *item);
+    void syncEntityListSelection();
+    void updateToolControls();
+    QString toolName(const QUuid& id) const;
+    QString entityToolLabel(const Entity* entity) const;
     void applyProperties(int index, std::unique_ptr<Entity> newEntity);
 
     // Transform helpers (called from TransformPanel signal lambdas)

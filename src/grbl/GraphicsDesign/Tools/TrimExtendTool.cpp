@@ -207,6 +207,9 @@ void TrimExtendTool::mousePress(const QPointF& pos)
         if (m_trimHi < 1.0 - kEps)
             replacements.push_back(std::make_unique<LineEntity>(cutHi, p2));
 
+        for (auto& replacement : replacements)
+            replacement->copyPlotMetadataFrom(*line);
+
         if (replacements.empty()) {
             // Delete the entity
             commandStack().execute(std::make_unique<DeleteEntityCommand>(m_hoverIdx));

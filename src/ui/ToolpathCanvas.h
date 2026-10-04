@@ -6,6 +6,8 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QPainterPath>
+#include <QColor>
+#include <QSet>
 #include "grbl/GcodeParser.h"
 
 class ToolpathCanvas : public QWidget
@@ -17,11 +19,14 @@ public:
 
     void setMoves(const QList<GcodeMove> &moves);
     void setMovesNoFit(const QList<GcodeMove> &moves);  // No autoFit - preserve zoom/pan
+    void setStrokeColors(const QHash<int, QColor>& colors); // Original G-code line index -> assigned pen color
+    void setLineFilter(bool enabled, const QSet<int>& visibleLines);
     void setExecutingLine(int lineNumber);
     void setStreamRange(int startLine, int endLine);
     void setCutterPosition(const QVector3D &pos);
     void highlightSegment(int lineNumber);
     void setWorktableSize(const QSizeF &size);
+    void setTransformEnabled(bool enabled) { m_transformEnabled = enabled; update(); }
 
 signals:
     void segmentClicked(int lineNumber);
@@ -51,6 +56,8 @@ private:
     void drawBoundingBox(QPainter &painter);
     void drawCrosshair(QPainter &painter);
     void rebuildPaths();
+    QColor strokeColor(const GcodeMove& move) const;
+    bool isLineVisible(int line) const;
 
     // Hit testing
     double distanceToSegment(const QPointF &p, const QPointF &a, const QPointF &b) const;
@@ -77,6 +84,10 @@ private:
 
     // Move data
     QList<GcodeMove> m_moves;
+    QHash<int, QColor> m_strokeColors;
+    QSet<int> m_visibleLines;
+    bool m_lineFilterEnabled = false;
+    bool m_transformEnabled = true;
     int m_executingLine = -1;
     int m_highlightedLine = -1;
     int m_rangeStart = -1;
@@ -107,8 +118,11 @@ private:
 
     // Cached line vectors (rebuilt when moves/view change)
     QVector<QLineF> m_rapidLines;
-    QVector<QLineF> m_linearLines;
-    QVector<QLineF> m_arcLines;
+    struct StrokeBatch {
+        QColor color;
+        QVector<QLineF> lines;
+    };
+    QList<StrokeBatch> m_strokeBatches; // Ordered color runs preserve overlapping path order.
     // Out-of-range segments (dimmed when range is active)
     QVector<QLineF> m_dimmedLines;
     bool m_pathsDirty = true;

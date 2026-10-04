@@ -30,14 +30,12 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
     for (const QString &line : lines) {
         stringListLines.append(line);
     }
-    QStringList cleaned = cleanLines(stringListLines);
-
-    for (int i = 0; i < cleaned.size(); ++i) {
+    for (int i = 0; i < stringListLines.size(); ++i) {
         GcodeMove move;
         move.lineNumber = i;
         move.start = currentPos;
 
-        QString stripped = stripComments(cleaned[i]).trimmed();
+        QString stripped = stripComments(stringListLines[i]).trimmed();
         if (stripped.isEmpty())
             continue;
 
@@ -55,12 +53,14 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
 
             switch (letter.unicode()) {
             case 'G': {
+                // G91.1 controls arc offsets, not linear distance mode.
+                if (qFuzzyCompare(value, 91.1) || qFuzzyCompare(value, 90.1)) break;
                 int code = static_cast<int>(value);
                 switch (code) {
-                case 0:  motionType = GcodeMove::Type::Rapid;   hasMotion = true; break;
-                case 1:  motionType = GcodeMove::Type::Linear;   hasMotion = true; break;
-                case 2:  motionType = GcodeMove::Type::ArcCW;    hasMotion = true; break;
-                case 3:  motionType = GcodeMove::Type::ArcCCW;   hasMotion = true; break;
+                case 0:  motionType = GcodeMove::Type::Rapid; break;
+                case 1:  motionType = GcodeMove::Type::Linear; break;
+                case 2:  motionType = GcodeMove::Type::ArcCW; break;
+                case 3:  motionType = GcodeMove::Type::ArcCCW; break;
                 case 90: absolute = true; break;
                 case 91: absolute = false; break;
                 default: break;
@@ -79,6 +79,10 @@ QList<GcodeMove> GcodeParser::parse(const QList<QString> &lines)
             }
         }
 
+        currentMotionType = motionType;
+        // A modal G0/G1 block alone does not move. I/J-only arcs are full circles.
+        hasMotion = hasMotion || ((motionType == GcodeMove::Type::ArcCW || motionType == GcodeMove::Type::ArcCCW)
+                                  && (iVal != 0 || jVal != 0));
         if (hasMotion) {
             move.type = motionType;
             move.end = target;
@@ -177,7 +181,8 @@ QString GcodeParser::stripComments(const QString &line)
     QString result;
     bool inComment = false;
     for (const QChar &ch : line) {
-        if (ch == '(' || ch == ';') {
+        if (ch == ';' && !inComment) break;
+        if (ch == '(') {
             inComment = true;
             continue;
         }
@@ -213,7 +218,9 @@ QStringList GcodeParser::movesToGcode(const QList<GcodeMove> &moves)
                    .arg(mv.end.z(), 0, 'f', 4);
 
         if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
-            cmd += QString(" I%1 J%2")
+            if (mv.radius != 0)
+                cmd += QString(" R%1").arg(mv.radius, 0, 'f', 4);
+            else cmd += QString(" I%1 J%2")
                        .arg(mv.iOffset, 0, 'f', 4)
                        .arg(mv.jOffset, 0, 'f', 4);
         }
@@ -247,6 +254,12 @@ QList<GcodeMove> GcodeParser::transformMoves(const QList<GcodeMove> &moves,
                                               double rotateDeg)
 {
     if (moves.isEmpty()) return moves;
+    for (double value : {scaleX, scaleY, offsetX, offsetY, rotateDeg})
+        if (!std::isfinite(value)) return {};
+    if (scaleX <= 0 || scaleY <= 0) return {};
+    for (const auto& move : moves)
+        if ((move.type == GcodeMove::Type::ArcCW || move.type == GcodeMove::Type::ArcCCW)
+            && std::abs(scaleX - scaleY) > 0.000001) return {};
 
     // Compute bounding-box center for scale and rotation pivot
     double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
@@ -278,6 +291,7 @@ QList<GcodeMove> GcodeParser::transformMoves(const QList<GcodeMove> &moves,
         out.end   = scalePoint(mv.end);
         out.iOffset = mv.iOffset * scaleX;
         out.jOffset = mv.jOffset * scaleY;
+        out.radius = mv.radius * scaleX;
 
         // Rotate around center
         if (std::abs(rotateDeg) > 0.001) {

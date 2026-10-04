@@ -20,6 +20,8 @@ public:
 
 public slots:
     void setMotionEnabled(bool enabled);
+    void setJogEnabled(bool enabled);
+    void setAbsoluteMotionEnabled(bool enabled);
 
 signals:
     void jogContinuousRequested(const QString &axis, int direction, double feed);

@@ -240,6 +240,7 @@ void OffsetTool::mousePress(const QPointF& pos)
     // Re-compute to get a clean copy for the command
     auto offsetEntity = makeOffset(m_hoverIdx, pos);
     if (!offsetEntity) return;
+    offsetEntity->copyPlotMetadataFrom(*document().entityAt(m_hoverIdx));
 
     commandStack().execute(std::make_unique<AddEntityCommand>(std::move(offsetEntity)));
     // Keep hover active so user can immediately offset again

@@ -662,6 +662,17 @@ QPushButton#zeroZBtn {
     color: #2563eb;  /* Blue */
 }
 
+/* Axis jog pad buttons (icon + axis label) */
+QPushButton#btnXPlus,
+QPushButton#btnXMinus,
+QPushButton#btnYPlus,
+QPushButton#btnYMinus,
+QPushButton#btnZPlus,
+QPushButton#btnZMinus {
+    min-width: 58px;
+    padding: 5px 10px;
+}
+
 /* Emergency stop button */
 QPushButton#eStopBtn {
     background-color: #dc2626;

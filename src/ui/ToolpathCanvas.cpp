@@ -38,6 +38,9 @@ ToolpathCanvas::ToolpathCanvas(QWidget *parent)
 void ToolpathCanvas::setMoves(const QList<GcodeMove> &moves)
 {
     m_moves = moves;
+    m_strokeColors.clear();
+    m_visibleLines.clear();
+    m_lineFilterEnabled = false;
     m_bboxDirty = true;
     m_pathsDirty = true;
     m_executingLine = -1;
@@ -76,6 +79,30 @@ void ToolpathCanvas::setExecutingLine(int lineNumber)
     scheduleUpdate();
 }
 
+void ToolpathCanvas::setStrokeColors(const QHash<int, QColor>& colors)
+{
+    if (m_strokeColors == colors) return;
+    m_strokeColors = colors;
+    m_pathsDirty = true;
+    update();
+}
+
+void ToolpathCanvas::setLineFilter(bool enabled, const QSet<int>& visibleLines)
+{
+    if (m_lineFilterEnabled == enabled && m_visibleLines == visibleLines) return;
+    m_lineFilterEnabled = enabled;
+    m_visibleLines = visibleLines;
+    if (!isLineVisible(m_highlightedLine)) m_highlightedLine = -1;
+    m_pathsDirty = true;
+    m_pastBuiltLine = -1;
+    update();
+}
+
+bool ToolpathCanvas::isLineVisible(int line) const
+{
+    return !m_lineFilterEnabled || m_visibleLines.contains(line);
+}
+
 void ToolpathCanvas::setStreamRange(int startLine, int endLine)
 {
     m_rangeStart = startLine;
@@ -93,6 +120,7 @@ void ToolpathCanvas::setCutterPosition(const QVector3D &pos)
 void ToolpathCanvas::highlightSegment(int lineNumber)
 {
     m_highlightedLine = lineNumber;
+    m_pastBuiltLine = -1;
     update();
 }
 
@@ -335,21 +363,38 @@ void ToolpathCanvas::paintEvent(QPaintEvent *)
     drawWorktable(painter);
     drawAxisOrigin(painter);
     drawMoves(painter);
+    if (m_lineFilterEnabled && m_rapidLines.isEmpty() && m_strokeBatches.isEmpty() && m_dimmedLines.isEmpty()) {
+        painter.setPen(QColor("#64748b"));
+        painter.drawText(rect().adjusted(20, 20, -20, -20), Qt::AlignCenter, "No drawing motion for this pen filter");
+    }
     drawBoundingBox(painter);
     drawCutter(painter);
     drawCrosshair(painter);
 }
 
+QColor ToolpathCanvas::strokeColor(const GcodeMove& move) const
+{
+    const auto assigned = m_strokeColors.constFind(move.lineNumber);
+    if (assigned != m_strokeColors.cend() && assigned->isValid()) return *assigned;
+    const bool arc = move.type == GcodeMove::Type::ArcCW || move.type == GcodeMove::Type::ArcCCW;
+    return QColor(arc ? "#22aa66" : "#2266aa");
+}
+
 void ToolpathCanvas::rebuildPaths()
 {
     m_rapidLines.clear();
-    m_linearLines.clear();
-    m_arcLines.clear();
+    m_strokeBatches.clear();
     m_dimmedLines.clear();
 
     // Pre-allocate reasonable sizes
     m_rapidLines.reserve(m_moves.size() / 3);
-    m_linearLines.reserve(m_moves.size() / 3);
+
+    auto appendStroke = [&](const QLineF& line, const QColor& color) {
+        if (line.isNull()) return; // Z-only moves do not draw a visible XY stroke.
+        if (m_strokeBatches.isEmpty() || m_strokeBatches.last().color != color)
+            m_strokeBatches.append({color, {}});
+        m_strokeBatches.last().lines << line;
+    };
 
     bool hasRange = (m_rangeStart >= 0 || m_rangeEnd >= 0);
     int rStart = m_rangeStart >= 0 ? m_rangeStart : 0;
@@ -357,6 +402,7 @@ void ToolpathCanvas::rebuildPaths()
 
     for (int i = 0; i < m_moves.size(); ++i) {
         const auto &mv = m_moves[i];
+        if (!isLineVisible(mv.lineNumber)) continue;
         bool inRange = !hasRange || (mv.lineNumber >= rStart && mv.lineNumber <= rEnd);
 
         if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
@@ -364,7 +410,7 @@ void ToolpathCanvas::rebuildPaths()
             for (int j = 0; j + 1 < pts.size(); ++j) {
                 QLineF seg(machineToScreen(pts[j]), machineToScreen(pts[j + 1]));
                 if (inRange)
-                    m_arcLines << seg;
+                    appendStroke(seg, strokeColor(mv));
                 else
                     m_dimmedLines << seg;
             }
@@ -381,7 +427,7 @@ void ToolpathCanvas::rebuildPaths()
             QPointF b = machineToScreen(QPointF(mv.end.x(), mv.end.y()));
             QLineF seg(a, b);
             if (inRange)
-                m_linearLines << seg;
+                appendStroke(seg, strokeColor(mv));
             else
                 m_dimmedLines << seg;
         }
@@ -404,11 +450,15 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
     painter.setPen(QPen(QColor("#ff8800"), 1.8, Qt::DashLine));
     painter.drawLines(m_rapidLines);
 
-    painter.setPen(QPen(QColor("#2266aa"), 1.8));
-    painter.drawLines(m_linearLines);
-
-    painter.setPen(QPen(QColor("#22aa66"), 1.8));
-    painter.drawLines(m_arcLines);
+    for (const auto& batch : m_strokeBatches) {
+        // A narrow outline keeps white and pale pens visible on the light canvas.
+        if (qGray(batch.color.rgb()) > 200) {
+            painter.setPen(QPen(QColor("#64748b"), 3.8));
+            painter.drawLines(batch.lines);
+        }
+        painter.setPen(QPen(batch.color, 1.8));
+        painter.drawLines(batch.lines);
+    }
 
     // Out-of-range segments drawn dimmed
     if (!m_dimmedLines.isEmpty()) {
@@ -420,6 +470,7 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
     auto drawMoveHighlight = [&](int moveIdx, const QColor &color) {
         if (moveIdx < 0 || moveIdx >= m_moves.size()) return;
         const auto &mv = m_moves[moveIdx];
+        if (!isLineVisible(mv.lineNumber)) return;
 
         painter.setPen(QPen(color, 2.2));
 
@@ -451,7 +502,7 @@ void ToolpathCanvas::drawMoves(QPainter &painter)
         if (m_pastBuiltLine != m_executingLine || scaleChanged) {
             m_pastSegments.clear();
             for (auto mapIt = m_lineToIndex.begin(); mapIt != m_lineToIndex.end(); ++mapIt) {
-                if (mapIt.key() >= m_executingLine || mapIt.key() == m_highlightedLine)
+                if (mapIt.key() >= m_executingLine || mapIt.key() == m_highlightedLine || !isLineVisible(mapIt.key()))
                     continue;
                 int idx = mapIt.value();
                 if (idx < 0 || idx >= m_moves.size()) continue;
@@ -509,6 +560,7 @@ void ToolpathCanvas::drawCutter(QPainter &painter)
 
 void ToolpathCanvas::drawBoundingBox(QPainter &painter)
 {
+    if (!m_transformEnabled) return;
     if (m_moves.isEmpty()) return;
 
     QRectF bbox = computeBoundingBox();
@@ -643,6 +695,7 @@ int ToolpathCanvas::findClickedSegment(const QPointF &screenPos) const
     int bestLine = -1;
 
     for (const auto &mv : m_moves) {
+        if (!isLineVisible(mv.lineNumber)) continue;
         if (mv.type == GcodeMove::Type::ArcCW || mv.type == GcodeMove::Type::ArcCCW) {
             auto pts = approximateArc(mv);
             for (int j = 0; j + 1 < pts.size(); ++j) {
@@ -669,7 +722,7 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
 
     if (event->button() == Qt::LeftButton) {
         // 1. Check handle hit
-        HandleId handle = hitTestHandles(pos);
+        HandleId handle = m_transformEnabled ? hitTestHandles(pos) : HandleId::None;
         if (handle != HandleId::None) {
             m_activeHandle = handle;
             m_preDragMoves = m_moves;
@@ -701,7 +754,7 @@ void ToolpathCanvas::mousePressEvent(QMouseEvent *event)
         }
 
         // 3. Check inside bbox → translate
-        if (isInsideBBox(pos)) {
+        if (m_transformEnabled && isInsideBBox(pos)) {
             m_dragMode = DragMode::Translate;
             m_preDragMoves = m_moves;
             m_dragStart = pos;
@@ -794,6 +847,14 @@ void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
 
         scaleX = std::max(0.01, scaleX);
         scaleY = std::max(0.01, scaleY);
+        // Circular arcs require proportional scaling, including side handles.
+        for (const auto& move : m_preDragMoves) {
+            if (move.type != GcodeMove::Type::ArcCW && move.type != GcodeMove::Type::ArcCCW) continue;
+            if (m_activeHandle == HandleId::MiddleLeft || m_activeHandle == HandleId::MiddleRight)
+                scaleY = scaleX;
+            else scaleX = scaleY;
+            break;
+        }
 
         m_moves = GcodeParser::transformMoves(m_preDragMoves, scaleX, scaleY, 0, 0, 0);
         m_bboxDirty = true;
@@ -821,10 +882,10 @@ void ToolpathCanvas::mouseMoveEvent(QMouseEvent *event)
     }
 
     // Hover cursor feedback
-    HandleId hh = hitTestHandles(pos);
+    HandleId hh = m_transformEnabled ? hitTestHandles(pos) : HandleId::None;
     if (hh != HandleId::None) {
         setCursor(cursorForHandle(hh));
-    } else if (isInsideBBox(pos)) {
+    } else if (m_transformEnabled && isInsideBBox(pos)) {
         setCursor(Qt::SizeAllCursor);
     } else {
         setCursor(Qt::ArrowCursor);

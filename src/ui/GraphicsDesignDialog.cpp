@@ -1,6 +1,7 @@
 #include "GraphicsDesignDialog.h"
 #include "ui_GraphicsDesignDialog.h"
 #include "DesignCanvas.h"
+#include "SettingsManager.h"
 #include "LineNumberPlainTextEdit.h"
 #include "../grbl/GraphicsDesign/Document.h"
 #include "../grbl/GraphicsDesign/Entity.h"
@@ -99,7 +100,7 @@ void GraphicsDesignDialog::updatePreview()
         ui->feedSpeedSpinBox->value(),
         ui->plungeSpeedSpinBox->value(),
         ui->fastHeightSpinBox->value(),
-        ui->workHeightSpinBox->value());
+        ui->workHeightSpinBox->value(), SettingsManager::instance().toolLibrary());
 
     QString previewText = QStringList(m_generatedLines.mid(0, 100)).join("\n");
     if (m_generatedLines.size() > 100) {

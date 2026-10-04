@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include "grbl/GcodeStreamer.h"
 
 class MachineState;
 class SerialManager;
@@ -29,6 +30,7 @@ public:
     /// Wire internal service-to-service connections.
     /// UI code should connect to the signals exposed here, NOT to individual services directly.
     void wireServices();
+    bool confirmRackSetup(const QUuid& holderTool);
 
 signals:
     // Exposed signals for UI consumption
@@ -40,15 +42,23 @@ signals:
     void streamingFinished();
     void streamingPaused();
     void streamingResumed();
+    void streamingEnded(GcodeStreamer::Outcome outcome, const QString& message, int sourceLine);
+    void executionAvailabilityChanged(bool ready);
+    void executionPhaseChanged(const QString& phase, const QUuid& tool, const QUuid& path);
 
 public slots:
     // Facade operations — UI calls these instead of individual services
     void startStreaming(const QStringList &lines, int startLine = 0, int endLine = -1);
+    void startJob(const PlotJob& job, int startLine = 0, int endLine = -1);
     void pauseStreaming();
     void resumeStreaming();
     void stopStreaming();
     void sendCommand(const QString &cmd);
+    void sendCommands(const QStringList& commands);
     void sendRealtime(char cmd);
+    void jogStep(const QString& axis, double step, double feedRate);
+    void jogContinuous(const QString& axis, int direction, double feedRate);
+    void jogCancel();
 
 private:
     MachineState  *m_machineState;

@@ -79,7 +79,7 @@ bool toolAutoSwitchesToSelectAfterCreation(ToolManager::Type type)
 
 DesignCanvas::DesignCanvas(QWidget *parent)
     : QWidget(parent)
-    , m_commandStack(m_document)
+    , m_commandStack(*m_document.commandStack())
     , m_toolManager(m_document, m_commandStack)
     , m_drawing(m_document, m_transforms)
     , m_snap(m_document, m_transforms, m_gridSize, kSnapDistancePx)
@@ -100,6 +100,7 @@ DesignCanvas::DesignCanvas(QWidget *parent)
     });
 
     // Connect document signals
+    connect(&m_document, &Document::historyChanged, this, &DesignCanvas::emitUndoRedoState);
     connect(&m_document, &Document::changed, this, [this]() {
         m_drawing.invalidateCache();
         scheduleUpdate();

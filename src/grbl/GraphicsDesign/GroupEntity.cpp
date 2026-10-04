@@ -16,10 +16,7 @@ bool isDimensionKind(Entity::Kind kind)
 
 QJsonObject entityToNestedJson(const Entity& entity)
 {
-    QJsonObject json = entity.toJson();
-    json["enabled"] = entity.isEnabled();
-    json["layerId"] = entity.layerId().toString();
-    return json;
+    return entity.toJsonWithMetadata();
 }
 
 } // namespace

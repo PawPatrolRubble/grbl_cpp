@@ -12,6 +12,9 @@
 #include <vector>
 #include <optional>
 #include <QVector>
+#include <QHash>
+
+class ToolLibrary;
 
 /// Manages a collection of entities with selection and undo/redo support.
 /// Merges tinyCad's Document with grbl_cpp's ShapeModel.
@@ -25,6 +28,7 @@ public:
 
     // Entity management
     void addEntity(std::unique_ptr<Entity> entity);
+    void importEntities(std::vector<std::unique_ptr<Entity>> entities);
     void insertEntity(int index, std::unique_ptr<Entity> entity);
     void replaceEntity(int index, std::unique_ptr<Entity> entity);
     void beginBatch();
@@ -51,12 +55,22 @@ public:
     QUuid primarySelectedId() const { return m_primarySelectedId; }
     Entity* selectedEntity() const;
 
+    bool assignToolToSelection(const QUuid& toolId);
+    QSet<QUuid> toolIdsForEntity(const Entity* entity, bool resolveDefault = false) const;
+    QSet<QUuid> plottingToolIds() const;
+    QUuid defaultToolId() const { return m_defaultToolId; }
+    void setDefaultToolId(const QUuid& id);
+    void rememberToolName(const QUuid& id, const QString& name);
+    QString toolNameHint(const QUuid& id) const;
+
     // Selection by position (from tinyCad)
     void selectNearest(const QPointF& worldPos, double tolerance);
 
     // G-code generation
+    // Compatibility helper supplied by PlotEngine; new callers use PlotJobBuilder.
     QStringList generateGcode(double feedRateXY, double plungeRateZ,
-                              double safeZ, double cutZ) const;
+                              double safeZ, double cutZ,
+                              const ToolLibrary* tools = nullptr) const;
 
     // Serialization
     QJsonDocument toJson() const;
@@ -72,7 +86,6 @@ public:
     // Layer management
     int layerCount() const { return m_layers.size(); }
     const Layer& layerAt(int index) const { return m_layers[index]; }
-    Layer& layerAt(int index) { return m_layers[index]; }
     int indexOfLayer(const QUuid& id) const;
     QUuid activeLayerId() const { return m_activeLayerId; }
     void setActiveLayerId(const QUuid& id);
@@ -88,10 +101,14 @@ public:
 
 signals:
     void changed();
+    void historyChanged();
     void selectionChanged();
     void layersChanged();
 
 private:
+    friend class EditLayersCommand;
+    DocumentLayerState layerState() const;
+    void restoreLayerState(const DocumentLayerState& state);
     void normalizeSelectionAfterRemoval(int removedIndex);
     void ensurePrimarySelection();
 
@@ -103,6 +120,8 @@ private:
     double m_worktableWidth = 300.0;
     QList<Layer> m_layers;
     QUuid m_activeLayerId;
+    QUuid m_defaultToolId;
+    QHash<QUuid, QString> m_toolNameHints;
 
 public:
     double worktableWidth() const { return m_worktableWidth; }

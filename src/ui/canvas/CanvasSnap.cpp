@@ -646,7 +646,7 @@ CanvasSnap::SnapResult CanvasSnap::computeSnap(const QPointF& rawWorldPos, bool 
     }
 
     // Grid snap: only use if no entity snap was found
-    if (!best.active) {
+    if (!best.active && m_gridSnap && m_gridSize > 0) {
         const QPointF gridPoint(std::round(rawWorldPos.x() / m_gridSize) * m_gridSize,
                                 std::round(rawWorldPos.y() / m_gridSize) * m_gridSize);
         const double screenDistance = QLineF(toScreen(rawWorldPos), toScreen(gridPoint)).length();

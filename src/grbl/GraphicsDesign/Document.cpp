@@ -1,8 +1,57 @@
 #include "Document.h"
 #include "../GcodeParser.h"
+#include "GroupEntity.h"
 
 #include <QJsonArray>
 #include <algorithm>
+
+namespace {
+
+void collectToolIds(const Entity* entity, const Document& document, QSet<QUuid>& ids,
+                    bool resolveDefault, bool plottingOnly)
+{
+    if (!entity || !entity->isDrawable()) return;
+    if (plottingOnly && (!entity->isEnabled() || !document.isEntityVisible(entity))) return;
+    if (const auto* group = dynamic_cast<const GroupEntity*>(entity)) {
+        for (const auto& child : group->children())
+            collectToolIds(child.get(), document, ids, resolveDefault, plottingOnly);
+        return;
+    }
+    ids.insert(resolveDefault && entity->toolId().isNull()
+                   ? document.defaultToolId() : entity->toolId());
+}
+
+bool assignTool(Entity* entity, const Document& document, const QUuid& toolId)
+{
+    if (!entity || !entity->isDrawable() || document.isEntityLocked(entity)) return false;
+    if (auto* group = dynamic_cast<GroupEntity*>(entity)) {
+        bool changed = false;
+        for (const auto& child : group->children())
+            changed = assignTool(child.get(), document, toolId) || changed;
+        return changed;
+    }
+    if (entity->toolId() == toolId) return false;
+    entity->setToolId(toolId);
+    return true;
+}
+
+bool validToolReferences(const QJsonObject& json)
+{
+    for (const QString& field : {QStringLiteral("toolId"), QStringLiteral("defaultToolId")}) {
+        if (!json.contains(field)) continue;
+        if (!json[field].isString()) return false;
+        const QString value = json[field].toString();
+        if (!value.isEmpty() && QUuid::fromString(value).isNull()) return false;
+    }
+    for (const QString& field : {QStringLiteral("entities"), QStringLiteral("children")}) {
+        for (const auto& child : json[field].toArray()) {
+            if (!validToolReferences(child.toObject())) return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 Document::Document(QObject* parent)
     : QObject(parent)
@@ -21,10 +70,20 @@ Document::~Document()
 
 void Document::addEntity(std::unique_ptr<Entity> entity)
 {
+    if (!entity) return;
+    if (indexOf(entity->id()) >= 0) entity->setId(QUuid::createUuid());
     if (entity->layerId().isNull())
         entity->setLayerId(m_activeLayerId);
     m_entities.push_back(std::move(entity));
     if (m_batchDepth == 0) emit changed();
+}
+
+void Document::importEntities(std::vector<std::unique_ptr<Entity>> entities)
+{
+    auto command = std::make_unique<CompositeCommand>();
+    for (auto& entity : entities)
+        if (entity) command->add(std::make_unique<AddEntityCommand>(std::move(entity)));
+    if (!command->empty()) m_commandStack->execute(std::move(command));
 }
 
 void Document::beginBatch() { ++m_batchDepth; }
@@ -32,12 +91,13 @@ void Document::endBatch() { if (--m_batchDepth <= 0) { m_batchDepth = 0; emit ch
 
 void Document::insertEntity(int index, std::unique_ptr<Entity> entity)
 {
+    if (!entity) return;
     if (index < 0) index = 0;
     if (index > entityCount()) index = entityCount();
     if (entity->layerId().isNull())
         entity->setLayerId(m_activeLayerId);
     m_entities.insert(m_entities.begin() + index, std::move(entity));
-    emit changed();
+    if (m_batchDepth == 0) emit changed();
 }
 
 void Document::replaceEntity(int index, std::unique_ptr<Entity> entity)
@@ -49,7 +109,7 @@ void Document::replaceEntity(int index, std::unique_ptr<Entity> entity)
         if (entity->layerId().isNull())
             entity->setLayerId(m_entities[index]->layerId());
         m_entities[index] = std::move(entity);
-        emit changed();
+        if (m_batchDepth == 0) emit changed();
     }
 }
 
@@ -68,7 +128,7 @@ std::unique_ptr<Entity> Document::takeEntityAt(int index)
     auto entity = std::move(m_entities[index]);
     m_entities.erase(m_entities.begin() + index);
     normalizeSelectionAfterRemoval(index);
-    emit changed();
+    if (m_batchDepth == 0) emit changed();
     return entity;
 }
 
@@ -82,6 +142,9 @@ void Document::clear()
 {
     m_entities.clear();
     m_selectedIds.clear();
+    m_primarySelectedId = {};
+    m_defaultToolId = {};
+    m_toolNameHints.clear();
     emit changed();
     emit selectionChanged();
 }
@@ -219,33 +282,15 @@ void Document::selectNearest(const QPointF& worldPos, double tolerance)
     }
 }
 
-QStringList Document::generateGcode(double feedRateXY, double plungeRateZ,
-                                     double safeZ, double cutZ) const
-{
-    QStringList gcode;
-    gcode << "G21 G90        ; metric, absolute";
-    gcode << QString("G0 Z%1        ; raise pen").arg(safeZ, 0, 'f', 2);
-
-    for (const auto& entity : m_entities) {
-        if (!entity->isEnabled()) continue;
-        if (!isEntityVisible(entity.get())) continue;
-        if (entity->kind() == Entity::Kind::LinearDimension) continue;
-        if (entity->kind() == Entity::Kind::AngularDimension) continue;
-        if (entity->kind() == Entity::Kind::RadiusDimension) continue;
-        QList<GcodeMove> moves = entity->toGcodeMoves(safeZ, cutZ, feedRateXY);
-        QStringList entityGcode = GcodeParser::movesToGcode(moves);
-        gcode << entityGcode;
-    }
-
-    gcode << QString("G0 Z%1        ; final raise").arg(safeZ, 0, 'f', 2);
-    gcode << "G0 X0 Y0        ; return to origin";
-    gcode << "; End of design G-code";
-    return gcode;
-}
-
 QJsonDocument Document::toJson() const
 {
     QJsonObject root;
+    root["schemaVersion"] = 2;
+    if (!m_defaultToolId.isNull()) root["defaultToolId"] = m_defaultToolId.toString();
+    QJsonArray toolReferences;
+    for (auto it = m_toolNameHints.constBegin(); it != m_toolNameHints.constEnd(); ++it)
+        toolReferences.append(QJsonObject{{"id", it.key().toString()}, {"name", it.value()}});
+    root["toolReferences"] = toolReferences;
 
     // Layers
     QJsonArray layersArray;
@@ -264,10 +309,7 @@ QJsonDocument Document::toJson() const
     // Entities
     QJsonArray entitiesArray;
     for (const auto& entity : m_entities) {
-        QJsonObject entityJson = entity->toJson();
-        entityJson["enabled"] = entity->isEnabled();
-        entityJson["layerId"] = entity->layerId().toString();
-        entitiesArray.append(entityJson);
+        entitiesArray.append(entity->toJsonWithMetadata());
     }
 
     root["entities"] = entitiesArray;
@@ -276,9 +318,18 @@ QJsonDocument Document::toJson() const
 
 bool Document::loadFromJson(const QJsonDocument& doc)
 {
+    if (!doc.isObject() || doc.object()["schemaVersion"].toInt(1) > 2
+        || !validToolReferences(doc.object())) return false;
+    m_commandStack->clear();
     clear();
 
     QJsonObject root = doc.object();
+    m_defaultToolId = QUuid::fromString(root["defaultToolId"].toString());
+    for (const auto& value : root["toolReferences"].toArray()) {
+        const auto reference = value.toObject();
+        rememberToolName(QUuid::fromString(reference["id"].toString()),
+                         reference["name"].toString());
+    }
 
     // Load layers (if present, otherwise keep default layer)
     QJsonArray layersArray = root["layers"].toArray();
@@ -331,6 +382,54 @@ bool Document::loadFromJson(const QJsonDocument& doc)
 // Layer management
 // ---------------------------------------------------------------------------
 
+bool Document::assignToolToSelection(const QUuid& toolId)
+{
+    auto command = std::make_unique<CompositeCommand>();
+    for (int index : selectedIndices()) {
+        const Entity* entity = entityAt(index);
+        if (!entity) continue;
+        auto after = entity->clone();
+        if (assignTool(after.get(), *this, toolId))
+            command->add(std::make_unique<UpdateEntityCommand>(
+                index, entity->clone(), std::move(after), false));
+    }
+    if (command->empty()) return false;
+    m_commandStack->execute(std::move(command));
+    return true;
+}
+
+QSet<QUuid> Document::toolIdsForEntity(const Entity* entity, bool resolveDefault) const
+{
+    QSet<QUuid> ids;
+    collectToolIds(entity, *this, ids, resolveDefault, false);
+    return ids;
+}
+
+QSet<QUuid> Document::plottingToolIds() const
+{
+    QSet<QUuid> ids;
+    for (const auto& entity : m_entities)
+        collectToolIds(entity.get(), *this, ids, true, true);
+    return ids;
+}
+
+void Document::setDefaultToolId(const QUuid& id)
+{
+    if (m_defaultToolId == id) return;
+    m_defaultToolId = id;
+    emit changed();
+}
+
+void Document::rememberToolName(const QUuid& id, const QString& name)
+{
+    if (!id.isNull() && !name.trimmed().isEmpty()) m_toolNameHints[id] = name.trimmed();
+}
+
+QString Document::toolNameHint(const QUuid& id) const
+{
+    return m_toolNameHints.value(id, id.toString(QUuid::WithoutBraces).left(8));
+}
+
 int Document::indexOfLayer(const QUuid& id) const
 {
     for (int i = 0; i < m_layers.size(); ++i)
@@ -346,59 +445,91 @@ void Document::setActiveLayerId(const QUuid& id)
 
 void Document::addLayer(const QString& name)
 {
+    const auto before = layerState();
+    auto after = before;
     Layer l;
     l.id   = QUuid::createUuid();
     l.name = name;
-    m_layers.append(l);
-    emit layersChanged();
+    after.layers.append(l);
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(before, std::move(after)));
 }
 
 void Document::removeLayerAt(int index)
 {
     if (index <= 0 || index >= m_layers.size()) return;  // cannot remove layer 0
+    const auto before = layerState();
+    auto after = before;
     QUuid removedId = m_layers[index].id;
     QUuid fallbackId = m_layers[0].id;
-    // Reassign entities on removed layer to layer 0
-    for (auto& e : m_entities) {
-        if (e->layerId() == removedId)
-            e->setLayerId(fallbackId);
-    }
-    m_layers.removeAt(index);
-    if (m_activeLayerId == removedId)
-        m_activeLayerId = fallbackId;
-    emit layersChanged();
-    emit changed();
+    for (auto it = after.entityLayers.begin(); it != after.entityLayers.end(); ++it)
+        if (it.value() == removedId) it.value() = fallbackId;
+    after.layers.removeAt(index);
+    if (after.activeLayerId == removedId) after.activeLayerId = fallbackId;
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(before, std::move(after)));
 }
 
 void Document::setLayerName(int index, const QString& name)
 {
     if (index < 0 || index >= m_layers.size()) return;
-    m_layers[index].name = name;
-    emit layersChanged();
+    if (m_layers[index].name == name) return;
+    auto after = layerState();
+    after.layers[index].name = name;
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(layerState(), std::move(after)));
 }
 
 void Document::setLayerVisible(int index, bool visible)
 {
     if (index < 0 || index >= m_layers.size()) return;
-    m_layers[index].visible = visible;
-    emit layersChanged();
-    emit changed();
+    if (m_layers[index].visible == visible) return;
+    auto after = layerState();
+    after.layers[index].visible = visible;
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(layerState(), std::move(after)));
 }
 
 void Document::setLayerLocked(int index, bool locked)
 {
     if (index < 0 || index >= m_layers.size()) return;
-    m_layers[index].locked = locked;
-    emit layersChanged();
-    emit changed();
+    if (m_layers[index].locked == locked) return;
+    auto after = layerState();
+    after.layers[index].locked = locked;
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(layerState(), std::move(after)));
 }
 
 void Document::setLayerColor(int index, const QColor& color)
 {
     if (index < 0 || index >= m_layers.size()) return;
-    m_layers[index].color = color;
+    if (m_layers[index].color == color) return;
+    auto after = layerState();
+    after.layers[index].color = color;
+    m_commandStack->execute(std::make_unique<EditLayersCommand>(layerState(), std::move(after)));
+}
+
+DocumentLayerState Document::layerState() const
+{
+    DocumentLayerState state{m_layers, m_activeLayerId, {}};
+    auto collect = [&](auto&& self, const Entity* entity) -> void {
+        if (!entity) return;
+        state.entityLayers.insert(entity->id(), entity->layerId());
+        if (const auto* group = dynamic_cast<const GroupEntity*>(entity))
+            for (const auto& child : group->children()) self(self, child.get());
+    };
+    for (const auto& entity : m_entities) collect(collect, entity.get());
+    return state;
+}
+
+void Document::restoreLayerState(const DocumentLayerState& state)
+{
+    m_layers = state.layers;
+    m_activeLayerId = state.activeLayerId;
+    auto restore = [&](auto&& self, Entity* entity) -> void {
+        if (!entity) return;
+        if (state.entityLayers.contains(entity->id())) entity->setLayerId(state.entityLayers[entity->id()]);
+        if (auto* group = dynamic_cast<GroupEntity*>(entity))
+            for (const auto& child : group->children()) self(self, child.get());
+    };
+    for (const auto& entity : m_entities) restore(restore, entity.get());
     emit layersChanged();
-    emit changed();
+    if (m_batchDepth == 0) emit changed();
 }
 
 bool Document::isEntityVisible(const Entity* e) const

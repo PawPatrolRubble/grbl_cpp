@@ -63,6 +63,11 @@ public:
     QUuid layerId() const { return m_layerId; }
     void setLayerId(const QUuid& id) { m_layerId = id; }
 
+    QUuid toolId() const { return m_toolId; }
+    void setToolId(const QUuid& id) { m_toolId = id; }
+    bool isDrawable() const;
+    void copyPlotMetadataFrom(const Entity& source);
+
     // Geometry
     virtual QRectF boundingRect() const = 0;
     virtual QPointF center() const = 0;
@@ -87,6 +92,7 @@ public:
 
     // Serialization
     virtual QJsonObject toJson() const = 0;
+    QJsonObject toJsonWithMetadata() const;
     static std::unique_ptr<Entity> fromJson(const QJsonObject& json);
 
     // Rotation (optional, some entities support it)
@@ -115,14 +121,16 @@ protected:
     QUuid m_id;
     Kind m_kind;
     QUuid m_layerId;   // null UUID = default / not assigned
+    QUuid m_toolId;    // null UUID = document default tool
     double m_rotation = 0.0;
     bool m_enabled = true;
 
-    /// Copy base-class fields (id, layerId, rotation, enabled) to \p dest.
+    /// Copy base-class fields (id, layerId, toolId, rotation, enabled) to \p dest.
     /// Call from each subclass clone() to avoid losing state.
     void copyBaseFieldsTo(Entity* dest) const {
         dest->m_id       = m_id;
         dest->m_layerId  = m_layerId;
+        dest->m_toolId   = m_toolId;
         dest->m_rotation  = m_rotation;
         dest->m_enabled   = m_enabled;
     }

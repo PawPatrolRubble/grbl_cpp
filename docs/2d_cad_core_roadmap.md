@@ -135,6 +135,7 @@ These capabilities connect CAD editing back to machining output.
 - Arc fitting and path simplification
 - Layer-to-operation mapping
 - Pen, laser, spindle presets
+- Per-path pen assignment and automatic rack exchanges: [multi-pen implementation plan](superpowers/plans/2026-10-03-multi-pen-tool-change.md)
 
 Priority in this project:
 

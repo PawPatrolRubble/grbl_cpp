@@ -15,7 +15,9 @@
 #include "PropertyPages/RadiusDimensionPage.h"
 #include "PropertyPages/SplinePage.h"
 #include "../DesignCanvas.h"
-#include "../LineNumberPlainTextEdit.h"
+#include "../ToolsDialog.h"
+#include "../../SettingsManager.h"
+#include "../../grbl/ToolLibrary.h"
 #include "../../grbl/GraphicsDesign/Document.h"
 #include "../../grbl/GraphicsDesign/Entity.h"
 #include "../../grbl/GraphicsDesign/LineEntity.h"
@@ -32,6 +34,7 @@
 #include "../../grbl/GraphicsDesign/RadiusDimensionEntity.h"
 #include "../../grbl/GraphicsDesign/SplineEntity.h"
 #include "../../grbl/DxfParser.h"
+#include "plotting/PlotJobBuilder.h"
 
 #include <cmath>
 
@@ -51,13 +54,13 @@ static const int kSwatchOff = kIconsW + 2;
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QDialogButtonBox>
-#include <QStackedWidget>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QGroupBox>
 #include <QPlainTextEdit>
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -69,12 +72,15 @@ static const int kSwatchOff = kIconsW + 2;
 #include <QJsonDocument>
 #include <QSignalBlocker>
 #include <QFontDatabase>
+#include <QFrame>
 #include <QStyledItemDelegate>
 #include <QPainter>
 #include <QApplication>
 #include <QCursor>
 #include <QColorDialog>
 #include <QMouseEvent>
+#include <QStandardItemModel>
+#include <QScopedValueRollback>
 
 GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
     : QWidget(parent)
@@ -83,6 +89,7 @@ GraphicsDesignPanel::GraphicsDesignPanel(QWidget *parent)
     setupUi();
     setupConnections();
     refreshLayerList();
+    updateToolControls();
     updatePreview();
 }
 
@@ -120,7 +127,6 @@ void GraphicsDesignPanel::setupUi()
     // ---- Right: Operations panel ----
     auto *rightPanel = new QWidget();
     rightPanel->setMinimumWidth(260);
-    rightPanel->setMaximumWidth(400);
     auto *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(10, 10, 10, 10);
     rightLayout->setSpacing(8);
@@ -321,100 +327,43 @@ void GraphicsDesignPanel::setupUi()
     actionRow->addWidget(m_clearBtn);
     rightLayout->addLayout(actionRow);
 
-    // ---- Floating Property Panel (overlay on canvas) ----
-    m_floatingPropertyPanel = new QWidget(m_canvas);
-    m_floatingPropertyPanel->setObjectName("floatingPropertyPanel");
-    m_floatingPropertyPanel->setStyleSheet(
-        "#floatingPropertyPanel {"
-        "  background: rgba(255, 255, 255, 230);"
-        "  border: 1px solid #c0c0c0;"
-        "  border-radius: 6px;"
-        "}"
-    );
-    auto *floatingLayout = new QVBoxLayout(m_floatingPropertyPanel);
-    floatingLayout->setContentsMargins(8, 8, 8, 8);
-    floatingLayout->setSpacing(6);
-
-    // Header row: collapse button + opacity control
-    auto *opacityHeader = new QHBoxLayout();
-
-    // Collapse/expand toggle button
-    m_collapseBtn = new QToolButton();
-    m_collapseBtn->setText("▼");
-    m_collapseBtn->setToolTip("Collapse property panel");
-    m_collapseBtn->setAutoRaise(true);
-    m_collapseBtn->setFixedSize(20, 20);
-    connect(m_collapseBtn, &QToolButton::clicked, this, [this]() {
-        m_propertyPanelCollapsed = !m_propertyPanelCollapsed;
-        m_propertyStack->setVisible(!m_propertyPanelCollapsed);
-        m_layerGroup->setVisible(!m_propertyPanelCollapsed);
-        m_collapseBtn->setText(m_propertyPanelCollapsed ? "▶" : "▼");
-        m_collapseBtn->setToolTip(m_propertyPanelCollapsed ? "Expand property panel" : "Collapse property panel");
-        m_floatingPropertyPanel->adjustSize();
-    });
-    opacityHeader->addWidget(m_collapseBtn);
-
-    auto *opacityLabel = new QLabel("Opacity:");
-    opacityLabel->setStyleSheet("font-size: 10px; color: #666;");
-    opacityHeader->addWidget(opacityLabel);
-    m_opacitySlider = new QSlider(Qt::Horizontal);
-    m_opacitySlider->setRange(30, 100);
-    m_opacitySlider->setValue(90);
-    m_opacitySlider->setMaximumWidth(80);
-    m_opacitySlider->setToolTip("Adjust property panel transparency");
-    connect(m_opacitySlider, &QSlider::valueChanged, this, [this](int value) {
-        // Update opacity via stylesheet background alpha
-        int alpha = static_cast<int>(value * 2.55);  // Convert 0-100 to 0-255
-        m_floatingPropertyPanel->setStyleSheet(
-            QString("#floatingPropertyPanel {"
-                    "  background: rgba(255, 255, 255, %1);"
-                    "  border: 1px solid #c0c0c0;"
-                    "  border-radius: 6px;"
-                    "}").arg(alpha)
-        );
-    });
-    opacityHeader->addWidget(m_opacitySlider);
-    opacityHeader->addStretch();  // Push everything to the left
-    floatingLayout->addLayout(opacityHeader);
-
-    // Property stack (moved from right panel)
-    m_propertyStack = new QStackedWidget();
-    m_propertyStack->setMaximumHeight(280);  // Allow more height for floating panel
-    floatingLayout->addWidget(m_propertyStack);
-
-    // Position at top-left of canvas (sizing happens after pages are built)
-    m_floatingPropertyPanel->setFixedWidth(350);
-
-    // Property pages �?each PropertyPage subclass owns its own UI
-    m_propertyStack->addWidget(new EmptyPage());               // index 0: no selection
-    m_propertyStack->addWidget(new LinePage());                // index 1
-    m_propertyStack->addWidget(new RectanglePage());           // index 2
-    m_propertyStack->addWidget(new CirclePage());              // index 3
-    m_propertyStack->addWidget(new ArcPage());                 // index 4
-    buildTextPage();                                           // index 5 (inline, no PropertyPage yet)
-    m_polylinePage = new PolylinePage();
-    m_propertyStack->addWidget(m_polylinePage);                // index 6
-    m_propertyStack->addWidget(new DimensionPage());           // index 7
-    m_propertyStack->addWidget(new AngularDimensionPage());    // index 8
-    m_propertyStack->addWidget(new RadiusDimensionPage());     // index 9
-    m_propertyStack->addWidget(new SplinePage());              // index 10
-
     m_transformPanel = new TransformPanel();
     m_transformPanel->setVisible(false);
     rightLayout->addWidget(m_transformPanel);
-    rightLayout->addWidget(new QLabel("Entities:"));
+    rightLayout->addWidget(new QLabel("Paths (Ctrl/Shift to select):"));
     m_entityList = new QListWidget();
+    m_entityList->setObjectName("pathList");
     m_entityList->setMaximumHeight(120);
-    m_entityList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_entityList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     rightLayout->addWidget(m_entityList);
 
-    buildLayerSection();
-    m_floatingPropertyPanel->layout()->addWidget(m_layerGroup);  // Add layers to floating panel
+    auto* toolRow = new QHBoxLayout;
+    toolRow->addWidget(new QLabel("Assign tool:"));
+    m_assignToolCombo = new QComboBox;
+    m_assignToolCombo->setObjectName("assignToolCombo");
+    m_assignToolCombo->setMinimumContentsLength(8);
+    m_assignToolCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    toolRow->addWidget(m_assignToolCombo, 1);
+    auto* manageTools = new QPushButton("Tools...");
+    manageTools->setObjectName("manageToolsButton");
+    toolRow->addWidget(manageTools);
+    connect(manageTools, &QPushButton::clicked, this, [this]() {
+        ToolsDialog dialog(*SettingsManager::instance().toolLibrary(), this);
+        dialog.exec();
+    });
+    rightLayout->addLayout(toolRow);
+    auto* defaultRow = new QHBoxLayout;
+    defaultRow->addWidget(new QLabel("Default tool:"));
+    m_defaultToolCombo = new QComboBox;
+    m_defaultToolCombo->setObjectName("defaultToolCombo");
+    defaultRow->addWidget(m_defaultToolCombo, 1);
+    rightLayout->addLayout(defaultRow);
+    m_toolStatusLabel = new QLabel;
+    m_toolStatusLabel->setObjectName("toolAssignmentStatus");
+    m_toolStatusLabel->setWordWrap(true);
+    rightLayout->addWidget(m_toolStatusLabel);
 
-    // Now size and position the floating panel after all content is added
-    m_floatingPropertyPanel->adjustSize();
-    m_floatingPropertyPanel->move(10, 10);  // Position at top-left with margin
-    m_floatingPropertyPanel->show();
+    buildLayerSection();
 
     // Options grid
     auto *optionsGrid = new QGridLayout();
@@ -466,18 +415,56 @@ void GraphicsDesignPanel::setupUi()
     m_workHeightSpinBox->setRange(-100, 100);
     m_workHeightSpinBox->setValue(-3);
     optionsGrid->addWidget(m_workHeightSpinBox, row, 1);
+    row++;
+    m_workCoordinateCombo = new QComboBox;
+    m_workCoordinateCombo->setObjectName("plotWorkCoordinateSystem");
+    for (int frame = 54; frame <= 59; ++frame) m_workCoordinateCombo->addItem(QString("G%1").arg(frame), frame);
+    optionsGrid->addWidget(new QLabel("Work frame:"), row, 0);
+    optionsGrid->addWidget(m_workCoordinateCombo, row, 1);
+    row++;
+    m_automaticRackCheck = new QCheckBox("Automatic passive rack exchanges");
+    m_automaticRackCheck->setObjectName("automaticRackCheck");
+    optionsGrid->addWidget(m_automaticRackCheck, row, 0, 1, 2);
+    row++;
+    m_initialHolderCombo = new QComboBox;
+    m_initialHolderCombo->setObjectName("initialHolderCombo");
+    m_initialHolderCombo->addItem("Choose holder contents...");
+    m_initialHolderCombo->addItem("Empty holder", QVariant::fromValue(QUuid{}));
+    optionsGrid->addWidget(new QLabel("Initial holder:"), row, 0);
+    optionsGrid->addWidget(m_initialHolderCombo, row, 1);
+    row++;
+    m_returnFinalPenCheck = new QCheckBox("Return final pen to rack");
+    m_returnFinalPenCheck->setObjectName("returnFinalPenCheck");
+    m_returnFinalPenCheck->setChecked(true);
+    optionsGrid->addWidget(m_returnFinalPenCheck, row, 0, 1, 2);
 
     rightLayout->addLayout(optionsGrid);
 
-    // G-code preview
-    rightLayout->addWidget(new QLabel("G-code Preview:"));
-    m_gcodePreview = new LineNumberPlainTextEdit();
-    m_gcodePreview->setReadOnly(true);
-    m_gcodePreview->setFont(QFont("Consolas", 10));
-    rightLayout->addWidget(m_gcodePreview, 1);
+    rightLayout->addWidget(new QLabel("Properties:"));
 
-    // Status line
-    m_lineCountLabel = new QLabel("0 entities, 0 G-code lines");
+    auto addPropertyPage = [this, rightLayout](int index, QWidget *page) {
+        m_propertyPages[index] = page;
+        page->setVisible(index == 0);
+        rightLayout->addWidget(page, 1);
+    };
+
+    addPropertyPage(0, new EmptyPage());
+    addPropertyPage(1, new LinePage());
+    addPropertyPage(2, new RectanglePage());
+    addPropertyPage(3, new CirclePage());
+    addPropertyPage(4, new ArcPage());
+    addPropertyPage(5, buildTextPage());
+    m_polylinePage = new PolylinePage();
+    addPropertyPage(6, m_polylinePage);
+    addPropertyPage(7, new DimensionPage());
+    addPropertyPage(8, new AngularDimensionPage());
+    addPropertyPage(9, new RadiusDimensionPage());
+    addPropertyPage(10, new SplinePage());
+
+    rightLayout->addWidget(m_layerGroup);
+
+    // G-code line count
+    m_lineCountLabel = new QLabel("G-code lines: 0");
     m_lineCountLabel->setAlignment(Qt::AlignRight);
     rightLayout->addWidget(m_lineCountLabel);
 
@@ -521,17 +508,32 @@ void GraphicsDesignPanel::setupUi()
 
     rightLayout->addLayout(buttonBar2);
 
-    splitter->addWidget(rightPanel);
+    auto* controlsScroll = new QScrollArea(splitter);
+    controlsScroll->setObjectName("designControlsScroll");
+    controlsScroll->setWidgetResizable(true);
+    controlsScroll->setFrameShape(QFrame::NoFrame);
+    controlsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    controlsScroll->setMinimumWidth(280);
+    controlsScroll->setMaximumWidth(420);
+    controlsScroll->setWidget(rightPanel);
+    splitter->addWidget(controlsScroll);
     splitter->setStretchFactor(0, 3);  // Canvas gets 3x stretch
     splitter->setStretchFactor(1, 1);  // Panel gets 1x stretch
 
     outerLayout->addWidget(splitter);
 }
 
-void GraphicsDesignPanel::buildTextPage()
+QWidget *GraphicsDesignPanel::buildTextPage()
 {
-    auto *page = new QWidget();
-    auto *layout = new QFormLayout(page);
+    auto *page = new QScrollArea();
+    page->setWidgetResizable(true);
+    page->setFrameShape(QFrame::NoFrame);
+    page->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    page->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    auto *content = new QWidget(page);
+    auto *layout = new QFormLayout(content);
+    layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
 
     m_textPosX = new QDoubleSpinBox();
     m_textPosX->setRange(-100000, 100000);
@@ -544,9 +546,19 @@ void GraphicsDesignPanel::buildTextPage()
     layout->addRow("Pos Y:", m_textPosY);
 
     m_textEdit = new QPlainTextEdit();
-    m_textEdit->setMaximumHeight(80);
-    m_textEdit->setTabChangesFocus(true);
-    layout->addRow("Text:", m_textEdit);
+    m_textEdit->setFixedHeight(150);
+    m_textEdit->setPlaceholderText("Enter text (supports multiple lines)");
+    m_textEdit->setTabChangesFocus(false);
+    m_textEdit->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    m_textEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    layout->addRow(new QLabel("Text:"));
+    layout->addRow(m_textEdit);
+
+    m_textStatsLabel = new QLabel("0 characters");
+    m_textStatsLabel->setStyleSheet("color: #888;");
+    layout->addRow(m_textStatsLabel);
+    connect(m_textEdit, &QPlainTextEdit::textChanged,
+            this, &GraphicsDesignPanel::updateTextStatsLabel);
 
     m_textFontSize = new QDoubleSpinBox();
     m_textFontSize->setRange(1, 100000);
@@ -696,7 +708,27 @@ void GraphicsDesignPanel::buildTextPage()
     };
     connect(m_textEdit, &QPlainTextEdit::textChanged, this, detectCJK);
 
-    m_propertyStack->addWidget(page);
+    page->setWidget(content);
+    return page;
+}
+
+void GraphicsDesignPanel::showPropertyPage(int pageIndex)
+{
+    for (QWidget *page : m_propertyPages) {
+        if (page) page->setVisible(false);
+    }
+
+    if (pageIndex >= 0 && pageIndex < static_cast<int>(m_propertyPages.size()) && m_propertyPages[pageIndex]) {
+        m_propertyPages[pageIndex]->setVisible(true);
+    }
+}
+
+void GraphicsDesignPanel::updateTextStatsLabel()
+{
+    if (!m_textEdit || !m_textStatsLabel) return;
+
+    int count = m_textEdit->toPlainText().length();
+    m_textStatsLabel->setText(QString("%1 character%2").arg(count).arg(count == 1 ? "" : "s"));
 }
 
 void GraphicsDesignPanel::buildLayerSection()
@@ -797,16 +829,49 @@ void GraphicsDesignPanel::setupConnections()
     // Entity list checkbox
     connect(m_entityList, &QListWidget::itemChanged, this, &GraphicsDesignPanel::onEntityItemChanged);
 
-    // Click entity list item to select on canvas
-    connect(m_entityList, &QListWidget::currentRowChanged, this, [this](int row) {
+    connect(m_entityList, &QListWidget::itemSelectionChanged, this, [this]() {
         if (m_updatingUi) return;
-        Document *doc = m_canvas->document();
-        if (row >= 0 && row < doc->entityCount()) {
-            Entity *e = doc->entityAt(row);
+        {
+            QScopedValueRollback<bool> guard(m_updatingUi, true);
+            Document* doc = m_canvas->document();
+            QList<QUuid> selected;
+            for (const auto* item : m_entityList->selectedItems())
+                selected.append(item->data(Qt::UserRole).toUuid());
+            const auto* current = m_entityList->currentItem();
+            const QUuid primary = current && current->isSelected()
+                ? current->data(Qt::UserRole).toUuid() : QUuid{};
             doc->clearSelection();
-            doc->setSelected(e->id(), true);
-            m_canvas->update();
+            for (const auto& id : selected) {
+                if (id != primary) doc->select(id);
+            }
+            if (!primary.isNull()) doc->select(primary);
         }
+        onSelectionChanged();
+        m_canvas->update();
+    });
+
+    connect(m_assignToolCombo, &QComboBox::activated, this, [this](int index) {
+        if (index < 0 || m_updatingUi) return;
+        const QUuid id = m_assignToolCombo->itemData(index).toUuid();
+        const auto* profile = SettingsManager::instance().toolLibrary()->tool(id);
+        if (!id.isNull() && (!profile || !profile->enabled)) return;
+        if (profile) m_canvas->document()->rememberToolName(id, profile->name);
+        m_canvas->document()->assignToolToSelection(id);
+    });
+    connect(m_defaultToolCombo, &QComboBox::activated, this, [this](int index) {
+        if (index < 0 || m_updatingUi) return;
+        const QUuid id = m_defaultToolCombo->itemData(index).toUuid();
+        Document* doc = m_canvas->document();
+        const auto* profile = SettingsManager::instance().toolLibrary()->tool(id);
+        if (!id.isNull() && (!profile || !profile->enabled)) return;
+        if (profile) doc->rememberToolName(id, profile->name);
+        if (id != doc->defaultToolId())
+            doc->commandStack()->execute(std::make_unique<SetDefaultToolCommand>(doc->defaultToolId(), id));
+    });
+    connect(SettingsManager::instance().toolLibrary(), &ToolLibrary::changed, this, [this]() {
+        updateToolControls();
+        refreshEntityList();
+        updatePreview();
     });
 
     // Buttons
@@ -817,7 +882,7 @@ void GraphicsDesignPanel::setupConnections()
     connect(m_exportBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onExportGcodeClicked);
     connect(m_generateBtn, &QPushButton::clicked, this, &GraphicsDesignPanel::onGenerateClicked);
 
-    // Auto-update G-code preview when options change
+    // Auto-update G-code line count when options change
     connect(m_toolModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &GraphicsDesignPanel::updatePreview);
     connect(m_feedSpeedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -828,6 +893,10 @@ void GraphicsDesignPanel::setupConnections()
             this, &GraphicsDesignPanel::updatePreview);
     connect(m_workHeightSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphicsDesignPanel::updatePreview);
+    connect(m_automaticRackCheck, &QCheckBox::toggled, this, &GraphicsDesignPanel::updatePreview);
+    connect(m_returnFinalPenCheck, &QCheckBox::toggled, this, &GraphicsDesignPanel::updatePreview);
+    connect(m_initialHolderCombo, &QComboBox::currentIndexChanged, this, &GraphicsDesignPanel::updatePreview);
+    connect(m_workCoordinateCombo, &QComboBox::currentIndexChanged, this, &GraphicsDesignPanel::updatePreview);
 
     // Line/Rect/Circle/Arc connects are handled by the generic PropertyPage::propertyChanged loop below.
 
@@ -864,7 +933,7 @@ void GraphicsDesignPanel::setupConnections()
     // Generic PropertyPage::propertyChanged handler for pages 1-4, 7-10
     for (int i = 1; i <= 10; ++i) {
         if (i == 5 || i == 6) continue; // Text (inline) and Polyline (special)
-        auto *page = qobject_cast<PropertyPage*>(m_propertyStack->widget(i));
+        auto *page = qobject_cast<PropertyPage*>(m_propertyPages[i]);
         if (page) {
             connect(page, &PropertyPage::propertyChanged, this, [this, page]() {
                 if (m_updatingUi) return;
@@ -993,12 +1062,15 @@ void GraphicsDesignPanel::onCanvasToolChanged()
 
 void GraphicsDesignPanel::onSelectionChanged()
 {
+    if (m_updatingUi) return;
+    syncEntityListSelection();
+    updateToolControls();
     const Entity *entity = m_canvas->selectedEntity();
 
     m_updatingUi = true;
 
     if (!entity) {
-        m_propertyStack->setCurrentIndex(0);
+        showPropertyPage(0);
         m_deleteBtn->setEnabled(false);
         m_transformPanel->setVisible(false);
         m_moveToLayerBtn->setEnabled(false);
@@ -1023,7 +1095,7 @@ void GraphicsDesignPanel::onSelectionChanged()
     };
 
     int pageIdx = kindToPage.value(static_cast<int>(entity->kind()), 0);
-    m_propertyStack->setCurrentIndex(pageIdx);
+    showPropertyPage(pageIdx);
 
     if (pageIdx == 5) {
         // Text: inline page
@@ -1041,6 +1113,7 @@ void GraphicsDesignPanel::onSelectionChanged()
             m_textEdit->blockSignals(true);
             m_textEdit->setPlainText(text->text());
             m_textEdit->blockSignals(false);
+            updateTextStatsLabel();
             m_textFontSize->setValue(text->fontSize());
             m_textLineHeight->setValue(text->lineHeight());
 
@@ -1088,7 +1161,7 @@ void GraphicsDesignPanel::onSelectionChanged()
             }
         }
     } else if (pageIdx > 0) {
-        auto *page = qobject_cast<PropertyPage*>(m_propertyStack->widget(pageIdx));
+        auto *page = qobject_cast<PropertyPage*>(m_propertyPages[pageIdx]);
         if (page) page->bind(entity);
     }
 
@@ -1096,87 +1169,254 @@ void GraphicsDesignPanel::onSelectionChanged()
     m_transformPanel->setVisible(true);
     m_transformPanel->resetInputs();
 
-    // Sync entity list selection
-    Document *doc = m_canvas->document();
-    for (int i = 0; i < doc->entityCount(); ++i) {
-        if (doc->entityAt(i)->id() == entity->id()) {
-            m_entityList->blockSignals(true);
-            m_entityList->setCurrentRow(i);
-            m_entityList->blockSignals(false);
-            break;
-        }
-    }
-
     m_updatingUi = false;
 }
 
 void GraphicsDesignPanel::refreshEntityList()
 {
-    m_entityList->blockSignals(true);
-    m_entityList->clear();
-
+    const QSignalBlocker blocker(m_entityList);
     Document *doc = m_canvas->document();
+    bool rebuild = m_entityList->count() != doc->entityCount();
+    if (!rebuild) {
+        for (int index = 0; index < doc->entityCount(); ++index)
+            rebuild |= m_entityList->item(index)->data(Qt::UserRole).toUuid() != doc->entityAt(index)->id();
+    }
+    if (rebuild) m_entityList->clear();
     for (int i = 0; i < doc->entityCount(); ++i) {
         Entity *e = doc->entityAt(i);
-        auto *item = new QListWidgetItem(e->displayName());
+        auto* item = rebuild ? new QListWidgetItem : m_entityList->item(i);
+        item->setText(e->displayName() + " | " + entityToolLabel(e));
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(e->isEnabled() ? Qt::Checked : Qt::Unchecked);
         item->setData(Qt::UserRole, QVariant::fromValue(e->id()));
-        m_entityList->addItem(item);
+        const QSet<QUuid> ids = doc->toolIdsForEntity(e, true);
+        const auto* profile = ids.size() == 1
+            ? SettingsManager::instance().toolLibrary()->tool(*ids.begin()) : nullptr;
+        QPixmap swatch(12, 12);
+        swatch.fill(profile ? profile->previewColor : QColor("#8b8b8b"));
+        item->setIcon(e->isDrawable() ? QIcon(swatch) : QIcon{});
+        item->setToolTip(entityToolLabel(e));
+        if (rebuild) m_entityList->addItem(item);
     }
+    syncEntityListSelection();
+    updateToolControls();
+}
 
-    m_entityList->blockSignals(false);
+void GraphicsDesignPanel::syncEntityListSelection()
+{
+    const QSignalBlocker blocker(m_entityList);
+    const Document* doc = m_canvas->document();
+    int primaryRow = -1;
+    for (int row = 0; row < m_entityList->count(); ++row) {
+        auto* item = m_entityList->item(row);
+        const QUuid id = item->data(Qt::UserRole).toUuid();
+        item->setSelected(doc->selectedIds().contains(id));
+        if (id == doc->primarySelectedId()) primaryRow = row;
+    }
+    m_entityList->setCurrentRow(primaryRow, QItemSelectionModel::NoUpdate);
+}
+
+QString GraphicsDesignPanel::toolName(const QUuid& id) const
+{
+    if (id.isNull()) return "Manual/current tool";
+    const auto* profile = SettingsManager::instance().toolLibrary()->tool(id);
+    if (profile) return profile->name + (profile->enabled ? "" : " (disabled)");
+    return "Missing: " + m_canvas->document()->toolNameHint(id);
+}
+
+QString GraphicsDesignPanel::entityToolLabel(const Entity* entity) const
+{
+    const auto ids = m_canvas->document()->toolIdsForEntity(entity);
+    if (ids.isEmpty()) return "No plotting path";
+    if (ids.size() > 1) return "Mixed tools";
+    const QUuid id = *ids.begin();
+    return id.isNull() ? "Default (" + toolName(m_canvas->document()->defaultToolId()) + ")" : toolName(id);
+}
+
+void GraphicsDesignPanel::updateToolControls()
+{
+    const QSignalBlocker assignBlocker(m_assignToolCombo);
+    const QSignalBlocker defaultBlocker(m_defaultToolCombo);
+    Document* doc = m_canvas->document();
+    auto* library = SettingsManager::instance().toolLibrary();
+    const QSignalBlocker holderBlocker(m_initialHolderCombo);
+    const auto initialHolder = m_initialHolderCombo->currentData();
+    m_initialHolderCombo->clear();
+    m_initialHolderCombo->addItem("Choose holder contents...");
+    m_initialHolderCombo->addItem("Empty holder", QVariant::fromValue(QUuid{}));
+    // Disabled pens may still be physically loaded and need returning.
+    for (const auto& pen : library->tools()) m_initialHolderCombo->addItem(toolName(pen.id), QVariant::fromValue(pen.id));
+    if (initialHolder.isValid()) {
+        int index = m_initialHolderCombo->findData(initialHolder);
+        if (index < 0) { m_initialHolderCombo->addItem("Missing initial pen — regenerate after reassignment", initialHolder); index = m_initialHolderCombo->count() - 1; }
+        m_initialHolderCombo->setCurrentIndex(index);
+    }
+    auto populate = [this, library](QComboBox* combo, const QString& defaultLabel) {
+        combo->clear();
+        combo->addItem(defaultLabel, QVariant::fromValue(QUuid{}));
+        for (const auto& profile : library->tools()) {
+            QPixmap swatch(12, 12);
+            swatch.fill(profile.previewColor);
+            combo->addItem(QIcon(swatch), toolName(profile.id), QVariant::fromValue(profile.id));
+            if (!profile.enabled) {
+                if (auto* model = qobject_cast<QStandardItemModel*>(combo->model()))
+                    model->item(combo->count() - 1)->setEnabled(false);
+            }
+        }
+    };
+    auto select = [this](QComboBox* combo, const QUuid& id) {
+        int index = combo->findData(QVariant::fromValue(id));
+        if (index < 0) {
+            combo->addItem(toolName(id), QVariant::fromValue(id));
+            index = combo->count() - 1;
+            if (auto* model = qobject_cast<QStandardItemModel*>(combo->model()))
+                model->item(index)->setEnabled(false);
+        }
+        combo->setCurrentIndex(index);
+    };
+    for (const auto& profile : library->tools()) doc->rememberToolName(profile.id, profile.name);
+    populate(m_defaultToolCombo, "Manual/current tool");
+    select(m_defaultToolCombo, doc->defaultToolId());
+    populate(m_assignToolCombo, "Default (" + toolName(doc->defaultToolId()) + ")");
+    QSet<QUuid> selectedTools;
+    bool assignable = false;
+    for (const auto* entity : doc->selectedEntities()) {
+        const auto ids = doc->toolIdsForEntity(entity);
+        selectedTools.unite(ids);
+        assignable |= !ids.isEmpty() && !doc->isEntityLocked(entity);
+    }
+    m_assignToolCombo->setEnabled(assignable);
+    m_assignToolCombo->setToolTip("Assign a tool to selected unlocked paths. Dimensions are excluded.");
+    if (selectedTools.size() == 1) select(m_assignToolCombo, *selectedTools.begin());
+    else {
+        m_assignToolCombo->setPlaceholderText(selectedTools.isEmpty() ? "Select paths" : "Mixed tools");
+        m_assignToolCombo->setCurrentIndex(-1);
+    }
 }
 
 void GraphicsDesignPanel::onEntityItemChanged(QListWidgetItem *item)
 {
-    int row = m_entityList->row(item);
+    const QUuid id = item->data(Qt::UserRole).toUuid();
+    const bool enabled = item->checkState() == Qt::Checked;
     Document *doc = m_canvas->document();
+    const int row = doc->indexOf(id);
     if (row >= 0 && row < doc->entityCount()) {
         Entity *e = doc->entityAt(row);
-        e->setEnabled(item->checkState() == Qt::Checked);
-        m_canvas->update();
-        updatePreview();
+        if (e->isEnabled() == enabled) return;
+        auto after = e->clone();
+        after->setEnabled(enabled);
+        doc->commandStack()->execute(std::make_unique<UpdateEntityCommand>(row, e->clone(), std::move(after), false));
     }
 }
 
 void GraphicsDesignPanel::updatePreview()
 {
     Document *doc = m_canvas->document();
-    m_generatedLines = doc->generateGcode(
-        m_feedSpeedSpinBox->value(),
-        m_plungeSpeedSpinBox->value(),
-        m_fastHeightSpinBox->value(),
-        m_workHeightSpinBox->value());
-
-    QString previewText = QStringList(m_generatedLines.mid(0, 100)).join("\n");
-    if (m_generatedLines.size() > 100) {
-        previewText += "\n... (more lines)";
+    const auto ids = doc->plottingToolIds();
+    m_automaticRackCheck->setEnabled(m_toolModeCombo->currentIndex() == 0);
+    const bool automatic = m_automaticRackCheck->isChecked() && m_toolModeCombo->currentIndex() == 0;
+    m_initialHolderCombo->setEnabled(automatic);
+    m_returnFinalPenCheck->setEnabled(automatic);
+    PlotOptions options{m_feedSpeedSpinBox->value(), m_plungeSpeedSpinBox->value(),
+                        m_fastHeightSpinBox->value(), m_workHeightSpinBox->value(), m_workCoordinateCombo->currentData().toInt()};
+    options.automaticRack = automatic;
+    options.initialHolderKnown = m_initialHolderCombo->currentData().isValid();
+    options.initialToolId = m_initialHolderCombo->currentData().toUuid();
+    options.returnFinalPen = m_returnFinalPenCheck->isChecked();
+    const auto result = PlotJobBuilder::build(*doc, options, SettingsManager::instance().toolLibrary());
+    const QString issue = result.errors.join('\n');
+    m_generationIssue = issue;
+    if (!issue.isEmpty()) {
+        m_generatedLines.clear();
+        m_generatedJob = PlotJob{};
+        m_toolStatusLabel->setText(ids.size() > 1 && !automatic && m_toolModeCombo->currentIndex() == 0
+            ? issue + "\nClick Generate to set up automatic rack exchanges."
+            : issue);
+    } else {
+        if (automatic) {
+            QStringList sequence;
+            for (const auto& id : result.job.penSequence) sequence << toolName(id);
+            int pickups = 0, returns = 0;
+            for (const auto& block : result.job.blocks) {
+                pickups += block.holderEffect == PlotJobBlock::HolderEffect::Loaded;
+                returns += block.holderEffect == PlotJobBlock::HolderEffect::Empty;
+            }
+            m_toolStatusLabel->setText(QString("Pen order: %1\n%2 pickups, %3 returns. Start requires calibrated rack/stations and holder confirmation.")
+                .arg(sequence.join(" → ")).arg(pickups).arg(returns));
+        } else m_toolStatusLabel->setText(ids.size() == 1 && !ids.begin()->isNull()
+            ? "Single-pen plotting: load " + toolName(*ids.begin()) + " manually."
+            : "Unassigned paths use the default pen. Single-pen plotting uses the currently loaded pen.");
     }
-    m_gcodePreview->setPlainText(previewText);
-    int visibleLayers = 0;
-    int lockedLayers  = 0;
-    for (int i = 0; i < doc->layerCount(); ++i) {
-        if (doc->layerAt(i).visible) ++visibleLayers;
-        if (doc->layerAt(i).locked)  ++lockedLayers;
+    // Generate is also the entry point for resolving tool-change setup. The
+    // builder's validation still gates emission of a complete, executable job.
+    const bool rackWorkflow = m_toolModeCombo->currentIndex() == 0 && (automatic || ids.size() > 1);
+    m_generateBtn->setEnabled(!ids.isEmpty() && (issue.isEmpty() || rackWorkflow));
+    m_exportBtn->setEnabled(issue.isEmpty() && !ids.isEmpty() && !automatic);
+    m_generateBtn->setToolTip(issue.isEmpty() ? "Generate the complete toolpath."
+                                            : issue + "\nClick Generate to complete setup or review these issues.");
+    m_exportBtn->setToolTip(automatic ? "Automatic jobs require phase/holder metadata. Generate and execute the complete job inside the application." : issue);
+    if (issue.isEmpty()) {
+        m_generatedJob = result.job;
+        m_generatedLines = result.job.lines();
     }
-    QString layerSummary = QString("%1 layer%2")
-        .arg(doc->layerCount())
-        .arg(doc->layerCount() == 1 ? "" : "s");
-    if (visibleLayers < doc->layerCount())
-        layerSummary += QString(" (%1 hidden)").arg(doc->layerCount() - visibleLayers);
-    if (lockedLayers > 0)
-        layerSummary += QString(" (%1 locked)").arg(lockedLayers);
 
-    m_lineCountLabel->setText(QString("%1 entit%2 · %3 · %4 G-code lines")
-                              .arg(doc->entityCount())
-                              .arg(doc->entityCount() == 1 ? "y" : "ies")
-                              .arg(layerSummary)
-                              .arg(m_generatedLines.size()));
+    m_lineCountLabel->setText(QString("G-code lines: %1").arg(m_generatedLines.size()));
 }
 
 void GraphicsDesignPanel::onGenerateClicked()
 {
+    if (!m_generateBtn->isEnabled()) return;
+    const bool automatic = m_automaticRackCheck->isChecked();
+    const bool mixedTools = m_canvas->document()->plottingToolIds().size() > 1;
+    if (m_toolModeCombo->currentIndex() == 0 && (mixedTools || automatic)
+        && (!automatic || !m_initialHolderCombo->currentData().isValid())) {
+        QDialog setup(this);
+        setup.setObjectName("rackGenerationSetupDialog");
+        setup.setWindowTitle("Generate with tool changes");
+        auto* layout = new QVBoxLayout(&setup);
+        auto* explanation = new QLabel(mixedTools
+            ? "This design uses multiple tools. Generate will use automatic passive rack exchanges."
+            : "Automatic rack exchanges require an initial holder selection.");
+        explanation->setWordWrap(true);
+        layout->addWidget(explanation);
+        auto* form = new QFormLayout;
+        auto* holder = new QComboBox;
+        holder->setObjectName("generationInitialHolderCombo");
+        holder->addItem("Choose holder contents...");
+        holder->addItem("Empty holder", QVariant::fromValue(QUuid{}));
+        for (const auto& tool : SettingsManager::instance().toolLibrary()->tools()) {
+            if (tool.enabled && tool.kind == ToolKind::Pen)
+                holder->addItem(tool.name, QVariant::fromValue(tool.id));
+        }
+        const int selected = holder->findData(m_initialHolderCombo->currentData());
+        holder->setCurrentIndex(selected >= 0 ? selected : 0);
+        form->addRow("Initial holder:", holder);
+        layout->addLayout(form);
+        auto* confirmation = new QLabel("Choose the holder contents the job should start with. You will confirm the physical setup before Start.");
+        confirmation->setWordWrap(true);
+        layout->addWidget(confirmation);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        buttons->setObjectName("rackGenerationButtons");
+        auto* generate = buttons->button(QDialogButtonBox::Ok);
+        generate->setText("Generate");
+        generate->setEnabled(holder->currentData().isValid());
+        connect(holder, &QComboBox::currentIndexChanged, &setup, [holder, generate]() {
+            generate->setEnabled(holder->currentData().isValid());
+        });
+        connect(buttons, &QDialogButtonBox::accepted, &setup, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &setup, &QDialog::reject);
+        layout->addWidget(buttons);
+        if (setup.exec() != QDialog::Accepted || !holder->currentData().isValid()) return;
+        const QSignalBlocker automaticBlocker(m_automaticRackCheck);
+        const QSignalBlocker holderBlocker(m_initialHolderCombo);
+        m_automaticRackCheck->setChecked(true);
+        m_initialHolderCombo->setCurrentIndex(m_initialHolderCombo->findData(holder->currentData()));
+    }
+    updatePreview();
+    if (!m_generationIssue.isEmpty()) {
+        QMessageBox::warning(this, "Cannot Generate Toolpath", m_generationIssue);
+        return;
+    }
     if (m_generatedLines.isEmpty() || m_generatedLines.size() < 3) {
         QMessageBox::warning(this, "No Design",
             "Please create some shapes before generating G-code.");
@@ -1184,6 +1424,7 @@ void GraphicsDesignPanel::onGenerateClicked()
     }
 
     emit gcodeGenerated(m_generatedLines);
+    emit plotJobGenerated(m_generatedJob);
     m_statusLabel->setText("G-code loaded to main window.");
 }
 
@@ -1211,9 +1452,13 @@ void GraphicsDesignPanel::onLoadDesignClicked()
     if (!file.isEmpty()) {
         QFile f(file);
         if (f.open(QIODevice::ReadOnly)) {
-            QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+            QJsonParseError error;
+            QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &error);
             f.close();
-            m_canvas->document()->loadFromJson(doc);
+            if (error.error != QJsonParseError::NoError || !m_canvas->document()->loadFromJson(doc)) {
+                QMessageBox::warning(this, "Load Failed", "The design contains invalid data or an unsupported version.");
+                return;
+            }
             m_statusLabel->setText("Design loaded.");
             updatePreview();
         } else {
@@ -1232,11 +1477,12 @@ void GraphicsDesignPanel::onClearAllClicked()
 {
     m_canvas->clearDocument();
     updatePreview();
-    m_propertyStack->setCurrentIndex(0);
+    showPropertyPage(0);
 }
 
 void GraphicsDesignPanel::onExportGcodeClicked()
 {
+    if (!m_exportBtn->isEnabled()) return;
     QString file = QFileDialog::getSaveFileName(this, "Export G-code",
         QString(), "G-code Files (*.nc *.ngc *.gcode *.txt)");
     if (!file.isEmpty()) {
@@ -1433,12 +1679,14 @@ void GraphicsDesignPanel::onImportImageClicked()
 
     // Convert polylines to PolylineEntities (continuous toolpaths)
     Document *doc = m_canvas->document();
+    std::vector<std::unique_ptr<Entity>> imported;
     for (const auto& path : paths) {
         if (path.size() >= 2) {
             auto polyEntity = std::make_unique<PolylineEntity>(path);
-            doc->addEntity(std::move(polyEntity));
+            imported.push_back(std::move(polyEntity));
         }
     }
+    doc->importEntities(std::move(imported));
 
     m_canvas->update();
     updatePreview();
@@ -1462,11 +1710,7 @@ void GraphicsDesignPanel::onImportDxfClicked()
 
     Document *doc = m_canvas->document();
     int count = entities.size();
-    doc->beginBatch();
-    for (auto& entity : entities) {
-        doc->addEntity(std::move(entity));
-    }
-    doc->endBatch();
+    doc->importEntities(std::move(entities));
 
     m_canvas->update();
     updatePreview();
@@ -1742,6 +1986,7 @@ void GraphicsDesignPanel::applyPolarArray(int n, double span, double cx, double 
                 default: return e->clone();
                 }
             }();
+            rotated->copyPlotMetadataFrom(*e);
             doc->commandStack()->execute(std::make_unique<AddEntityCommand>(std::move(rotated)));
         }
     }

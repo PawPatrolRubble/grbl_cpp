@@ -2,6 +2,10 @@
 
 #include <memory>
 #include <vector>
+#include <QUuid>
+#include "Layer.h"
+#include <QList>
+#include <QHash>
 
 class Document;
 class Entity;
@@ -27,6 +31,7 @@ public:
 
 private:
     std::unique_ptr<Entity> m_entity;
+    QUuid m_addedId;
 };
 
 /// Command to delete an entity from the document.
@@ -41,13 +46,15 @@ public:
 private:
     int m_index = -1;
     std::unique_ptr<Entity> m_entity;
+    QUuid m_targetId;
 };
 
 /// Command to update an entity (for handle edits and translations).
 class UpdateEntityCommand : public Command
 {
 public:
-    UpdateEntityCommand(int index, std::unique_ptr<Entity> before, std::unique_ptr<Entity> after);
+    UpdateEntityCommand(int index, std::unique_ptr<Entity> before, std::unique_ptr<Entity> after,
+                        bool preservePlotMetadata = true);
 
     void execute(Document& document) override;
     void undo(Document& document) override;
@@ -56,6 +63,7 @@ private:
     int m_index = -1;
     std::unique_ptr<Entity> m_before;
     std::unique_ptr<Entity> m_after;
+    QUuid m_targetId;
 };
 
 /// Command to clear all entities from the document.
@@ -83,6 +91,37 @@ private:
     std::vector<std::unique_ptr<Command>> m_commands;
 };
 
+/// Undoable change of the document's fallback pen.
+class SetDefaultToolCommand : public Command
+{
+public:
+    SetDefaultToolCommand(const QUuid& before, const QUuid& after);
+    void execute(Document& document) override;
+    void undo(Document& document) override;
+
+private:
+    QUuid m_before;
+    QUuid m_after;
+};
+
+struct DocumentLayerState
+{
+    QList<Layer> layers;
+    QUuid activeLayerId;
+    QHash<QUuid, QUuid> entityLayers;
+};
+
+class EditLayersCommand : public Command
+{
+public:
+    EditLayersCommand(DocumentLayerState before, DocumentLayerState after);
+    void execute(Document& document) override;
+    void undo(Document& document) override;
+private:
+    DocumentLayerState m_before;
+    DocumentLayerState m_after;
+};
+
 /// Undo/redo stack managing command history.
 class CommandStack
 {
@@ -94,6 +133,7 @@ public:
     bool canRedo() const;
     void undo();
     void redo();
+    void clear();
 
 private:
     Document& m_document;

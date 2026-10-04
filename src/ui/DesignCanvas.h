@@ -149,7 +149,7 @@ private:
 
     // --- Subsystems ---
     Document m_document;
-    CommandStack m_commandStack;
+    CommandStack& m_commandStack;
 
     ToolManager m_toolManager;
     ToolManager::Type m_toolManagerActiveType = ToolManager::Type::Select;

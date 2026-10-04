@@ -5,6 +5,8 @@
 #include <QVector3D>
 #include <QStringList>
 #include <QHash>
+#include <QElapsedTimer>
+#include <optional>
 #include "MachineState.h"
 
 class GrblParser : public QObject
@@ -17,6 +19,11 @@ public:
 
     void parseResponse(const QString &response);
     void requestStatusReport();
+    std::optional<QVector3D> workCoordinateOffset(int frame) const;
+    std::optional<QVector3D> currentMachinePosition() const;
+    void invalidateCoordinates();
+    void invalidateOffsets();
+    void invalidateMachinePosition() { m_positionKnown = false; }
 
     [[nodiscard]] static MachineState::State parseState(const QString &stateStr);
     [[nodiscard]] static QVector3D parsePosition(const QString &posStr);
@@ -34,4 +41,7 @@ private:
     QVector3D m_lastWco;
     QHash<QString, QVector3D> m_wcsOffsets;
     QString m_activeWcs = QStringLiteral("G54");
+    bool m_positionKnown = false;
+    bool m_wcoKnown = false;
+    QElapsedTimer m_positionAge;
 };

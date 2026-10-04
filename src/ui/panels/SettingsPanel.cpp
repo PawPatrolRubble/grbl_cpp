@@ -1,4 +1,5 @@
 #include "SettingsPanel.h"
+#include "../ToolsDialog.h"
 
 #include <QFormLayout>
 #include <QVBoxLayout>
@@ -37,6 +38,17 @@ SettingsPanel::SettingsPanel(QWidget *parent)
     auto *content = new QWidget();
     auto *mainLayout = new QVBoxLayout(content);
     mainLayout->setContentsMargins(8, 8, 8, 8);
+
+    auto* toolsLabel = new QLabel("Tools");
+    toolsLabel->setObjectName("sectionTitle");
+    mainLayout->addWidget(toolsLabel);
+    auto* manageTools = new QPushButton("Manage Tools...");
+    manageTools->setObjectName("manageToolsButton");
+    connect(manageTools, &QPushButton::clicked, this, [this]() {
+        ToolsDialog dialog(*SettingsManager::instance().toolLibrary(), this);
+        dialog.exec();
+    });
+    mainLayout->addWidget(manageTools);
 
     // =====================================================================
     // Canvas Settings section

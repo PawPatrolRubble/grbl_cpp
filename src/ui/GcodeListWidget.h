@@ -7,6 +7,11 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QMenu>
+#include <QIcon>
+#include <QSortFilterProxyModel>
+#include <optional>
+#include "plotting/PlotJob.h"
+#include "grbl/ToolLibrary.h"
 
 enum class GcodeType { Rapid, Linear, ArcCW, ArcCCW, Other, Comment };
 
@@ -15,12 +20,16 @@ class GcodeListModel : public QAbstractListModel
     Q_OBJECT
 
 public:
+    enum Role { ToolIdRole = Qt::UserRole + 1, ToolNameRole, PreviewColorRole };
+
     explicit GcodeListModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     void setLines(const QStringList &lines);
+    void setPlotJob(const PlotJob& job, const QList<ToolDefinition>& tools);
+    void setToolDefinitions(const QList<ToolDefinition>& tools);
     QStringList lines() const;
     int lineCount() const;
     int executingLine() const;
@@ -33,9 +42,18 @@ public:
     void clearRange();
 
 private:
+    struct ToolAnnotation {
+        QString name;
+        QColor previewColor;
+        QIcon swatch;
+    };
     GcodeType typeAt(int row) const;
+    QString toolLabel(int row) const;
+    void cacheToolDefinitions(const QList<ToolDefinition>& tools);
 
     QStringList m_lines;
+    QList<PlotJobBlock> m_blocks;
+    QHash<QUuid, ToolAnnotation> m_tools;
     mutable QHash<int, GcodeType> m_typeCache;  // lazy per-row type cache
     int m_executingLine = -1;
     int m_rangeStart = -1;
@@ -50,6 +68,9 @@ public:
     explicit GcodeListWidget(QWidget *parent = nullptr);
 
     void setLines(const QStringList &lines);
+    void setPlotJob(const PlotJob& job, const QList<ToolDefinition>& tools);
+    void setToolDefinitions(const QList<ToolDefinition>& tools);
+    void setToolFilter(const std::optional<QUuid>& tool);
     QStringList lines() const;
     void highlightLine(int lineNumber);
     void selectLine(int lineNumber);
@@ -71,8 +92,12 @@ private slots:
 
 private:
     void updateRangeLabel();
+    void updateLineControls(const QStringList& lines);
+    void updateCountLabel();
+    QModelIndex viewIndexForLine(int line) const;
 
     GcodeListModel *m_model;
+    QSortFilterProxyModel *m_filterModel;
     QListView *m_listView;
     QLabel *m_countLabel;
     QLabel *m_rangeLabel;
@@ -83,4 +108,6 @@ private:
     QPushButton *m_clearRangeBtn;
     QCheckBox *m_returnToOriginCheck;
     int m_lastHighlight = -1;
+    bool m_managedRack = false;
+    std::optional<QUuid> m_toolFilter;
 };

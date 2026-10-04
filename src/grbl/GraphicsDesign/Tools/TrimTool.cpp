@@ -325,6 +325,8 @@ void TrimTool::applyTrimResult(int entityIdx, TrimModification::TrimResult&& res
     if (!result.success) return;
 
     const Entity* original = document().entityAt(entityIdx);
+    for (auto& replacement : result.replacements)
+        replacement->copyPlotMetadataFrom(*original);
 
     if (result.replacements.empty()) {
         // Entity completely removed

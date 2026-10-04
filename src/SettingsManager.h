@@ -6,6 +6,7 @@
 #include <QJsonObject>
 
 class QSettings;
+class ToolLibrary;
 
 /// Global singleton that manages application settings via a local JSON file.
 /// Window/dock layout stays in QSettings (binary blobs).
@@ -40,12 +41,15 @@ public:
     [[nodiscard]] CanvasSettings canvasSettings() const { return m_canvas; }
     void setCanvasSettings(const CanvasSettings &s);
 
+    ToolLibrary* toolLibrary() const { return m_toolLibrary; }
+
     // --- Persist / reset ---
     void save();
     void resetToDefaults();
 
 signals:
     void canvasSettingsChanged(const CanvasSettings &settings);
+    void settingsSaveFailed(const QString& message);
 
 private:
     explicit SettingsManager(QObject *parent = nullptr);
@@ -62,6 +66,7 @@ private:
     static QColor      colorFromJson(const QJsonObject &obj, const QColor &fallback);
 
     QSettings *m_settings;  // for layout blobs only
+    ToolLibrary* m_toolLibrary;
 
     // Cached values (JSON-backed)
     double m_jogStepSize  = 1.0;
